@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -81,6 +81,35 @@ function vehicleColor(vehicleId?: string | null) {
 }
 
 export default function JobsPage() {
+  return (
+    <div style={shell}>
+      <AppHeader />
+      <Suspense fallback={<JobsPageLoading />}>
+        <JobsPageContent />
+      </Suspense>
+    </div>
+  );
+}
+
+function JobsPageLoading() {
+  return (
+    <div style={page}>
+      <div style={heroCard}>
+        <div style={heroTop}>
+          <div>
+            <div style={eyebrow}>Jobs</div>
+            <h1 style={title}>All Jobs</h1>
+            <p style={subtitle}>Loading jobs...</p>
+          </div>
+        </div>
+      </div>
+
+      <div style={loadingBox}>Loading jobs...</div>
+    </div>
+  );
+}
+
+function JobsPageContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -149,110 +178,106 @@ export default function JobsPage() {
   }, [jobs, customerFilter]);
 
   return (
-    <div style={shell}>
-      <AppHeader />
-
-      <div style={page}>
-        <div style={heroCard}>
-          <div style={heroTop}>
-            <div>
-              <div style={eyebrow}>Jobs</div>
-              <h1 style={title}>All Jobs</h1>
-              <p style={subtitle}>
-                Open, review, and manage every job in one place.
-              </p>
-            </div>
-
-            <Link href="/jobs/new" style={{ textDecoration: "none" }}>
-              <button type="button" style={blueButton}>
-                ➕ Add Job
-              </button>
-            </Link>
+    <div style={page}>
+      <div style={heroCard}>
+        <div style={heroTop}>
+          <div>
+            <div style={eyebrow}>Jobs</div>
+            <h1 style={title}>All Jobs</h1>
+            <p style={subtitle}>
+              Open, review, and manage every job in one place.
+            </p>
           </div>
-        </div>
 
-        {customerFilter ? (
-          <div style={filterBanner}>
-            <div>
-              Showing jobs for: <strong>{customerFilter}</strong>
-            </div>
-
-            <button
-              type="button"
-              style={clearBtn}
-              onClick={() => router.push("/jobs")}
-            >
-              Clear
+          <Link href="/jobs/new" style={{ textDecoration: "none" }}>
+            <button type="button" style={blueButton}>
+              ➕ Add Job
             </button>
+          </Link>
+        </div>
+      </div>
+
+      {customerFilter ? (
+        <div style={filterBanner}>
+          <div>
+            Showing jobs for: <strong>{customerFilter}</strong>
           </div>
-        ) : null}
 
-        {loading ? (
-          <div style={loadingBox}>Loading jobs...</div>
-        ) : filteredJobs.length === 0 ? (
-          <div style={emptyBox}>No jobs found.</div>
-        ) : (
-          filteredJobs.map((job) => {
-            const tireText = [job.qty, job.tires || job.size]
-              .filter(Boolean)
-              .join(" • ");
+          <button
+            type="button"
+            style={clearBtn}
+            onClick={() => router.push("/jobs")}
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
 
-            const unitOrVehicle = job.unit_number || job.vehicle || "";
-            const total = formatMoney(job.job_total);
+      {loading ? (
+        <div style={loadingBox}>Loading jobs...</div>
+      ) : filteredJobs.length === 0 ? (
+        <div style={emptyBox}>No jobs found.</div>
+      ) : (
+        filteredJobs.map((job) => {
+          const tireText = [job.qty, job.tires || job.size]
+            .filter(Boolean)
+            .join(" • ");
 
-            return (
-              <div
-                key={job.id}
-                style={card}
-                onClick={() => router.push(`/jobs/${job.id}`)}
-              >
-                <div style={cardTop}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={customer}>{job.customer || "Unnamed Job"}</div>
+          const unitOrVehicle = job.unit_number || job.vehicle || "";
+          const total = formatMoney(job.job_total);
 
-                    {unitOrVehicle ? <div style={sub}>🚗 {unitOrVehicle}</div> : null}
-                    {job.address ? <div style={sub}>📍 {job.address}</div> : null}
-                    {job.phone ? <div style={sub}>📞 {job.phone}</div> : null}
-                    {job.service_type ? <div style={sub}>🔧 {job.service_type}</div> : null}
-                    {job.po_number ? <div style={sub}>📄 PO: {job.po_number}</div> : null}
-                    {job.billing_name ? <div style={sub}>💵 Bill To: {job.billing_name}</div> : null}
-                    {tireText ? <div style={sub}>🛞 {tireText}</div> : null}
-                    {job.notes ? <div style={notes}>📝 {job.notes}</div> : null}
-                    {job.scheduled ? (
-                      <div style={time}>🕒 {formatDateTimeNY(job.scheduled)}</div>
-                    ) : null}
+          return (
+            <div
+              key={job.id}
+              style={card}
+              onClick={() => router.push(`/jobs/${job.id}`)}
+            >
+              <div style={cardTop}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={customer}>{job.customer || "Unnamed Job"}</div>
+
+                  {unitOrVehicle ? <div style={sub}>🚗 {unitOrVehicle}</div> : null}
+                  {job.address ? <div style={sub}>📍 {job.address}</div> : null}
+                  {job.phone ? <div style={sub}>📞 {job.phone}</div> : null}
+                  {job.service_type ? <div style={sub}>🔧 {job.service_type}</div> : null}
+                  {job.po_number ? <div style={sub}>📄 PO: {job.po_number}</div> : null}
+                  {job.billing_name ? <div style={sub}>💵 Bill To: {job.billing_name}</div> : null}
+                  {tireText ? <div style={sub}>🛞 {tireText}</div> : null}
+                  {job.notes ? <div style={notes}>📝 {job.notes}</div> : null}
+                  {job.scheduled ? (
+                    <div style={time}>🕒 {formatDateTimeNY(job.scheduled)}</div>
+                  ) : null}
+                </div>
+
+                <div style={rightSide}>
+                  <div
+                    style={{
+                      ...tag,
+                      background: vehicleColor(job.vehicle_id),
+                    }}
+                  >
+                    {vehicleLabel(job.vehicle_id)}
                   </div>
 
-                  <div style={rightSide}>
-                    <div
-                      style={{
-                        ...tag,
-                        background: vehicleColor(job.vehicle_id),
-                      }}
-                    >
-                      {vehicleLabel(job.vehicle_id)}
-                    </div>
-
-                    <div style={infoTag}>
-                      {job.job_status || (job.complete ? "completed" : "scheduled")}
-                    </div>
-
-                    <div style={infoTag}>
-                      {job.payment_status || "unpaid"}
-                    </div>
-
-                    {total ? <div style={moneyTag}>{total}</div> : null}
-
-                    {job.invoice_number ? (
-                      <div style={infoTag}>Inv: {job.invoice_number}</div>
-                    ) : null}
+                  <div style={infoTag}>
+                    {job.job_status || (job.complete ? "completed" : "scheduled")}
                   </div>
+
+                  <div style={infoTag}>
+                    {job.payment_status || "unpaid"}
+                  </div>
+
+                  {total ? <div style={moneyTag}>{total}</div> : null}
+
+                  {job.invoice_number ? (
+                    <div style={infoTag}>Inv: {job.invoice_number}</div>
+                  ) : null}
                 </div>
               </div>
-            );
-          })
-        )}
-      </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

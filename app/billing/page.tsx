@@ -188,6 +188,7 @@ export default function BillingPage() {
                             <span style={paidText}>Paid</span>
                           ) : (
                             <button
+                              type="button"
                               onClick={() => handleMarkPaid(job.id)}
                               style={payButton}
                               disabled={isUpdating}
@@ -289,12 +290,12 @@ const emptyState: React.CSSProperties = {
 
 const table: React.CSSProperties = {
   width: "100%",
-  borderCollapse: "collapse",
+  borderCollapse: "collapse" as const,
 };
 
 const th: React.CSSProperties = {
   padding: 12,
-  textAlign: "left",
+  textAlign: "left" as const,
 };
 
 const td: React.CSSProperties = {
