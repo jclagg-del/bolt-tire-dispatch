@@ -169,12 +169,8 @@ export default function BillingPage() {
                         <td style={td}>
                           {job.unit_number || job.vehicle || "—"}
                         </td>
-                        <td style={td}>
-                          {formatScheduled(job.scheduled)}
-                        </td>
-                        <td style={tdStrong}>
-                          {formatMoney(job.job_total)}
-                        </td>
+                        <td style={td}>{formatScheduled(job.scheduled)}</td>
+                        <td style={tdStrong}>{formatMoney(job.job_total)}</td>
 
                         <td style={td}>
                           <span
@@ -215,59 +211,119 @@ export default function BillingPage() {
 
 /* styles */
 
-const shell = { background: "#f8fafc", minHeight: "100vh" };
-const page = { padding: 20, maxWidth: 1200, margin: "0 auto" };
+const shell: React.CSSProperties = {
+  background: "#f8fafc",
+  minHeight: "100vh",
+};
 
-const headerWrap = { marginBottom: 16 };
-const eyebrow = { fontSize: 12, fontWeight: 700, color: "#6b7280" };
-const title = { fontSize: 32, fontWeight: 800 };
-const description = { color: "#4b5563" };
+const page: React.CSSProperties = {
+  padding: 20,
+  maxWidth: 1200,
+  margin: "0 auto",
+};
 
-const summaryRow = {
+const headerWrap: React.CSSProperties = {
+  marginBottom: 16,
+};
+
+const eyebrow: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 700,
+  color: "#6b7280",
+};
+
+const title: React.CSSProperties = {
+  fontSize: 32,
+  fontWeight: 800,
+};
+
+const description: React.CSSProperties = {
+  color: "#4b5563",
+};
+
+const summaryRow: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 12,
   marginBottom: 18,
 };
 
-const summaryCard = {
+const summaryCard: React.CSSProperties = {
   background: "white",
   padding: 14,
   borderRadius: 12,
   border: "1px solid #e5e7eb",
 };
 
-const summaryLabel = { fontSize: 13, color: "#6b7280" };
-const summaryValue = { fontSize: 28, fontWeight: 800 };
+const summaryLabel: React.CSSProperties = {
+  fontSize: 13,
+  color: "#6b7280",
+};
 
-const sectionCard = {
+const summaryValue: React.CSSProperties = {
+  fontSize: 28,
+  fontWeight: 800,
+};
+
+const sectionCard: React.CSSProperties = {
   background: "white",
   border: "1px solid #e5e7eb",
   borderRadius: 12,
   marginBottom: 16,
 };
 
-const sectionHeader = { padding: 16, borderBottom: "1px solid #e5e7eb" };
-const sectionTitle = { fontSize: 20, fontWeight: 800 };
+const sectionHeader: React.CSSProperties = {
+  padding: 16,
+  borderBottom: "1px solid #e5e7eb",
+};
 
-const emptyState = { padding: 16, color: "#6b7280" };
+const sectionTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 800,
+};
 
-const table = { width: "100%", borderCollapse: "collapse" };
-const th = { padding: 12, textAlign: "left" };
-const td = { padding: 12 };
-const tdStrong = { ...td, fontWeight: 700 };
+const emptyState: React.CSSProperties = {
+  padding: 16,
+  color: "#6b7280",
+};
 
-const statusPill = {
+const table: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+};
+
+const th: React.CSSProperties = {
+  padding: 12,
+  textAlign: "left",
+};
+
+const td: React.CSSProperties = {
+  padding: 12,
+};
+
+const tdStrong: React.CSSProperties = {
+  ...td,
+  fontWeight: 700,
+};
+
+const statusPill: React.CSSProperties = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 700,
 };
 
-const paidPill = { background: "#dcfce7", color: "#166534" };
-const unpaidPill = { background: "#fee2e2", color: "#991b1b" };
+const paidPill: React.CSSProperties = {
+  background: "#dcfce7",
+  color: "#166534",
+};
 
-const payButton = {
+const unpaidPill: React.CSSProperties = {
+  background: "#fee2e2",
+  color: "#991b1b",
+};
+
+const payButton: React.CSSProperties = {
   padding: "8px 12px",
   background: "#16a34a",
   color: "white",
@@ -276,4 +332,7 @@ const payButton = {
   fontWeight: 700,
 };
 
-const paidText = { color: "#166534", fontWeight: 700 };
+const paidText: React.CSSProperties = {
+  color: "#166534",
+  fontWeight: 700,
+};
