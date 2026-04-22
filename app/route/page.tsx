@@ -395,7 +395,12 @@ function RouteCard({
   const phoneHref = cleanPhone(phone);
   const total = formatMoney(job.job_total);
   const unitOrVehicle = job.unit_number || job.vehicle || "";
-  const tireText = [job.qty, job.tires || job.size].filter(Boolean).join(" • ");
+
+  const tireParts: string[] = [];
+  if (job.qty) tireParts.push(String(job.qty));
+  if (job.tires) tireParts.push(String(job.tires));
+  if (job.size) tireParts.push(String(job.size));
+  const tireText = tireParts.length ? tireParts.join(" • ") : "-";
 
   return (
     <div style={card}>
@@ -430,7 +435,7 @@ function RouteCard({
 
         <div style={infoItem}>
           <div style={infoLabel}>Tires</div>
-          <div style={infoValue}>{tireText || "-"}</div>
+          <div style={infoValue}>{tireText}</div>
         </div>
 
         <div style={infoItem}>
