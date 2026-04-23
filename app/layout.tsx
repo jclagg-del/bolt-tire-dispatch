@@ -1,3 +1,5 @@
+import AuthGate from "@/components/AuthGate";
+
 export default function RootLayout({
   children,
 }: {
@@ -6,9 +8,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={body}>
-        <div style={container}>
-          {children}
-        </div>
+        <AuthGate>
+          <div style={container}>{children}</div>
+        </AuthGate>
       </body>
     </html>
   );
@@ -21,5 +23,5 @@ const body: React.CSSProperties = {
 };
 
 const container: React.CSSProperties = {
-  paddingBottom: 0, // removed space for nav
+  paddingBottom: 0,
 };
