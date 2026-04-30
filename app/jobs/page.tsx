@@ -27,6 +27,7 @@ type Job = {
   payment_status?: string | null;
   invoice_number?: string | null;
   job_status?: string | null;
+  archived?: boolean | null; // ✅ added
 };
 
 const NY_TIMEZONE = "America/New_York";
@@ -143,8 +144,10 @@ function JobsPageContent() {
         job_total,
         payment_status,
         invoice_number,
-        job_status
-      `);
+        job_status,
+        archived
+      `)
+      .eq("archived", false); // ✅ filters archived jobs
 
     if (error) {
       console.error("Error fetching jobs:", error.message);
@@ -281,6 +284,8 @@ function JobsPageContent() {
     </div>
   );
 }
+
+/* ⬇️ styles unchanged below */
 
 const shell: React.CSSProperties = {
   background: "#f8fafc",
