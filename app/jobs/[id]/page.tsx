@@ -49,7 +49,7 @@ export default function EditJobPage() {
   const [form, setForm] = useState<JobForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
@@ -185,23 +185,29 @@ export default function EditJobPage() {
     router.refresh();
   };
 
-  const handleDelete = async () => {
-    if (!id || deleting) return;
+  const handleArchive = async () => {
+    if (!id || archiving) return;
 
     const confirmed = window.confirm(
-      "Delete this job permanently? This cannot be undone."
+      "Archive this job? It will be hidden from active job lists but not permanently deleted."
     );
 
     if (!confirmed) return;
 
-    setDeleting(true);
+    setArchiving(true);
 
-    const { error } = await supabase.from("jobs").delete().eq("id", id);
+    const { error } = await supabase
+      .from("jobs")
+      .update({
+        archived: true,
+        job_status: "archived",
+      })
+      .eq("id", id);
 
-    setDeleting(false);
+    setArchiving(false);
 
     if (error) {
-      alert(`Error deleting job: ${error.message}`);
+      alert(`Error archiving job: ${error.message}`);
       return;
     }
 
@@ -344,11 +350,11 @@ export default function EditJobPage() {
 
               <button
                 type="button"
-                onClick={handleDelete}
-                style={deleteButton}
-                disabled={deleting}
+                onClick={handleArchive}
+                style={archiveButton}
+                disabled={archiving}
               >
-                {deleting ? "Deleting..." : "🗑 Delete Job"}
+                {archiving ? "Archiving..." : "📦 Archive Job"}
               </button>
             </div>
           </div>
@@ -745,9 +751,9 @@ const reopenButton: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const deleteButton: React.CSSProperties = {
+const archiveButton: React.CSSProperties = {
   padding: "12px 14px",
-  background: "#dc2626",
+  background: "#6b7280",
   color: "white",
   border: "none",
   borderRadius: 10,
