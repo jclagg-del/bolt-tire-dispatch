@@ -49,6 +49,7 @@ export default function EditJobPage() {
   const [form, setForm] = useState<JobForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
@@ -184,6 +185,30 @@ export default function EditJobPage() {
     router.refresh();
   };
 
+  const handleDelete = async () => {
+    if (!id || deleting) return;
+
+    const confirmed = window.confirm(
+      "Delete this job permanently? This cannot be undone."
+    );
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+
+    const { error } = await supabase.from("jobs").delete().eq("id", id);
+
+    setDeleting(false);
+
+    if (error) {
+      alert(`Error deleting job: ${error.message}`);
+      return;
+    }
+
+    router.push("/jobs");
+    router.refresh();
+  };
+
   const openCompleteModal = () => {
     if (!form || completing) return;
     setMileageConfirmed(!!form.vehicle_mileage.trim());
@@ -316,6 +341,15 @@ export default function EditJobPage() {
                   {completing ? "Updating..." : "↩️ Reopen Job"}
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={handleDelete}
+                style={deleteButton}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting..." : "🗑 Delete Job"}
+              </button>
             </div>
           </div>
         </div>
@@ -704,6 +738,16 @@ const completeButton: React.CSSProperties = {
 const reopenButton: React.CSSProperties = {
   padding: "12px 14px",
   background: "#f59e0b",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const deleteButton: React.CSSProperties = {
+  padding: "12px 14px",
+  background: "#dc2626",
   color: "white",
   border: "none",
   borderRadius: 10,
