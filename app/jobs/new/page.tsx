@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 
 type FormState = {
   customer: string;
+  contact_person: string;
   phone: string;
   email: string;
   vehicle: string;
@@ -37,9 +38,11 @@ function formatLocalDateTimeForDb(value: string) {
 export default function NewJobPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState("");
 
   const [form, setForm] = useState<FormState>({
     customer: "",
+    contact_person: "",
     phone: "",
     email: "",
     vehicle: "",
@@ -69,6 +72,48 @@ export default function NewJobPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  useEffect(() => {
+    const customer = form.customer.trim();
+
+    if (customer.length < 3) {
+      setLookupMessage("");
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("contact_person,phone,email,address")
+        .ilike("customer", customer)
+        .order("scheduled", { ascending: false, nullsFirst: false })
+        .limit(1);
+
+      if (error) {
+        setLookupMessage("");
+        return;
+      }
+
+      const match = data?.[0];
+
+      if (!match) {
+        setLookupMessage("");
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        contact_person: prev.contact_person || match.contact_person || "",
+        phone: prev.phone || match.phone || "",
+        email: prev.email || match.email || "",
+        address: prev.address || match.address || "",
+      }));
+
+      setLookupMessage("Repeat customer info filled from last job.");
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [form.customer]);
+
   const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
     e?.preventDefault();
     if (saving) return;
@@ -82,6 +127,7 @@ export default function NewJobPage() {
 
     const payload = {
       customer: form.customer.trim(),
+      contact_person: form.contact_person.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       vehicle: form.vehicle.trim() || null,
@@ -90,9 +136,7 @@ export default function NewJobPage() {
       tires: form.tires.trim() || null,
       size: form.size.trim() || null,
       qty: form.qty.trim() ? Number(form.qty) : null,
-      price_tires: form.price_tires.trim()
-        ? Number(form.price_tires)
-        : null,
+      price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
       address: form.address.trim() || null,
       scheduled: formatLocalDateTimeForDb(form.scheduled),
       vehicle_id: form.vehicle_id || "stepvan",
@@ -134,14 +178,14 @@ export default function NewJobPage() {
               <div style={eyebrow}>Jobs</div>
               <h1 style={title}>New Job</h1>
               <p style={subtitle}>
-                Create a new job and capture contact, vehicle, tire, and billing info.
+                Create a new job and auto-fill repeat customer contact info.
               </p>
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} style={card}>
-          <div style={sectionTitle}>Job Info</div>
+          <div style={sectionTitle}>Customer Info</div>
 
           <input
             name="customer"
@@ -150,6 +194,15 @@ export default function NewJobPage() {
             onChange={handleChange}
             style={input}
             autoComplete="organization"
+          />
+
+          <input
+            name="contact_person"
+            placeholder="Contact Person"
+            value={form.contact_person}
+            onChange={handleChange}
+            style={input}
+            autoComplete="name"
           />
 
           <input
@@ -171,6 +224,19 @@ export default function NewJobPage() {
             inputMode="email"
             autoComplete="email"
           />
+
+          <input
+            name="address"
+            placeholder="Address"
+            value={form.address}
+            onChange={handleChange}
+            style={input}
+            autoComplete="street-address"
+          />
+
+          {lookupMessage ? <div style={notice}>{lookupMessage}</div> : null}
+
+          <div style={sectionTitle}>Job Info</div>
 
           <input
             name="vehicle"
@@ -195,15 +261,6 @@ export default function NewJobPage() {
             onChange={handleChange}
             style={input}
             inputMode="numeric"
-          />
-
-          <input
-            name="address"
-            placeholder="Address"
-            value={form.address}
-            onChange={handleChange}
-            style={input}
-            autoComplete="street-address"
           />
 
           <input
@@ -443,6 +500,17 @@ const textarea: React.CSSProperties = {
   fontSize: 16,
   minHeight: 110,
   background: "#fff",
+};
+
+const notice: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 10,
+  background: "#ecfdf5",
+  border: "1px solid #bbf7d0",
+  color: "#166534",
+  fontSize: 14,
+  fontWeight: 700,
 };
 
 const button: React.CSSProperties = {
