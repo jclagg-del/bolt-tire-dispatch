@@ -80,6 +80,25 @@ function getNYDateKey(input?: string | null) {
   return `${year}-${month}-${day}`;
 }
 
+function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  utcDate.setUTCDate(utcDate.getUTCDate() + days);
+
+  return `${utcDate.getUTCFullYear()}-${String(utcDate.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(utcDate.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getStartOfWeek(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = date.getUTCDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  return addDaysToDateKey(dateKey, mondayOffset);
+}
+
 function formatDateTimeNY(input?: string | null) {
   const date = parseJobDate(input);
   if (!date) return "";
@@ -147,6 +166,7 @@ function JobsPageContent() {
   const searchParams = useSearchParams();
 
   const customerFilter = searchParams.get("customer") || "";
+  const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
@@ -158,6 +178,8 @@ function JobsPageContent() {
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [serviceFilter, setServiceFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
 
   const fetchVehicles = async () => {
     const { data, error } = await supabase
@@ -220,8 +242,6 @@ function JobsPageContent() {
     fetchJobs();
   }, []);
 
-  const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
-
   const vehicleMap = useMemo(() => {
     const map: Record<string, Vehicle> = {};
     vehicles.forEach((vehicle) => {
@@ -239,6 +259,42 @@ function JobsPageContent() {
 
     return Array.from(set).sort();
   }, [jobs]);
+
+  const applyQuickDate = (value: string) => {
+    setDateFilter(value);
+
+    if (value === "today") {
+      setStartDateFilter(todayKey);
+      setEndDateFilter(todayKey);
+      return;
+    }
+
+    if (value === "tomorrow") {
+      const tomorrow = addDaysToDateKey(todayKey, 1);
+      setStartDateFilter(tomorrow);
+      setEndDateFilter(tomorrow);
+      return;
+    }
+
+    if (value === "this_week") {
+      const start = getStartOfWeek(todayKey);
+      setStartDateFilter(start);
+      setEndDateFilter(addDaysToDateKey(start, 6));
+      return;
+    }
+
+    if (value === "next_week") {
+      const start = addDaysToDateKey(getStartOfWeek(todayKey), 7);
+      setStartDateFilter(start);
+      setEndDateFilter(addDaysToDateKey(start, 6));
+      return;
+    }
+
+    if (value === "all" || value === "upcoming" || value === "past" || value === "unscheduled") {
+      setStartDateFilter("");
+      setEndDateFilter("");
+    }
+  };
 
   const filteredJobs = useMemo(() => {
     let result = [...jobs];
@@ -290,16 +346,32 @@ function JobsPageContent() {
       result = result.filter((job) => (job.service_type || "") === serviceFilter);
     }
 
-    if (dateFilter !== "all") {
+    if (dateFilter === "upcoming") {
+      result = result.filter((job) => getNYDateKey(job.scheduled) > todayKey);
+    }
+
+    if (dateFilter === "past") {
       result = result.filter((job) => {
         const jobDateKey = getNYDateKey(job.scheduled);
+        return !!jobDateKey && jobDateKey < todayKey;
+      });
+    }
 
-        if (dateFilter === "today") return jobDateKey === todayKey;
-        if (dateFilter === "upcoming") return jobDateKey > todayKey;
-        if (dateFilter === "past") return !!jobDateKey && jobDateKey < todayKey;
-        if (dateFilter === "unscheduled") return !job.scheduled;
+    if (dateFilter === "unscheduled") {
+      result = result.filter((job) => !job.scheduled);
+    }
 
-        return true;
+    if (startDateFilter) {
+      result = result.filter((job) => {
+        const jobDateKey = getNYDateKey(job.scheduled);
+        return !!jobDateKey && jobDateKey >= startDateFilter;
+      });
+    }
+
+    if (endDateFilter) {
+      result = result.filter((job) => {
+        const jobDateKey = getNYDateKey(job.scheduled);
+        return !!jobDateKey && jobDateKey <= endDateFilter;
       });
     }
 
@@ -312,6 +384,8 @@ function JobsPageContent() {
     paymentFilter,
     serviceFilter,
     dateFilter,
+    startDateFilter,
+    endDateFilter,
     todayKey,
   ]);
 
@@ -322,6 +396,8 @@ function JobsPageContent() {
     setPaymentFilter("all");
     setServiceFilter("all");
     setDateFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
     router.push("/jobs");
   };
 
@@ -351,18 +427,61 @@ function JobsPageContent() {
           placeholder="Search customer, vehicle, address, PO, invoice, notes..."
         />
 
+        <div style={quickDateRow}>
+          <button type="button" style={quickDateButton} onClick={() => applyQuickDate("today")}>
+            Today
+          </button>
+          <button type="button" style={quickDateButton} onClick={() => applyQuickDate("tomorrow")}>
+            Tomorrow
+          </button>
+          <button type="button" style={quickDateButton} onClick={() => applyQuickDate("this_week")}>
+            This Week
+          </button>
+          <button type="button" style={quickDateButton} onClick={() => applyQuickDate("next_week")}>
+            Next Week
+          </button>
+          <button type="button" style={quickDateButton} onClick={() => setPaymentFilter("unpaid")}>
+            Unpaid
+          </button>
+        </div>
+
         <div style={filterGrid}>
           <select
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
+            onChange={(e) => applyQuickDate(e.target.value)}
             style={filterInput}
           >
             <option value="all">All Dates</option>
             <option value="today">Today</option>
+            <option value="tomorrow">Tomorrow</option>
+            <option value="this_week">This Week</option>
+            <option value="next_week">Next Week</option>
             <option value="upcoming">Upcoming</option>
             <option value="past">Past</option>
             <option value="unscheduled">Unscheduled</option>
           </select>
+
+          <input
+            type="date"
+            value={startDateFilter}
+            onChange={(e) => {
+              setStartDateFilter(e.target.value);
+              setDateFilter("custom");
+            }}
+            style={filterInput}
+            title="Start Date"
+          />
+
+          <input
+            type="date"
+            value={endDateFilter}
+            onChange={(e) => {
+              setEndDateFilter(e.target.value);
+              setDateFilter("custom");
+            }}
+            style={filterInput}
+            title="End Date"
+          />
 
           <select
             value={vehicleFilter}
@@ -389,7 +508,6 @@ function JobsPageContent() {
             <option value="completed">Completed</option>
             <option value="billed">Billed</option>
             <option value="paid">Paid</option>
-            <option value="archived">Archived</option>
           </select>
 
           <select
@@ -581,6 +699,24 @@ const searchInput: React.CSSProperties = {
   marginBottom: 10,
 };
 
+const quickDateRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
+const quickDateButton: React.CSSProperties = {
+  padding: "9px 11px",
+  borderRadius: 999,
+  border: "1px solid #d1d5db",
+  background: "#f9fafb",
+  color: "#111827",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 13,
+};
+
 const filterGrid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
@@ -594,6 +730,7 @@ const filterInput: React.CSSProperties = {
   border: "1px solid #d1d5db",
   background: "white",
   fontSize: 14,
+  boxSizing: "border-box",
 };
 
 const clearBtn: React.CSSProperties = {
