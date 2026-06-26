@@ -25,25 +25,41 @@ type Job = {
   billing_name?: string | null;
 };
 
+type Vehicle = {
+  id: string;
+  name: string;
+  color: string;
+  active: boolean;
+  sort_order: number;
+};
+
+type Assignment = {
+  assignment_date: string;
+  vehicle_id: string;
+  technician_name: string;
+};
+
 const NY_TIMEZONE = "America/New_York";
+
+const fallbackVehicles: Vehicle[] = [
+  { id: "stepvan", name: "Stepvan", color: "#2563eb", active: true, sort_order: 1 },
+  { id: "service", name: "Service Truck", color: "#facc15", active: true, sort_order: 2 },
+  { id: "sprinter", name: "Sprinter", color: "#10b981", active: true, sort_order: 3 },
+];
 
 function parseJobDate(input?: string | null) {
   if (!input) return null;
-
   const value = input.trim();
   if (!value) return null;
 
-  const hasTimezone =
-    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
 
   if (hasTimezone) {
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
 
-  const localValue = value.replace(" ", "T");
-  const d = new Date(localValue);
-
+  const d = new Date(value.replace(" ", "T"));
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -85,76 +101,110 @@ function formatMoney(value?: number | string | null) {
   return `$${num.toFixed(2)}`;
 }
 
-function vehicleLabel(vehicleId?: string | null) {
-  return vehicleId === "stepvan" ? "Stepvan" : "Service";
-}
+function getTextColor(background: string) {
+  const hex = background.replace("#", "");
+  if (hex.length !== 6) return "white";
 
-function vehicleColor(vehicleId?: string | null) {
-  return vehicleId === "stepvan" ? "#2563eb" : "#facc15";
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 150 ? "#111827" : "white";
 }
 
 export default function DashboardPage() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  const fetchJobs = async () => {
-    setLoading(true);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
 
-    try {
-      const result = await Promise.race([
-        supabase
-          .from("jobs")
-          .select(`
-            id,
-            customer,
-            vehicle,
-            vehicle_id,
-            unit_number,
-            address,
-            scheduled,
-            complete,
-            service_type,
-            po_number,
-            size,
-            qty,
-            job_total,
-            payment_status,
-            invoice_number,
-            job_status,
-            billing_name
-          `),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout fetching jobs")), 5000)
-        ),
-      ]);
+  const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
 
-      const { data, error } = result as {
-        data: Job[] | null;
-        error: { message: string } | null;
-      };
+  const fetchVehicles = async () => {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("id,name,color,active,sort_order")
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
 
-      if (error) {
-        console.error("Dashboard fetch error:", error.message);
-        setJobs([]);
-        setLoading(false);
-        return;
-      }
-
-      setJobs(data || []);
-      setLoading(false);
-    } catch (err: any) {
-      console.error("Dashboard fetch error:", err?.message || err);
-      setJobs([]);
-      setLoading(false);
+    if (error || !data || data.length === 0) {
+      setVehicles(fallbackVehicles);
+      return;
     }
+
+    setVehicles(data as Vehicle[]);
+  };
+
+  const fetchAssignments = async () => {
+    const { data, error } = await supabase
+      .from("vehicle_daily_assignments")
+      .select("assignment_date,vehicle_id,technician_name")
+      .eq("assignment_date", todayKey);
+
+    if (error) {
+      console.error("Dashboard technician assignment error:", error.message);
+      setAssignments({});
+      return;
+    }
+
+    const map: Record<string, string> = {};
+    ((data as Assignment[]) || []).forEach((row) => {
+      map[row.vehicle_id] = row.technician_name || "";
+    });
+
+    setAssignments(map);
+  };
+
+  const fetchJobs = async () => {
+    const { data, error } = await supabase.from("jobs").select(`
+      id,
+      customer,
+      vehicle,
+      vehicle_id,
+      unit_number,
+      address,
+      scheduled,
+      complete,
+      service_type,
+      po_number,
+      size,
+      qty,
+      job_total,
+      payment_status,
+      invoice_number,
+      job_status,
+      billing_name
+    `);
+
+    if (error) {
+      console.error("Dashboard fetch error:", error.message);
+      setJobs([]);
+      return;
+    }
+
+    setJobs((data as Job[]) || []);
+  };
+
+  const loadDashboard = async () => {
+    setLoading(true);
+    await Promise.all([fetchVehicles(), fetchAssignments(), fetchJobs()]);
+    setLoading(false);
   };
 
   useEffect(() => {
-    fetchJobs();
+    loadDashboard();
   }, []);
 
-  const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
+  const vehicleMap = useMemo(() => {
+    const map: Record<string, Vehicle> = {};
+    vehicles.forEach((vehicle) => {
+      map[vehicle.id] = vehicle;
+    });
+    return map;
+  }, [vehicles]);
 
   const scheduledJobs = useMemo(() => {
     return jobs.filter((j) => !!j.scheduled && !j.complete);
@@ -172,6 +222,41 @@ export default function DashboardPage() {
       .sort((a, b) => (a.scheduled || "").localeCompare(b.scheduled || ""));
   }, [scheduledJobs, todayKey]);
 
+  const completedJobs = useMemo(() => {
+    return jobs.filter((j) => !!j.complete);
+  }, [jobs]);
+
+  const unpaidJobs = useMemo(() => {
+    return jobs.filter((j) => (j.payment_status || "unpaid") !== "paid");
+  }, [jobs]);
+
+  const todayRevenue = useMemo(() => {
+    return todaysJobs.reduce((sum, job) => {
+      const value = Number(job.job_total || 0);
+      return Number.isNaN(value) ? sum : sum + value;
+    }, 0);
+  }, [todaysJobs]);
+
+  const jobsByVehicleToday = useMemo(() => {
+    const grouped: Record<string, Job[]> = {};
+
+    vehicles.forEach((vehicle) => {
+      grouped[vehicle.id] = [];
+    });
+
+    todaysJobs.forEach((job) => {
+      const vehicleId = job.vehicle_id || "stepvan";
+
+      if (!grouped[vehicleId]) {
+        grouped[vehicleId] = [];
+      }
+
+      grouped[vehicleId].push(job);
+    });
+
+    return grouped;
+  }, [todaysJobs, vehicles]);
+
   return (
     <div style={shell}>
       <AppHeader />
@@ -181,43 +266,79 @@ export default function DashboardPage() {
           <div style={heroTop}>
             <div>
               <div style={eyebrow}>Bolt Tire</div>
-              <h1 style={heroTitle}>Home</h1>
+              <h1 style={heroTitle}>Dispatch Dashboard</h1>
               <p style={subtitle}>
-                Active jobs, today’s schedule, and quick access to the work that matters most.
+                Today&apos;s jobs, vehicle assignments, and quick links to the pages you use most.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => router.push("/jobs/new")}
-              style={primaryButton}
-            >
+            <button type="button" onClick={() => router.push("/jobs/new")} style={primaryButton}>
               + Add Job
             </button>
           </div>
         </div>
 
-        <div style={summaryGrid}>
-          <div style={summaryCard}>
-            <div style={summaryLabel}>Today</div>
-            <div style={summaryValue}>{todaysJobs.length}</div>
-          </div>
-
-          <div style={summaryCard}>
-            <div style={summaryLabel}>Upcoming</div>
-            <div style={summaryValue}>{upcomingJobs.length}</div>
-          </div>
-
-          <div style={summaryCard}>
-            <div style={summaryLabel}>Open Jobs</div>
-            <div style={summaryValue}>{scheduledJobs.length}</div>
-          </div>
+        <div style={quickGrid}>
+          <QuickCard label="Open Jobs" value={scheduledJobs.length} onClick={() => router.push("/jobs")} />
+          <QuickCard label="Today&apos;s Route" value={todaysJobs.length} onClick={() => router.push("/route")} />
+          <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />
+          <QuickCard label="Completed" value={completedJobs.length} onClick={() => router.push("/completed")} />
+          <QuickCard label="Billing" value={unpaidJobs.length} onClick={() => router.push("/billing")} />
+          <QuickCard label="Revenue Today" value={formatMoney(todayRevenue)} onClick={() => router.push("/billing")} />
         </div>
 
-        {loading && <div style={loadingBox}>Loading jobs...</div>}
+        {loading && <div style={loadingBox}>Loading dashboard...</div>}
 
         {!loading && (
           <>
+            <section style={sectionWrap}>
+              <div style={sectionHeader}>
+                <h2 style={sectionTitle}>Today&apos;s Vehicles</h2>
+                <div style={sectionBadge}>{vehicles.length}</div>
+              </div>
+
+              <div style={vehicleGrid}>
+                {vehicles.map((vehicle) => {
+                  const vehicleJobs = jobsByVehicleToday[vehicle.id] || [];
+                  const techName = assignments[vehicle.id] || "No tech assigned";
+                  const textColor = getTextColor(vehicle.color);
+
+                  return (
+                    <div
+                      key={vehicle.id}
+                      style={vehicleCard}
+                      onClick={() => router.push("/route")}
+                    >
+                      <div
+                        style={{
+                          ...vehicleHeader,
+                          background: vehicle.color,
+                          color: textColor,
+                        }}
+                      >
+                        {vehicle.name}
+                      </div>
+
+                      <div style={vehicleBody}>
+                        <div style={vehicleTech}>{techName}</div>
+                        <div style={vehicleJobsText}>
+                          {vehicleJobs.length} job{vehicleJobs.length === 1 ? "" : "s"} today
+                        </div>
+
+                        {vehicleJobs[0] ? (
+                          <div style={firstStop}>
+                            First stop: {vehicleJobs[0].customer || "Unnamed Job"}
+                          </div>
+                        ) : (
+                          <div style={firstStop}>No jobs scheduled</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
             <section style={sectionWrap}>
               <div style={sectionHeader}>
                 <h2 style={sectionTitle}>Today</h2>
@@ -227,7 +348,9 @@ export default function DashboardPage() {
               {todaysJobs.length === 0 ? (
                 <div style={emptyState}>No jobs scheduled for today.</div>
               ) : (
-                todaysJobs.map((job) => <JobCard key={job.id} job={job} />)
+                todaysJobs.map((job) => (
+                  <JobCard key={job.id} job={job} vehicle={vehicleMap[job.vehicle_id || ""]} />
+                ))
               )}
             </section>
 
@@ -240,7 +363,9 @@ export default function DashboardPage() {
               {upcomingJobs.length === 0 ? (
                 <div style={emptyState}>No upcoming jobs.</div>
               ) : (
-                upcomingJobs.map((job) => <JobCard key={job.id} job={job} />)
+                upcomingJobs.slice(0, 10).map((job) => (
+                  <JobCard key={job.id} job={job} vehicle={vehicleMap[job.vehicle_id || ""]} />
+                ))
               )}
             </section>
           </>
@@ -250,11 +375,30 @@ export default function DashboardPage() {
   );
 }
 
-function JobCard({ job }: { job: Job }) {
+function QuickCard({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" style={quickCard} onClick={onClick}>
+      <div style={quickLabel}>{label}</div>
+      <div style={quickValue}>{value}</div>
+    </button>
+  );
+}
+
+function JobCard({ job, vehicle }: { job: Job; vehicle?: Vehicle }) {
   const router = useRouter();
 
   const total = formatMoney(job.job_total);
-  const vehicleName = vehicleLabel(job.vehicle_id);
+  const vehicleName = vehicle?.name || job.vehicle_id || "Unassigned";
+  const vehicleBg = vehicle?.color || "#9ca3af";
+  const vehicleText = getTextColor(vehicleBg);
   const payment = job.payment_status || "unpaid";
   const unitOrVehicle = job.unit_number || job.vehicle || "";
   const status = job.job_status || "scheduled";
@@ -273,7 +417,8 @@ function JobCard({ job }: { job: Job }) {
         <div
           style={{
             ...tag,
-            background: vehicleColor(job.vehicle_id),
+            background: vehicleBg,
+            color: vehicleText,
           }}
         >
           {vehicleName}
@@ -281,56 +426,32 @@ function JobCard({ job }: { job: Job }) {
       </div>
 
       <div style={infoGrid}>
-        <div style={infoItem}>
-          <div style={infoLabel}>Service</div>
-          <div style={infoValue}>{job.service_type || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>PO #</div>
-          <div style={infoValue}>{job.po_number || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Size / Qty</div>
-          <div style={infoValue}>
-            {job.size || "-"}
-            {job.qty !== null && job.qty !== undefined && job.qty !== ""
-              ? ` / ${job.qty}`
-              : ""}
-          </div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Total</div>
-          <div style={infoValueStrong}>{total || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Billing</div>
-          <div style={infoValue}>{payment}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Invoice</div>
-          <div style={infoValue}>{job.invoice_number || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Status</div>
-          <div style={infoValue}>{status}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Bill To</div>
-          <div style={infoValue}>{job.billing_name || "-"}</div>
-        </div>
+        <Info label="Service" value={job.service_type || "-"} />
+        <Info label="PO #" value={job.po_number || "-"} />
+        <Info
+          label="Size / Qty"
+          value={`${job.size || "-"}${
+            job.qty !== null && job.qty !== undefined && job.qty !== "" ? ` / ${job.qty}` : ""
+          }`}
+        />
+        <Info label="Total" value={total || "-"} strong />
+        <Info label="Billing" value={payment} />
+        <Info label="Invoice" value={job.invoice_number || "-"} />
+        <Info label="Status" value={status} />
+        <Info label="Bill To" value={job.billing_name || "-"} />
       </div>
     </div>
   );
 }
 
-/* STYLES */
+function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div style={infoItem}>
+      <div style={infoLabel}>{label}</div>
+      <div style={strong ? infoValueStrong : infoValue}>{value}</div>
+    </div>
+  );
+}
 
 const shell: React.CSSProperties = {
   background: "#f8fafc",
@@ -339,7 +460,7 @@ const shell: React.CSSProperties = {
 
 const page: React.CSSProperties = {
   padding: 18,
-  maxWidth: 1050,
+  maxWidth: 1150,
   margin: "0 auto",
 };
 
@@ -395,6 +516,37 @@ const primaryButton: React.CSSProperties = {
   background: "#2563eb",
 };
 
+const quickGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+  marginBottom: 18,
+};
+
+const quickCard: React.CSSProperties = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 16,
+  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const quickLabel: React.CSSProperties = {
+  fontSize: 13,
+  color: "#6b7280",
+  marginBottom: 8,
+  fontWeight: 700,
+  textTransform: "uppercase",
+};
+
+const quickValue: React.CSSProperties = {
+  fontSize: 28,
+  fontWeight: 800,
+  color: "#111827",
+};
+
 const sectionWrap: React.CSSProperties = {
   marginBottom: 22,
 };
@@ -425,33 +577,47 @@ const sectionBadge: React.CSSProperties = {
   fontSize: 14,
 };
 
-const summaryGrid: React.CSSProperties = {
+const vehicleGrid: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 12,
-  marginBottom: 18,
 };
 
-const summaryCard: React.CSSProperties = {
+const vehicleCard: React.CSSProperties = {
   background: "white",
   border: "1px solid #e5e7eb",
   borderRadius: 16,
-  padding: 16,
+  overflow: "hidden",
   boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+  cursor: "pointer",
 };
 
-const summaryLabel: React.CSSProperties = {
-  fontSize: 13,
-  color: "#6b7280",
-  marginBottom: 8,
-  fontWeight: 700,
-  textTransform: "uppercase",
+const vehicleHeader: React.CSSProperties = {
+  padding: 12,
+  fontSize: 17,
+  fontWeight: 800,
 };
 
-const summaryValue: React.CSSProperties = {
-  fontSize: 30,
+const vehicleBody: React.CSSProperties = {
+  padding: 14,
+};
+
+const vehicleTech: React.CSSProperties = {
+  fontSize: 16,
   fontWeight: 800,
   color: "#111827",
+};
+
+const vehicleJobsText: React.CSSProperties = {
+  marginTop: 6,
+  color: "#374151",
+  fontSize: 14,
+};
+
+const firstStop: React.CSSProperties = {
+  marginTop: 8,
+  color: "#6b7280",
+  fontSize: 13,
 };
 
 const loadingBox: React.CSSProperties = {
@@ -517,7 +683,6 @@ const time: React.CSSProperties = {
 const tag: React.CSSProperties = {
   padding: "7px 11px",
   borderRadius: 999,
-  color: "black",
   fontSize: 12,
   fontWeight: 800,
   whiteSpace: "nowrap",
