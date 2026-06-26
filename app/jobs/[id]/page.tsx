@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import VehicleSelect from "@/components/VehicleSelect";
+import CompletionModal from "@/components/CompletionModal";
 
 type JobForm = {
   customer: string;
@@ -136,6 +138,11 @@ export default function EditJobPage() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const setVehicleId = (value: string) => {
+    if (!form) return;
+    setForm({ ...form, vehicle_id: value });
+  };
+
   const handleSave = async () => {
     if (!form || saving) return;
 
@@ -153,9 +160,7 @@ export default function EditJobPage() {
         tires: form.tires.trim() || null,
         size: form.size.trim() || null,
         qty: form.qty ? Number(form.qty) : null,
-        price_tires: form.price_tires.trim()
-          ? Number(form.price_tires)
-          : null,
+        price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
         address: form.address.trim() || null,
         notes: form.notes.trim() || null,
         scheduled: formatLocalDateTimeForDb(form.scheduled),
@@ -300,8 +305,6 @@ export default function EditJobPage() {
   }
 
   const mileageMissing = !form.vehicle_mileage.trim();
-  const canComplete =
-    !mileageMissing && mileageConfirmed && torqueConfirmed && !completing;
 
   return (
     <div style={shell}>
@@ -319,12 +322,7 @@ export default function EditJobPage() {
             </div>
 
             <div style={heroActions}>
-              <button
-                type="button"
-                onClick={handleSave}
-                style={saveButton}
-                disabled={saving}
-              >
+              <button type="button" onClick={handleSave} style={saveButton} disabled={saving}>
                 {saving ? "Saving..." : "💾 Save Changes"}
               </button>
 
@@ -363,63 +361,13 @@ export default function EditJobPage() {
         <div style={card}>
           <div style={sectionTitle}>Job Info</div>
 
-          <input
-            name="customer"
-            value={form.customer}
-            onChange={handleChange}
-            style={input}
-            placeholder="Customer"
-          />
-
-          <input
-            name="phone"
-            value={form.phone}
-            onChange={handleChange}
-            style={input}
-            placeholder="Phone"
-          />
-
-          <input
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            style={input}
-            placeholder="Email"
-            inputMode="email"
-          />
-
-          <input
-            name="vehicle"
-            value={form.vehicle}
-            onChange={handleChange}
-            style={input}
-            placeholder="Vehicle"
-          />
-
-          <input
-            name="unit_number"
-            value={form.unit_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="Unit Number"
-          />
-
-          <input
-            name="vehicle_mileage"
-            value={form.vehicle_mileage}
-            onChange={handleChange}
-            style={input}
-            placeholder="Vehicle Mileage"
-            inputMode="numeric"
-          />
-
-          <input
-            name="address"
-            value={form.address}
-            onChange={handleChange}
-            style={input}
-            placeholder="Address"
-          />
+          <input name="customer" value={form.customer} onChange={handleChange} style={input} placeholder="Customer" />
+          <input name="phone" value={form.phone} onChange={handleChange} style={input} placeholder="Phone" />
+          <input name="email" value={form.email} onChange={handleChange} style={input} placeholder="Email" inputMode="email" />
+          <input name="vehicle" value={form.vehicle} onChange={handleChange} style={input} placeholder="Vehicle" />
+          <input name="unit_number" value={form.unit_number} onChange={handleChange} style={input} placeholder="Unit Number" />
+          <input name="vehicle_mileage" value={form.vehicle_mileage} onChange={handleChange} style={input} placeholder="Vehicle Mileage" inputMode="numeric" />
+          <input name="address" value={form.address} onChange={handleChange} style={input} placeholder="Address" />
 
           <input
             type="datetime-local"
@@ -429,22 +377,9 @@ export default function EditJobPage() {
             style={input}
           />
 
-          <select
-            name="vehicle_id"
-            value={form.vehicle_id}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="stepvan">🚐 Stepvan</option>
-            <option value="service">🛠 Service Truck</option>
-          </select>
+          <VehicleSelect value={form.vehicle_id} onChange={setVehicleId} style={input} />
 
-          <select
-            name="service_type"
-            value={form.service_type}
-            onChange={handleChange}
-            style={input}
-          >
+          <select name="service_type" value={form.service_type} onChange={handleChange} style={input}>
             <option value="">Service Type</option>
             <option value="new tires">New Tires</option>
             <option value="repair">Repair</option>
@@ -456,92 +391,26 @@ export default function EditJobPage() {
 
           <div style={sectionTitle}>Tire Info</div>
 
-          <input
-            name="tires"
-            value={form.tires}
-            onChange={handleChange}
-            style={input}
-            placeholder="Tires"
-          />
-
-          <input
-            name="size"
-            value={form.size}
-            onChange={handleChange}
-            style={input}
-            placeholder="Size"
-          />
-
-          <input
-            name="qty"
-            value={form.qty}
-            onChange={handleChange}
-            style={input}
-            placeholder="Quantity"
-            inputMode="numeric"
-          />
-
-          <input
-            name="price_tires"
-            value={form.price_tires}
-            onChange={handleChange}
-            style={input}
-            placeholder="Tire Price (each)"
-            inputMode="decimal"
-          />
+          <input name="tires" value={form.tires} onChange={handleChange} style={input} placeholder="Tires" />
+          <input name="size" value={form.size} onChange={handleChange} style={input} placeholder="Size" />
+          <input name="qty" value={form.qty} onChange={handleChange} style={input} placeholder="Quantity" inputMode="numeric" />
+          <input name="price_tires" value={form.price_tires} onChange={handleChange} style={input} placeholder="Tire Price (each)" inputMode="decimal" />
 
           <div style={sectionTitle}>Billing Info</div>
 
-          <input
-            name="po_number"
-            value={form.po_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="PO Number"
-          />
+          <input name="po_number" value={form.po_number} onChange={handleChange} style={input} placeholder="PO Number" />
+          <input name="billing_name" value={form.billing_name} onChange={handleChange} style={input} placeholder="Billing Name" />
+          <input name="job_total" value={form.job_total} onChange={handleChange} style={input} placeholder="Job Total" inputMode="decimal" />
 
-          <input
-            name="billing_name"
-            value={form.billing_name}
-            onChange={handleChange}
-            style={input}
-            placeholder="Billing Name"
-          />
-
-          <input
-            name="job_total"
-            value={form.job_total}
-            onChange={handleChange}
-            style={input}
-            placeholder="Job Total"
-            inputMode="decimal"
-          />
-
-          <select
-            name="payment_status"
-            value={form.payment_status}
-            onChange={handleChange}
-            style={input}
-          >
+          <select name="payment_status" value={form.payment_status} onChange={handleChange} style={input}>
             <option value="unpaid">Unpaid</option>
             <option value="partial">Partial</option>
             <option value="paid">Paid</option>
           </select>
 
-          <input
-            name="invoice_number"
-            value={form.invoice_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="Invoice Number"
-          />
+          <input name="invoice_number" value={form.invoice_number} onChange={handleChange} style={input} placeholder="Invoice Number" />
 
-          <select
-            name="job_status"
-            value={form.job_status}
-            onChange={handleChange}
-            style={input}
-          >
+          <select name="job_status" value={form.job_status} onChange={handleChange} style={input}>
             <option value="scheduled">Scheduled</option>
             <option value="en_route">En Route</option>
             <option value="on_site">On Site</option>
@@ -552,74 +421,21 @@ export default function EditJobPage() {
 
           <div style={sectionTitle}>Notes</div>
 
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={handleChange}
-            style={textarea}
-            placeholder="Notes"
-          />
+          <textarea name="notes" value={form.notes} onChange={handleChange} style={textarea} placeholder="Notes" />
         </div>
       </div>
 
-      {showCompleteModal && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
-            <h2 style={modalTitle}>Before completing this job</h2>
-            <p style={modalText}>
-              Please confirm the required reminders below.
-            </p>
-
-            {mileageMissing && (
-              <div style={warningBox}>
-                Vehicle mileage has not been entered yet. Add mileage in the form before completing this job.
-              </div>
-            )}
-
-            <label style={checkRow}>
-              <input
-                type="checkbox"
-                checked={mileageConfirmed}
-                onChange={(e) => setMileageConfirmed(e.target.checked)}
-                disabled={mileageMissing}
-              />
-              <span>Vehicle mileage has been entered</span>
-            </label>
-
-            <label style={checkRow}>
-              <input
-                type="checkbox"
-                checked={torqueConfirmed}
-                onChange={(e) => setTorqueConfirmed(e.target.checked)}
-              />
-              <span>All wheels have been torqued properly</span>
-            </label>
-
-            <div style={modalButtonRow}>
-              <button
-                type="button"
-                onClick={closeCompleteModal}
-                style={modalCancelButton}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleComplete}
-                style={{
-                  ...modalCompleteButton,
-                  opacity: canComplete ? 1 : 0.6,
-                  cursor: canComplete ? "pointer" : "not-allowed",
-                }}
-                disabled={!canComplete}
-              >
-                {completing ? "Completing..." : "Confirm Complete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CompletionModal
+        show={showCompleteModal}
+        completing={completing}
+        mileageMissing={mileageMissing}
+        mileageConfirmed={mileageConfirmed}
+        torqueConfirmed={torqueConfirmed}
+        onMileageChange={setMileageConfirmed}
+        onTorqueChange={setTorqueConfirmed}
+        onCancel={closeCompleteModal}
+        onConfirm={handleComplete}
+      />
     </div>
   );
 }
@@ -758,87 +574,5 @@ const archiveButton: React.CSSProperties = {
   border: "none",
   borderRadius: 10,
   cursor: "pointer",
-  fontWeight: 700,
-};
-
-const modalOverlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.45)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-  zIndex: 1000,
-};
-
-const modalCard: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 460,
-  background: "white",
-  borderRadius: 14,
-  padding: 20,
-  boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
-};
-
-const modalTitle: React.CSSProperties = {
-  margin: 0,
-  marginBottom: 8,
-  fontSize: 22,
-  fontWeight: 700,
-};
-
-const modalText: React.CSSProperties = {
-  marginTop: 0,
-  marginBottom: 16,
-  color: "#4b5563",
-  fontSize: 15,
-};
-
-const warningBox: React.CSSProperties = {
-  background: "#fef3c7",
-  color: "#92400e",
-  padding: 12,
-  borderRadius: 8,
-  marginBottom: 14,
-  fontWeight: 600,
-  fontSize: 14,
-};
-
-const checkRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  alignItems: "flex-start",
-  padding: "10px 0",
-  fontSize: 16,
-};
-
-const modalButtonRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  marginTop: 18,
-  flexWrap: "wrap",
-};
-
-const modalCancelButton: React.CSSProperties = {
-  flex: 1,
-  minWidth: 140,
-  padding: 12,
-  background: "#e5e7eb",
-  color: "#111827",
-  border: "none",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: 700,
-};
-
-const modalCompleteButton: React.CSSProperties = {
-  flex: 1,
-  minWidth: 140,
-  padding: 12,
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
   fontWeight: 700,
 };

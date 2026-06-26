@@ -29,32 +29,47 @@ type Job = {
   vehicle_mileage?: string | null;
 };
 
+type Vehicle = {
+  id: string;
+  name: string;
+  color: string;
+  active: boolean;
+  sort_order: number;
+};
+
+type Assignment = {
+  id?: string;
+  assignment_date: string;
+  vehicle_id: string;
+  technician_name: string;
+};
+
 const NY_TIMEZONE = "America/New_York";
+
+const fallbackVehicles: Vehicle[] = [
+  { id: "stepvan", name: "Stepvan", color: "#2563eb", active: true, sort_order: 1 },
+  { id: "service", name: "Service Truck", color: "#facc15", active: true, sort_order: 2 },
+  { id: "sprinter", name: "Sprinter", color: "#10b981", active: true, sort_order: 3 },
+];
 
 function parseJobDate(input?: string | null) {
   if (!input) return null;
-
   const value = input.trim();
   if (!value) return null;
 
-  const hasTimezone =
-    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
 
   if (hasTimezone) {
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
 
-  const localValue = value.replace(" ", "T");
-  const d = new Date(localValue);
-
+  const d = new Date(value.replace(" ", "T"));
   return isNaN(d.getTime()) ? null : d;
 }
 
 function getNYDateKey(input: string | Date) {
-  const date =
-    input instanceof Date ? input : parseJobDate(input) || new Date(input);
-
+  const date = input instanceof Date ? input : parseJobDate(input) || new Date(input);
   if (isNaN(date.getTime())) return "";
 
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -99,20 +114,74 @@ function mapsUrl(address?: string | null) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
+function getReadableTextColor(background: string) {
+  const hex = background.replace("#", "");
+  if (hex.length !== 6) return "white";
+
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 150 ? "#111827" : "white";
+}
+
 export default function RoutePage() {
+  const router = useRouter();
+
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
+  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [savingTech, setSavingTech] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [completingId, setCompletingId] = useState<string | number | null>(null);
   const [errorText, setErrorText] = useState("");
+
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [routeMileage, setRouteMileage] = useState("");
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
   const [torqueConfirmed, setTorqueConfirmed] = useState(false);
-  const router = useRouter();
+
+  const todayKey = useMemo(() => getNYDateKey(new Date()), []);
+
+  const fetchVehicles = async () => {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("id,name,color,active,sort_order")
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      setVehicles(fallbackVehicles);
+      return;
+    }
+
+    setVehicles(data as Vehicle[]);
+  };
+
+  const fetchAssignments = async () => {
+    const { data, error } = await supabase
+      .from("vehicle_daily_assignments")
+      .select("assignment_date,vehicle_id,technician_name")
+      .eq("assignment_date", todayKey);
+
+    if (error) {
+      console.error("Error loading technician assignments:", error.message);
+      setAssignments({});
+      return;
+    }
+
+    const map: Record<string, string> = {};
+    ((data as Assignment[]) || []).forEach((row) => {
+      map[row.vehicle_id] = row.technician_name || "";
+    });
+
+    setAssignments(map);
+  };
 
   const fetchJobs = async () => {
-    setLoading(true);
     setErrorText("");
 
     const { data, error } = await supabase
@@ -144,19 +213,21 @@ export default function RoutePage() {
     if (error) {
       setErrorText(error.message);
       setJobs([]);
-      setLoading(false);
       return;
     }
 
     setJobs((data as Job[]) || []);
+  };
+
+  const loadPage = async () => {
+    setLoading(true);
+    await Promise.all([fetchVehicles(), fetchAssignments(), fetchJobs()]);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchJobs();
+    loadPage();
   }, []);
-
-  const todayKey = useMemo(() => getNYDateKey(new Date()), []);
 
   const todaysJobs = useMemo(() => {
     return jobs
@@ -167,13 +238,54 @@ export default function RoutePage() {
       .sort((a, b) => (a.scheduled || "").localeCompare(b.scheduled || ""));
   }, [jobs, todayKey]);
 
-  const stepvanJobs = useMemo(() => {
-    return todaysJobs.filter((job) => job.vehicle_id === "stepvan");
-  }, [todaysJobs]);
+  const jobsByVehicle = useMemo(() => {
+    const grouped: Record<string, Job[]> = {};
 
-  const serviceTruckJobs = useMemo(() => {
-    return todaysJobs.filter((job) => job.vehicle_id !== "stepvan");
-  }, [todaysJobs]);
+    vehicles.forEach((vehicle) => {
+      grouped[vehicle.id] = [];
+    });
+
+    todaysJobs.forEach((job) => {
+      const vehicleId = job.vehicle_id || "stepvan";
+
+      if (!grouped[vehicleId]) {
+        grouped[vehicleId] = [];
+      }
+
+      grouped[vehicleId].push(job);
+    });
+
+    return grouped;
+  }, [todaysJobs, vehicles]);
+
+  const saveTechnician = async (vehicleId: string, technicianName: string) => {
+    setSavingTech(vehicleId);
+
+    const { error } = await supabase
+      .from("vehicle_daily_assignments")
+      .upsert(
+        {
+          assignment_date: todayKey,
+          vehicle_id: vehicleId,
+          technician_name: technicianName.trim(),
+        },
+        {
+          onConflict: "assignment_date,vehicle_id",
+        }
+      );
+
+    setSavingTech(null);
+
+    if (error) {
+      alert(`Error saving technician: ${error.message}`);
+      return;
+    }
+
+    setAssignments((prev) => ({
+      ...prev,
+      [vehicleId]: technicianName,
+    }));
+  };
 
   const openCompleteModal = (job: Job) => {
     setSelectedJob(job);
@@ -252,56 +364,75 @@ export default function RoutePage() {
           <div style={eyebrow}>Route</div>
           <h1 style={title}>Today&apos;s Route</h1>
           <p style={subtitle}>
-            Jobs are split by vehicle so the stepvan and service truck can run side by side.
+            Jobs are split by vehicle. Assign a technician to each vehicle for the day.
           </p>
         </div>
 
         {errorText ? <div style={errorBanner}>Error: {errorText}</div> : null}
 
         <div style={columnsWrap}>
-          <div style={column}>
-            <div style={{ ...columnHeader, background: "#2563eb" }}>
-              🚐 Stepvan ({stepvanJobs.length})
-            </div>
+          {vehicles.map((vehicle) => {
+            const vehicleJobs = jobsByVehicle[vehicle.id] || [];
+            const techName = assignments[vehicle.id] || "";
+            const textColor = getReadableTextColor(vehicle.color);
 
-            <div style={columnBody}>
-              {stepvanJobs.length > 0 ? (
-                stepvanJobs.map((job, index) => (
-                  <RouteCard
-                    key={job.id}
-                    job={job}
-                    stopNumber={index + 1}
-                    isCompleting={completingId === job.id}
-                    onComplete={() => openCompleteModal(job)}
-                  />
-                ))
-              ) : (
-                <div style={empty}>No Stepvan jobs today</div>
-              )}
-            </div>
-          </div>
+            return (
+              <div key={vehicle.id} style={column}>
+                <div
+                  style={{
+                    ...columnHeader,
+                    background: vehicle.color || "#111827",
+                    color: textColor,
+                  }}
+                >
+                  <div>{vehicle.name} ({vehicleJobs.length})</div>
+                </div>
 
-          <div style={column}>
-            <div style={{ ...columnHeader, background: "#facc15", color: "#111" }}>
-              🛠 Service Truck ({serviceTruckJobs.length})
-            </div>
+                <div style={techBox}>
+                  <label style={techLabel}>Technician Today</label>
+                  <div style={techRow}>
+                    <input
+                      value={techName}
+                      onChange={(e) =>
+                        setAssignments((prev) => ({
+                          ...prev,
+                          [vehicle.id]: e.target.value,
+                        }))
+                      }
+                      onBlur={(e) => saveTechnician(vehicle.id, e.target.value)}
+                      style={techInput}
+                      placeholder="Technician name"
+                    />
 
-            <div style={columnBody}>
-              {serviceTruckJobs.length > 0 ? (
-                serviceTruckJobs.map((job, index) => (
-                  <RouteCard
-                    key={job.id}
-                    job={job}
-                    stopNumber={index + 1}
-                    isCompleting={completingId === job.id}
-                    onComplete={() => openCompleteModal(job)}
-                  />
-                ))
-              ) : (
-                <div style={empty}>No Service Truck jobs today</div>
-              )}
-            </div>
-          </div>
+                    <button
+                      type="button"
+                      style={techSaveButton}
+                      onClick={() => saveTechnician(vehicle.id, techName)}
+                      disabled={savingTech === vehicle.id}
+                    >
+                      {savingTech === vehicle.id ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={columnBody}>
+                  {vehicleJobs.length > 0 ? (
+                    vehicleJobs.map((job, index) => (
+                      <RouteCard
+                        key={job.id}
+                        job={job}
+                        stopNumber={index + 1}
+                        isCompleting={completingId === job.id}
+                        onComplete={() => openCompleteModal(job)}
+                      />
+                    ))
+                  ) : (
+                    <div style={empty}>No {vehicle.name} jobs today</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -313,9 +444,7 @@ export default function RoutePage() {
               Confirm the job is wrapped up properly before marking it complete.
             </p>
 
-            <div style={jobNameBox}>
-              {selectedJob.customer || "Unnamed Job"}
-            </div>
+            <div style={jobNameBox}>{selectedJob.customer || "Unnamed Job"}</div>
 
             <input
               value={routeMileage}
@@ -351,11 +480,7 @@ export default function RoutePage() {
             </label>
 
             <div style={modalButtonRow}>
-              <button
-                type="button"
-                onClick={closeCompleteModal}
-                style={modalCancelButton}
-              >
+              <button type="button" onClick={closeCompleteModal} style={modalCancelButton}>
                 Cancel
               </button>
 
@@ -406,11 +531,7 @@ function RouteCard({
     <div style={card}>
       <div style={cardTop}>
         <div style={stopBadge}>Stop {stopNumber}</div>
-        <button
-          type="button"
-          onClick={() => router.push(`/jobs/${job.id}`)}
-          style={editBtn}
-        >
+        <button type="button" onClick={() => router.push(`/jobs/${job.id}`)} style={editBtn}>
           Edit
         </button>
       </div>
@@ -423,45 +544,14 @@ function RouteCard({
       {phone ? <div style={sub}>📞 {phone}</div> : null}
 
       <div style={infoGrid}>
-        <div style={infoItem}>
-          <div style={infoLabel}>Service</div>
-          <div style={infoValue}>{job.service_type || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>PO #</div>
-          <div style={infoValue}>{job.po_number || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Tires</div>
-          <div style={infoValue}>{tireText}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Total</div>
-          <div style={infoValueStrong}>{total || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Billing</div>
-          <div style={infoValue}>{job.payment_status || "unpaid"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Invoice</div>
-          <div style={infoValue}>{job.invoice_number || "-"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Status</div>
-          <div style={infoValue}>{job.job_status || "scheduled"}</div>
-        </div>
-
-        <div style={infoItem}>
-          <div style={infoLabel}>Bill To</div>
-          <div style={infoValue}>{job.billing_name || "-"}</div>
-        </div>
+        <Info label="Service" value={job.service_type || "-"} />
+        <Info label="PO #" value={job.po_number || "-"} />
+        <Info label="Tires" value={tireText} />
+        <Info label="Total" value={total || "-"} strong />
+        <Info label="Billing" value={job.payment_status || "unpaid"} />
+        <Info label="Invoice" value={job.invoice_number || "-"} />
+        <Info label="Status" value={job.job_status || "scheduled"} />
+        <Info label="Bill To" value={job.billing_name || "-"} />
       </div>
 
       {job.notes && <div style={notes}>📝 {job.notes}</div>}
@@ -491,12 +581,7 @@ function RouteCard({
           <span style={btnDisabled}>Text</span>
         )}
 
-        <button
-          type="button"
-          onClick={onComplete}
-          style={completeBtn}
-          disabled={isCompleting}
-        >
+        <button type="button" onClick={onComplete} style={completeBtn} disabled={isCompleting}>
           {isCompleting ? "Completing..." : "Complete"}
         </button>
       </div>
@@ -504,7 +589,22 @@ function RouteCard({
   );
 }
 
-/* STYLES */
+function Info({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div style={infoItem}>
+      <div style={infoLabel}>{label}</div>
+      <div style={strong ? infoValueStrong : infoValue}>{value}</div>
+    </div>
+  );
+}
 
 const shell: React.CSSProperties = {
   background: "#f8fafc",
@@ -513,7 +613,7 @@ const shell: React.CSSProperties = {
 
 const page: React.CSSProperties = {
   padding: 16,
-  maxWidth: 1400,
+  maxWidth: 1600,
   margin: "0 auto",
 };
 
@@ -568,7 +668,7 @@ const errorBanner: React.CSSProperties = {
 
 const columnsWrap: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))",
   gap: 16,
 };
 
@@ -581,9 +681,47 @@ const column: React.CSSProperties = {
 
 const columnHeader: React.CSSProperties = {
   padding: "12px 14px",
+  fontWeight: 800,
+  fontSize: 18,
+};
+
+const techBox: React.CSSProperties = {
+  background: "white",
+  borderBottom: "1px solid #e5e7eb",
+  padding: 12,
+};
+
+const techLabel: React.CSSProperties = {
+  display: "block",
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#6b7280",
+  textTransform: "uppercase",
+  marginBottom: 6,
+};
+
+const techRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+};
+
+const techInput: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 15,
+};
+
+const techSaveButton: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "none",
+  background: "#111827",
   color: "white",
   fontWeight: 700,
-  fontSize: 18,
+  cursor: "pointer",
 };
 
 const columnBody: React.CSSProperties = {

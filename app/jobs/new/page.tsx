@@ -5,6 +5,14 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 
+type VehicleOption = {
+  id: string;
+  name: string;
+  color: string;
+  active: boolean;
+  sort_order: number;
+};
+
 type FormState = {
   customer: string;
   contact_person: string;
@@ -35,10 +43,35 @@ function formatLocalDateTimeForDb(value: string) {
   return `${value}:00`;
 }
 
+const fallbackVehicles: VehicleOption[] = [
+  {
+    id: "stepvan",
+    name: "Stepvan",
+    color: "#2563eb",
+    active: true,
+    sort_order: 1,
+  },
+  {
+    id: "service",
+    name: "Service Truck",
+    color: "#facc15",
+    active: true,
+    sort_order: 2,
+  },
+  {
+    id: "sprinter",
+    name: "Sprinter",
+    color: "#10b981",
+    active: true,
+    sort_order: 3,
+  },
+];
+
 export default function NewJobPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [lookupMessage, setLookupMessage] = useState("");
+  const [vehicles, setVehicles] = useState<VehicleOption[]>(fallbackVehicles);
 
   const [form, setForm] = useState<FormState>({
     customer: "",
@@ -64,6 +97,30 @@ export default function NewJobPage() {
     invoice_number: "",
     job_status: "scheduled",
   });
+
+  useEffect(() => {
+    const loadVehicles = async () => {
+      const { data, error } = await supabase
+        .from("vehicles")
+        .select("id,name,color,active,sort_order")
+        .eq("active", true)
+        .order("sort_order", { ascending: true });
+
+      if (error || !data || data.length === 0) {
+        setVehicles(fallbackVehicles);
+        return;
+      }
+
+      setVehicles(data as VehicleOption[]);
+
+      setForm((prev) => ({
+        ...prev,
+        vehicle_id: prev.vehicle_id || data[0].id || "stepvan",
+      }));
+    };
+
+    loadVehicles();
+  }, []);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -139,7 +196,7 @@ export default function NewJobPage() {
       price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
       address: form.address.trim() || null,
       scheduled: formatLocalDateTimeForDb(form.scheduled),
-      vehicle_id: form.vehicle_id || "stepvan",
+      vehicle_id: form.vehicle_id || vehicles[0]?.id || "stepvan",
       notes: form.notes.trim() || null,
       service_type: form.service_type.trim() || null,
       po_number: form.po_number.trim() || null,
@@ -277,8 +334,11 @@ export default function NewJobPage() {
             onChange={handleChange}
             style={input}
           >
-            <option value="stepvan">🚐 Stepvan</option>
-            <option value="service">🛠 Service Truck</option>
+            {vehicles.map((vehicle) => (
+              <option key={vehicle.id} value={vehicle.id}>
+                {vehicle.name}
+              </option>
+            ))}
           </select>
 
           <select

@@ -28,31 +28,40 @@ type Job = {
   billing_name?: string | null;
 };
 
+type Vehicle = {
+  id: string;
+  name: string;
+  color: string;
+  active: boolean;
+  sort_order: number;
+};
+
 const NY_TIMEZONE = "America/New_York";
+
+const fallbackVehicles: Vehicle[] = [
+  { id: "stepvan", name: "Stepvan", color: "#2563eb", active: true, sort_order: 1 },
+  { id: "service", name: "Service Truck", color: "#facc15", active: true, sort_order: 2 },
+  { id: "sprinter", name: "Sprinter", color: "#10b981", active: true, sort_order: 3 },
+];
 
 function parseJobDate(input?: string | null) {
   if (!input) return null;
-
   const value = input.trim();
   if (!value) return null;
 
-  const hasTimezone =
-    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
 
   if (hasTimezone) {
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
 
-  const localValue = value.replace(" ", "T");
-  const d = new Date(localValue);
-
+  const d = new Date(value.replace(" ", "T"));
   return isNaN(d.getTime()) ? null : d;
 }
 
 function getNYParts(input: string | Date) {
-  const date =
-    input instanceof Date ? input : parseJobDate(input) || new Date(input);
+  const date = input instanceof Date ? input : parseJobDate(input) || new Date(input);
 
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: NY_TIMEZONE,
@@ -65,8 +74,7 @@ function getNYParts(input: string | Date) {
     hour12: false,
   }).formatToParts(date);
 
-  const get = (type: string) =>
-    parts.find((p) => p.type === type)?.value ?? "";
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
 
   return {
     year: get("year"),
@@ -110,11 +118,10 @@ function addDaysToDateKey(dateKey: string, days: number) {
   const utcDate = new Date(Date.UTC(year, month - 1, day));
   utcDate.setUTCDate(utcDate.getUTCDate() + days);
 
-  const y = utcDate.getUTCFullYear();
-  const m = String(utcDate.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(utcDate.getUTCDate()).padStart(2, "0");
-
-  return `${y}-${m}-${d}`;
+  return `${utcDate.getUTCFullYear()}-${String(utcDate.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(utcDate.getUTCDate()).padStart(2, "0")}`;
 }
 
 function getStartOfWeekNY(date: Date) {
@@ -139,16 +146,10 @@ function getStartOfWeekNY(date: Date) {
   return addDaysToDateKey(getNYDateKey(date), mondayOffset);
 }
 
-function makeUTCISOStringFromNYLocal(
-  dateKey: string,
-  hour: number,
-  minute: number
-) {
+function makeUTCISOStringFromNYLocal(dateKey: string, hour: number, minute: number) {
   const [year, month, day] = dateKey.split("-").map(Number);
 
-  const desiredSerial =
-    Date.UTC(year, month - 1, day, hour, minute, 0, 0) / 60000;
-
+  const desiredSerial = Date.UTC(year, month - 1, day, hour, minute, 0, 0) / 60000;
   let guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
 
   for (let i = 0; i < 4; i++) {
@@ -166,7 +167,6 @@ function makeUTCISOStringFromNYLocal(
       ) / 60000;
 
     const diffMinutes = desiredSerial - actualSerial;
-
     if (diffMinutes === 0) break;
 
     guess = new Date(guess.getTime() + diffMinutes * 60000);
@@ -182,8 +182,23 @@ function formatMoney(value?: number | string | null) {
   return `$${num.toFixed(2)}`;
 }
 
+function getTextColor(background: string) {
+  const hex = background.replace("#", "");
+  if (hex.length !== 6) return "white";
+
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 150 ? "#111827" : "white";
+}
+
 export default function SchedulePage() {
+  const router = useRouter();
+
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorText, setErrorText] = useState("");
@@ -191,51 +206,74 @@ export default function SchedulePage() {
   const [draggingJobId, setDraggingJobId] = useState<string | null>(null);
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
   const [moveModeJobId, setMoveModeJobId] = useState<string | null>(null);
-  const router = useRouter();
+
+  const fetchVehicles = async () => {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("id,name,color,active,sort_order")
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      setVehicles(fallbackVehicles);
+      return;
+    }
+
+    setVehicles(data as Vehicle[]);
+  };
 
   const fetchJobs = async () => {
-    setLoading(true);
     setErrorText("");
 
-    const { data, error } = await supabase
-      .from("jobs")
-      .select(`
-        id,
-        customer,
-        vehicle,
-        vehicle_id,
-        unit_number,
-        address,
-        phone,
-        scheduled,
-        complete,
-        notes,
-        tires,
-        size,
-        qty,
-        service_type,
-        po_number,
-        job_total,
-        payment_status,
-        invoice_number,
-        job_status,
-        billing_name
-      `);
+    const { data, error } = await supabase.from("jobs").select(`
+      id,
+      customer,
+      vehicle,
+      vehicle_id,
+      unit_number,
+      address,
+      phone,
+      scheduled,
+      complete,
+      notes,
+      tires,
+      size,
+      qty,
+      service_type,
+      po_number,
+      job_total,
+      payment_status,
+      invoice_number,
+      job_status,
+      billing_name
+    `);
 
     if (error) {
       setErrorText(error.message);
       setJobs([]);
-      setLoading(false);
       return;
     }
 
     setJobs((data as Job[]) || []);
+  };
+
+  const loadPage = async () => {
+    setLoading(true);
+    await Promise.all([fetchVehicles(), fetchJobs()]);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchJobs();
+    loadPage();
   }, []);
+
+  const vehicleMap = useMemo(() => {
+    const map: Record<string, Vehicle> = {};
+    vehicles.forEach((vehicle) => {
+      map[vehicle.id] = vehicle;
+    });
+    return map;
+  }, [vehicles]);
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
@@ -252,24 +290,18 @@ export default function SchedulePage() {
   const jobsByDay = useMemo(() => {
     const grouped: Record<string, Job[]> = {};
 
-    for (const day of weekDays) {
-      grouped[day.dateKey] = [];
-    }
+    for (const day of weekDays) grouped[day.dateKey] = [];
 
     for (const job of jobs) {
       if (!job.scheduled || job.complete) continue;
 
       const dateKey = getNYDateKey(job.scheduled);
 
-      if (grouped[dateKey]) {
-        grouped[dateKey].push(job);
-      }
+      if (grouped[dateKey]) grouped[dateKey].push(job);
     }
 
     for (const key of Object.keys(grouped)) {
-      grouped[key].sort((a, b) =>
-        (a.scheduled || "").localeCompare(b.scheduled || "")
-      );
+      grouped[key].sort((a, b) => (a.scheduled || "").localeCompare(b.scheduled || ""));
     }
 
     return grouped;
@@ -299,9 +331,7 @@ export default function SchedulePage() {
 
     setJobs((prev) =>
       prev.map((job) =>
-        String(job.id) === String(jobId)
-          ? { ...job, scheduled: newScheduled }
-          : job
+        String(job.id) === String(jobId) ? { ...job, scheduled: newScheduled } : job
       )
     );
 
@@ -371,11 +401,7 @@ export default function SchedulePage() {
             ← Previous Week
           </button>
 
-          <button
-            type="button"
-            onClick={() => setWeekStart(getStartOfWeekNY(new Date()))}
-            style={todayButton}
-          >
+          <button type="button" onClick={() => setWeekStart(getStartOfWeekNY(new Date()))} style={todayButton}>
             This Week
           </button>
 
@@ -416,9 +442,7 @@ export default function SchedulePage() {
                   setDragOverDateKey(day.dateKey);
                 }}
                 onDragLeave={() => {
-                  setDragOverDateKey((current) =>
-                    current === day.dateKey ? null : current
-                  );
+                  setDragOverDateKey((current) => (current === day.dateKey ? null : current));
                 }}
                 onDrop={async (e) => {
                   e.preventDefault();
@@ -446,6 +470,7 @@ export default function SchedulePage() {
                       <JobCard
                         key={job.id}
                         job={job}
+                        vehicle={vehicleMap[job.vehicle_id || ""]}
                         draggingJobId={draggingJobId}
                         moveModeJobId={moveModeJobId}
                         onDragStart={(id) => setDraggingJobId(String(id))}
@@ -454,12 +479,8 @@ export default function SchedulePage() {
                           setDragOverDateKey(null);
                         }}
                         onOpenJob={(id) => router.push(`/jobs/${id}`)}
-                        onPickForMove={(id) => {
-                          setMoveModeJobId(String(id));
-                        }}
-                        onCancelMove={() => {
-                          setMoveModeJobId(null);
-                        }}
+                        onPickForMove={(id) => setMoveModeJobId(String(id))}
+                        onCancelMove={() => setMoveModeJobId(null)}
                       />
                     ))
                   ) : (
@@ -479,6 +500,7 @@ export default function SchedulePage() {
 
 function JobCard({
   job,
+  vehicle,
   draggingJobId,
   moveModeJobId,
   onDragStart,
@@ -488,6 +510,7 @@ function JobCard({
   onCancelMove,
 }: {
   job: Job;
+  vehicle?: Vehicle;
   draggingJobId: string | null;
   moveModeJobId: string | null;
   onDragStart: (id: string | number) => void;
@@ -497,15 +520,14 @@ function JobCard({
   onCancelMove: () => void;
 }) {
   const phone = job.phone || "";
-  const vehicleLabel =
-    job.vehicle_id === "stepvan" ? "Stepvan" : "Service Truck";
-  const vehicleColor =
-    job.vehicle_id === "stepvan" ? "#2563eb" : "#facc15";
+  const vehicleLabel = vehicle?.name || job.vehicle_id || "Unassigned";
+  const vehicleColor = vehicle?.color || "#9ca3af";
+  const textColor = getTextColor(vehicleColor);
   const isDragging = draggingJobId === String(job.id);
   const isSelectedForMove = moveModeJobId === String(job.id);
   const total = formatMoney(job.job_total);
   const unitOrVehicle = job.unit_number || job.vehicle || "";
-  const tireText = [job.qty, job.tires || job.size].filter(Boolean).join(" • ");
+  const tireText = [job.qty, job.tires, job.size].filter(Boolean).join(" • ");
 
   return (
     <div
@@ -521,12 +543,7 @@ function JobCard({
         opacity: isDragging ? 0.45 : 1,
       }}
     >
-      <div
-        style={{
-          ...card,
-          ...(isSelectedForMove ? selectedCard : {}),
-        }}
-      >
+      <div style={{ ...card, ...(isSelectedForMove ? selectedCard : {}) }}>
         <div style={cardTopRow}>
           <div style={customer}>{job.customer || "Unnamed Job"}</div>
 
@@ -534,60 +551,28 @@ function JobCard({
             style={{
               ...tag,
               background: vehicleColor,
+              color: textColor,
             }}
           >
             {vehicleLabel}
           </div>
         </div>
 
-        {job.scheduled && (
-          <div style={time}>🕒 {formatTimeNY(job.scheduled)}</div>
-        )}
+        {job.scheduled && <div style={time}>🕒 {formatTimeNY(job.scheduled)}</div>}
 
         {unitOrVehicle ? <div style={sub}>{unitOrVehicle}</div> : null}
         {job.address ? <div style={sub}>📍 {job.address}</div> : null}
         {phone ? <div style={sub}>📞 {phone}</div> : null}
 
         <div style={infoGrid}>
-          <div style={infoItem}>
-            <div style={infoLabel}>Service</div>
-            <div style={infoValue}>{job.service_type || "-"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>PO #</div>
-            <div style={infoValue}>{job.po_number || "-"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>Tires</div>
-            <div style={infoValue}>{tireText || "-"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>Total</div>
-            <div style={infoValueStrong}>{total || "-"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>Billing</div>
-            <div style={infoValue}>{job.payment_status || "unpaid"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>Invoice</div>
-            <div style={infoValue}>{job.invoice_number || "-"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>Status</div>
-            <div style={infoValue}>{job.job_status || "scheduled"}</div>
-          </div>
-
-          <div style={infoItem}>
-            <div style={infoLabel}>Bill To</div>
-            <div style={infoValue}>{job.billing_name || "-"}</div>
-          </div>
+          <Info label="Service" value={job.service_type || "-"} />
+          <Info label="PO #" value={job.po_number || "-"} />
+          <Info label="Tires" value={tireText || "-"} />
+          <Info label="Total" value={total || "-"} strong />
+          <Info label="Billing" value={job.payment_status || "unpaid"} />
+          <Info label="Invoice" value={job.invoice_number || "-"} />
+          <Info label="Status" value={job.job_status || "scheduled"} />
+          <Info label="Bill To" value={job.billing_name || "-"} />
         </div>
 
         {job.notes && <div style={notes}>📝 {job.notes}</div>}
@@ -629,10 +614,17 @@ function JobCard({
           )}
         </div>
 
-        <div style={dragHint}>
-          Desktop: drag to another day • iPhone: tap Move, then tap a day
-        </div>
+        <div style={dragHint}>Desktop: drag to another day • iPhone: tap Move, then tap a day</div>
       </div>
+    </div>
+  );
+}
+
+function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div style={infoItem}>
+      <div style={infoLabel}>{label}</div>
+      <div style={strong ? infoValueStrong : infoValue}>{value}</div>
     </div>
   );
 }
@@ -920,10 +912,9 @@ const notes: React.CSSProperties = {
 const tag: React.CSSProperties = {
   padding: "4px 8px",
   borderRadius: 6,
-  color: "black",
   fontSize: 12,
   whiteSpace: "nowrap",
-  fontWeight: 600,
+  fontWeight: 700,
 };
 
 const cardActions: React.CSSProperties = {
