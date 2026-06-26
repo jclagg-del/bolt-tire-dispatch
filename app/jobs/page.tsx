@@ -27,29 +27,57 @@ type Job = {
   payment_status?: string | null;
   invoice_number?: string | null;
   job_status?: string | null;
-  archived?: boolean | null; // ✅ added
+  archived?: boolean | null;
+};
+
+type Vehicle = {
+  id: string;
+  name: string;
+  color: string;
+  active: boolean;
+  sort_order: number;
 };
 
 const NY_TIMEZONE = "America/New_York";
 
+const fallbackVehicles: Vehicle[] = [
+  { id: "stepvan", name: "Stepvan", color: "#2563eb", active: true, sort_order: 1 },
+  { id: "service", name: "Service Truck", color: "#facc15", active: true, sort_order: 2 },
+  { id: "sprinter", name: "Sprinter", color: "#10b981", active: true, sort_order: 3 },
+];
+
 function parseJobDate(input?: string | null) {
   if (!input) return null;
-
   const value = input.trim();
   if (!value) return null;
 
-  const hasTimezone =
-    value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
+  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
 
   if (hasTimezone) {
     const d = new Date(value);
     return isNaN(d.getTime()) ? null : d;
   }
 
-  const localValue = value.replace(" ", "T");
-  const d = new Date(localValue);
-
+  const d = new Date(value.replace(" ", "T"));
   return isNaN(d.getTime()) ? null : d;
+}
+
+function getNYDateKey(input?: string | null) {
+  const date = parseJobDate(input);
+  if (!date) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: NY_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === "year")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatDateTimeNY(input?: string | null) {
@@ -73,12 +101,16 @@ function formatMoney(value?: string | number | null) {
   return `$${num.toFixed(2)}`;
 }
 
-function vehicleLabel(vehicleId?: string | null) {
-  return vehicleId === "stepvan" ? "Stepvan" : "Service";
-}
+function getTextColor(background: string) {
+  const hex = background.replace("#", "");
+  if (hex.length !== 6) return "white";
 
-function vehicleColor(vehicleId?: string | null) {
-  return vehicleId === "stepvan" ? "#2563eb" : "#facc15";
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  return brightness > 150 ? "#111827" : "white";
 }
 
 export default function JobsPage() {
@@ -111,13 +143,36 @@ function JobsPageLoading() {
 }
 
 function JobsPageContent() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const customerFilter = searchParams.get("customer") || "";
+
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
+  const [loading, setLoading] = useState(true);
+
+  const [searchText, setSearchText] = useState(customerFilter);
+  const [vehicleFilter, setVehicleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+
+  const fetchVehicles = async () => {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("id,name,color,active,sort_order")
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      setVehicles(fallbackVehicles);
+      return;
+    }
+
+    setVehicles(data as Vehicle[]);
+  };
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -147,7 +202,7 @@ function JobsPageContent() {
         job_status,
         archived
       `)
-      .eq("archived", false); // ✅ filters archived jobs
+      .eq("archived", false);
 
     if (error) {
       console.error("Error fetching jobs:", error.message);
@@ -161,24 +216,114 @@ function JobsPageContent() {
   };
 
   useEffect(() => {
+    fetchVehicles();
     fetchJobs();
   }, []);
+
+  const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
+
+  const vehicleMap = useMemo(() => {
+    const map: Record<string, Vehicle> = {};
+    vehicles.forEach((vehicle) => {
+      map[vehicle.id] = vehicle;
+    });
+    return map;
+  }, [vehicles]);
+
+  const serviceTypes = useMemo(() => {
+    const set = new Set<string>();
+
+    jobs.forEach((job) => {
+      if (job.service_type) set.add(job.service_type);
+    });
+
+    return Array.from(set).sort();
+  }, [jobs]);
 
   const filteredJobs = useMemo(() => {
     let result = [...jobs];
 
-    if (customerFilter) {
-      result = result.filter((job) =>
-        (job.customer || "")
-          .toLowerCase()
-          .includes(customerFilter.toLowerCase())
-      );
+    const search = searchText.trim().toLowerCase();
+
+    if (search) {
+      result = result.filter((job) => {
+        const haystack = [
+          job.customer,
+          job.phone,
+          job.vehicle,
+          job.unit_number,
+          job.address,
+          job.notes,
+          job.tires,
+          job.size,
+          job.service_type,
+          job.po_number,
+          job.billing_name,
+          job.invoice_number,
+          job.job_status,
+          job.payment_status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(search);
+      });
     }
 
-    return result.sort((a, b) =>
-      (b.scheduled || "").localeCompare(a.scheduled || "")
-    );
-  }, [jobs, customerFilter]);
+    if (vehicleFilter !== "all") {
+      result = result.filter((job) => (job.vehicle_id || "") === vehicleFilter);
+    }
+
+    if (statusFilter !== "all") {
+      result = result.filter((job) => {
+        const status = job.job_status || (job.complete ? "completed" : "scheduled");
+        return status === statusFilter;
+      });
+    }
+
+    if (paymentFilter !== "all") {
+      result = result.filter((job) => (job.payment_status || "unpaid") === paymentFilter);
+    }
+
+    if (serviceFilter !== "all") {
+      result = result.filter((job) => (job.service_type || "") === serviceFilter);
+    }
+
+    if (dateFilter !== "all") {
+      result = result.filter((job) => {
+        const jobDateKey = getNYDateKey(job.scheduled);
+
+        if (dateFilter === "today") return jobDateKey === todayKey;
+        if (dateFilter === "upcoming") return jobDateKey > todayKey;
+        if (dateFilter === "past") return !!jobDateKey && jobDateKey < todayKey;
+        if (dateFilter === "unscheduled") return !job.scheduled;
+
+        return true;
+      });
+    }
+
+    return result.sort((a, b) => (b.scheduled || "").localeCompare(a.scheduled || ""));
+  }, [
+    jobs,
+    searchText,
+    vehicleFilter,
+    statusFilter,
+    paymentFilter,
+    serviceFilter,
+    dateFilter,
+    todayKey,
+  ]);
+
+  const clearFilters = () => {
+    setSearchText("");
+    setVehicleFilter("all");
+    setStatusFilter("all");
+    setPaymentFilter("all");
+    setServiceFilter("all");
+    setDateFilter("all");
+    router.push("/jobs");
+  };
 
   return (
     <div style={page}>
@@ -187,9 +332,7 @@ function JobsPageContent() {
           <div>
             <div style={eyebrow}>Jobs</div>
             <h1 style={title}>All Jobs</h1>
-            <p style={subtitle}>
-              Open, review, and manage every job in one place.
-            </p>
+            <p style={subtitle}>Search, filter, open, and manage every job in one place.</p>
           </div>
 
           <Link href="/jobs/new" style={{ textDecoration: "none" }}>
@@ -200,21 +343,88 @@ function JobsPageContent() {
         </div>
       </div>
 
-      {customerFilter ? (
-        <div style={filterBanner}>
-          <div>
-            Showing jobs for: <strong>{customerFilter}</strong>
-          </div>
+      <div style={filterCard}>
+        <input
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={searchInput}
+          placeholder="Search customer, vehicle, address, PO, invoice, notes..."
+        />
 
-          <button
-            type="button"
-            style={clearBtn}
-            onClick={() => router.push("/jobs")}
+        <div style={filterGrid}>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            style={filterInput}
           >
-            Clear
+            <option value="all">All Dates</option>
+            <option value="today">Today</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="past">Past</option>
+            <option value="unscheduled">Unscheduled</option>
+          </select>
+
+          <select
+            value={vehicleFilter}
+            onChange={(e) => setVehicleFilter(e.target.value)}
+            style={filterInput}
+          >
+            <option value="all">All Vehicles</option>
+            {vehicles.map((vehicle) => (
+              <option key={vehicle.id} value={vehicle.id}>
+                {vehicle.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={filterInput}
+          >
+            <option value="all">All Statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="en_route">En Route</option>
+            <option value="on_site">On Site</option>
+            <option value="completed">Completed</option>
+            <option value="billed">Billed</option>
+            <option value="paid">Paid</option>
+            <option value="archived">Archived</option>
+          </select>
+
+          <select
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value)}
+            style={filterInput}
+          >
+            <option value="all">All Payments</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="partial">Partial</option>
+            <option value="paid">Paid</option>
+          </select>
+
+          <select
+            value={serviceFilter}
+            onChange={(e) => setServiceFilter(e.target.value)}
+            style={filterInput}
+          >
+            <option value="all">All Services</option>
+            {serviceTypes.map((service) => (
+              <option key={service} value={service}>
+                {service}
+              </option>
+            ))}
+          </select>
+
+          <button type="button" style={clearBtn} onClick={clearFilters}>
+            Clear Filters
           </button>
         </div>
-      ) : null}
+
+        <div style={resultCount}>
+          Showing {filteredJobs.length} of {jobs.length} jobs
+        </div>
+      </div>
 
       {loading ? (
         <div style={loadingBox}>Loading jobs...</div>
@@ -222,12 +432,13 @@ function JobsPageContent() {
         <div style={emptyBox}>No jobs found.</div>
       ) : (
         filteredJobs.map((job) => {
-          const tireText = [job.qty, job.tires || job.size]
-            .filter(Boolean)
-            .join(" • ");
-
+          const tireText = [job.qty, job.tires, job.size].filter(Boolean).join(" • ");
           const unitOrVehicle = job.unit_number || job.vehicle || "";
           const total = formatMoney(job.job_total);
+          const vehicle = vehicleMap[job.vehicle_id || ""];
+          const vehicleBg = vehicle?.color || "#9ca3af";
+          const vehicleText = getTextColor(vehicleBg);
+          const vehicleName = vehicle?.name || job.vehicle_id || "Unassigned";
 
           return (
             <div
@@ -249,26 +460,27 @@ function JobsPageContent() {
                   {job.notes ? <div style={notes}>📝 {job.notes}</div> : null}
                   {job.scheduled ? (
                     <div style={time}>🕒 {formatDateTimeNY(job.scheduled)}</div>
-                  ) : null}
+                  ) : (
+                    <div style={time}>🕒 Unscheduled</div>
+                  )}
                 </div>
 
                 <div style={rightSide}>
                   <div
                     style={{
                       ...tag,
-                      background: vehicleColor(job.vehicle_id),
+                      background: vehicleBg,
+                      color: vehicleText,
                     }}
                   >
-                    {vehicleLabel(job.vehicle_id)}
+                    {vehicleName}
                   </div>
 
                   <div style={infoTag}>
                     {job.job_status || (job.complete ? "completed" : "scheduled")}
                   </div>
 
-                  <div style={infoTag}>
-                    {job.payment_status || "unpaid"}
-                  </div>
+                  <div style={infoTag}>{job.payment_status || "unpaid"}</div>
 
                   {total ? <div style={moneyTag}>{total}</div> : null}
 
@@ -284,8 +496,6 @@ function JobsPageContent() {
     </div>
   );
 }
-
-/* ⬇️ styles unchanged below */
 
 const shell: React.CSSProperties = {
   background: "#f8fafc",
@@ -351,26 +561,55 @@ const blueButton: React.CSSProperties = {
   background: "#2563eb",
 };
 
-const filterBanner: React.CSSProperties = {
-  background: "#e0f2fe",
-  border: "1px solid #bae6fd",
-  padding: 12,
-  borderRadius: 12,
+const filterCard: React.CSSProperties = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  padding: 14,
+  borderRadius: 16,
   marginBottom: 14,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+};
+
+const searchInput: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  boxSizing: "border-box",
+  fontSize: 16,
+  marginBottom: 10,
+};
+
+const filterGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 10,
-  flexWrap: "wrap",
+};
+
+const filterInput: React.CSSProperties = {
+  width: "100%",
+  padding: 11,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "white",
+  fontSize: 14,
 };
 
 const clearBtn: React.CSSProperties = {
   background: "#111827",
   color: "white",
   border: "none",
-  borderRadius: 8,
-  padding: "8px 12px",
+  borderRadius: 10,
+  padding: "11px 12px",
   cursor: "pointer",
+  fontWeight: 700,
+};
+
+const resultCount: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 13,
+  color: "#6b7280",
   fontWeight: 700,
 };
 
@@ -446,7 +685,6 @@ const rightSide: React.CSSProperties = {
 const tag: React.CSSProperties = {
   padding: "6px 10px",
   borderRadius: 999,
-  color: "black",
   fontSize: 12,
   fontWeight: 700,
   whiteSpace: "nowrap",
