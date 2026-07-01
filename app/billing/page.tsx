@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 
@@ -51,6 +52,8 @@ function formatMoney(value?: number | string | null) {
 }
 
 export default function BillingPage() {
+  const router = useRouter();
+
   const [jobs, setJobs] = useState<BillingJob[]>([]);
   const [payingId, setPayingId] = useState<string | number | null>(null);
 
@@ -164,7 +167,11 @@ export default function BillingPage() {
                     const isUpdating = payingId === job.id;
 
                     return (
-                      <tr key={job.id}>
+                      <tr
+                        key={job.id}
+                        onClick={() => router.push(`/jobs/${job.id}`)}
+                        style={clickableRow}
+                      >
                         <td style={td}>{job.customer || "—"}</td>
                         <td style={td}>
                           {job.unit_number || job.vehicle || "—"}
@@ -189,7 +196,10 @@ export default function BillingPage() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => handleMarkPaid(job.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkPaid(job.id);
+                              }}
                               style={payButton}
                               disabled={isUpdating}
                             >
@@ -271,6 +281,7 @@ const sectionCard: React.CSSProperties = {
   border: "1px solid #e5e7eb",
   borderRadius: 12,
   marginBottom: 16,
+  overflow: "hidden",
 };
 
 const sectionHeader: React.CSSProperties = {
@@ -298,8 +309,13 @@ const th: React.CSSProperties = {
   textAlign: "left" as const,
 };
 
+const clickableRow: React.CSSProperties = {
+  cursor: "pointer",
+};
+
 const td: React.CSSProperties = {
   padding: 12,
+  borderTop: "1px solid #f1f5f9",
 };
 
 const tdStrong: React.CSSProperties = {
@@ -331,6 +347,7 @@ const payButton: React.CSSProperties = {
   border: "none",
   borderRadius: 8,
   fontWeight: 700,
+  cursor: "pointer",
 };
 
 const paidText: React.CSSProperties = {
