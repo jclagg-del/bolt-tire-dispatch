@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
 
 type JobForm = {
   customer: string;
+  contact_name: string;
   phone: string;
   email: string;
   vehicle: string;
@@ -18,22 +19,33 @@ type JobForm = {
   size: string;
   qty: string;
   price_tires: string;
+  tire_product_number: string;
+  tires_ordered: boolean;
+  tire_supplier: string;
+  ordered_by: string;
+  ordered_date: string;
+  tracking_number: string;
+  expected_arrival: string;
   address: string;
   notes: string;
   scheduled: string;
   vehicle_id: string;
   service_type: string;
   po_number: string;
+  mo_number: string;
   billing_name: string;
   job_total: string;
   payment_status: string;
   invoice_number: string;
   job_status: string;
+  submitted_by_customer: boolean;
+  customer_order_status: string;
   complete?: boolean;
 };
 
 function formatForDateTimeLocal(value?: string | null) {
   if (!value) return "";
+
   const clean = value.replace(" ", "T");
   return clean.substring(0, 16);
 }
@@ -43,10 +55,20 @@ function formatLocalDateTimeForDb(value: string) {
   return `${value}:00`;
 }
 
+function getCurrentLocalDateTime() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60_000);
+
+  return local.toISOString().substring(0, 16);
+}
+
 export default function EditJobPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id;
+
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [form, setForm] = useState<JobForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -58,11 +80,14 @@ export default function EditJobPage() {
   const [torqueConfirmed, setTorqueConfirmed] = useState(false);
 
   const fetchJob = async () => {
+    if (!id) return;
+
     const { data, error } = await supabase
       .from("jobs")
       .select(`
         id,
         customer,
+        contact_name,
         phone,
         email,
         vehicle,
@@ -72,17 +97,27 @@ export default function EditJobPage() {
         size,
         qty,
         price_tires,
+        tire_product_number,
+        tires_ordered,
+        tire_supplier,
+        ordered_by,
+        ordered_date,
+        tracking_number,
+        expected_arrival,
         address,
         notes,
         scheduled,
         vehicle_id,
         service_type,
         po_number,
+        mo_number,
         billing_name,
         job_total,
         payment_status,
         invoice_number,
         job_status,
+        submitted_by_customer,
+        customer_order_status,
         complete
       `)
       .eq("id", id)
@@ -93,65 +128,126 @@ export default function EditJobPage() {
       return;
     }
 
-    if (data) {
-      setForm({
-        customer: data.customer || "",
-        phone: data.phone || "",
-        email: data.email || "",
-        vehicle: data.vehicle || "",
-        unit_number: data.unit_number || "",
-        vehicle_mileage: data.vehicle_mileage || "",
-        tires: data.tires || "",
-        size: data.size || "",
-        qty: data.qty ? String(data.qty) : "",
-        price_tires:
-          data.price_tires !== null && data.price_tires !== undefined
-            ? String(data.price_tires)
-            : "",
-        address: data.address || "",
-        notes: data.notes || "",
-        scheduled: formatForDateTimeLocal(data.scheduled),
-        vehicle_id: data.vehicle_id || "stepvan",
-        service_type: data.service_type || "",
-        po_number: data.po_number || "",
-        billing_name: data.billing_name || "",
-        job_total:
-          data.job_total !== null && data.job_total !== undefined
-            ? String(data.job_total)
-            : "",
-        payment_status: data.payment_status || "unpaid",
-        invoice_number: data.invoice_number || "",
-        job_status: data.job_status || "scheduled",
-        complete: !!data.complete,
-      });
-    }
+    if (!data) return;
+
+    setForm({
+      customer: data.customer || "",
+      contact_name: data.contact_name || "",
+      phone: data.phone || "",
+      email: data.email || "",
+      vehicle: data.vehicle || "",
+      unit_number: data.unit_number || "",
+      vehicle_mileage: data.vehicle_mileage || "",
+      tires: data.tires || "",
+      size: data.size || "",
+      qty:
+        data.qty !== null && data.qty !== undefined
+          ? String(data.qty)
+          : "",
+      price_tires:
+        data.price_tires !== null && data.price_tires !== undefined
+          ? String(data.price_tires)
+          : "",
+      tire_product_number: data.tire_product_number || "",
+      tires_ordered: Boolean(data.tires_ordered),
+      tire_supplier: data.tire_supplier || "",
+      ordered_by: data.ordered_by || "",
+      ordered_date: formatForDateTimeLocal(data.ordered_date),
+      tracking_number: data.tracking_number || "",
+      expected_arrival: data.expected_arrival || "",
+      address: data.address || "",
+      notes: data.notes || "",
+      scheduled: formatForDateTimeLocal(data.scheduled),
+      vehicle_id: data.vehicle_id || "stepvan",
+      service_type: data.service_type || "",
+      po_number: data.po_number || "",
+      mo_number: data.mo_number || "",
+      billing_name: data.billing_name || "",
+      job_total:
+        data.job_total !== null && data.job_total !== undefined
+          ? String(data.job_total)
+          : "",
+      payment_status: data.payment_status || "unpaid",
+      invoice_number: data.invoice_number || "",
+      job_status: data.job_status || "scheduled",
+      submitted_by_customer: Boolean(data.submitted_by_customer),
+      customer_order_status: data.customer_order_status || "new",
+      complete: Boolean(data.complete),
+    });
   };
 
   useEffect(() => {
-    if (id) fetchJob();
+    if (id) {
+      fetchJob();
+    }
   }, [id]);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => {
     if (!form) return;
-    setForm({ ...form, [e.target.name]: e.target.value });
+
+    const { name, value } = e.target;
+
+    setForm((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        [name]: value,
+      };
+    });
   };
 
   const setVehicleId = (value: string) => {
-    if (!form) return;
-    setForm({ ...form, vehicle_id: value });
+    setForm((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        vehicle_id: value,
+      };
+    });
+  };
+
+  const handleTiresOrderedChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const checked = e.target.checked;
+
+    setForm((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        tires_ordered: checked,
+        ordered_date:
+          checked && !current.ordered_date
+            ? getCurrentLocalDateTime()
+            : current.ordered_date,
+      };
+    });
   };
 
   const handleSave = async () => {
-    if (!form || saving) return;
+    if (!form || !id || saving) return;
 
     setSaving(true);
+
+    const calculatedJobTotal =
+      form.job_total.trim() !== ""
+        ? Number(form.job_total)
+        : form.qty.trim() !== "" && form.price_tires.trim() !== ""
+          ? Number(form.qty) * Number(form.price_tires)
+          : null;
 
     const { error } = await supabase
       .from("jobs")
       .update({
         customer: form.customer.trim(),
+        contact_name: form.contact_name.trim() || null,
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         vehicle: form.vehicle.trim() || null,
@@ -159,23 +255,33 @@ export default function EditJobPage() {
         vehicle_mileage: form.vehicle_mileage.trim() || null,
         tires: form.tires.trim() || null,
         size: form.size.trim() || null,
-        qty: form.qty ? Number(form.qty) : null,
-        price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
+        qty: form.qty.trim() ? Number(form.qty) : null,
+        price_tires: form.price_tires.trim()
+          ? Number(form.price_tires)
+          : null,
+        tire_product_number:
+          form.tire_product_number.trim() || null,
+        tires_ordered: form.tires_ordered,
+        tire_supplier: form.tire_supplier.trim() || null,
+        ordered_by: form.ordered_by.trim() || null,
+        ordered_date: formatLocalDateTimeForDb(form.ordered_date),
+        tracking_number: form.tracking_number.trim() || null,
+        expected_arrival: form.expected_arrival || null,
         address: form.address.trim() || null,
         notes: form.notes.trim() || null,
         scheduled: formatLocalDateTimeForDb(form.scheduled),
         vehicle_id: form.vehicle_id || "stepvan",
         service_type: form.service_type.trim() || null,
         po_number: form.po_number.trim() || null,
+        mo_number: form.mo_number.trim() || null,
         billing_name: form.billing_name.trim() || null,
-        job_total: form.job_total.trim()
-          ? Number(form.job_total)
-          : form.qty && form.price_tires
-          ? Number(form.qty) * Number(form.price_tires)
-          : null,
+        job_total: calculatedJobTotal,
         payment_status: form.payment_status || "unpaid",
         invoice_number: form.invoice_number.trim() || null,
         job_status: form.job_status || "scheduled",
+        submitted_by_customer: form.submitted_by_customer,
+        customer_order_status:
+          form.customer_order_status || "new",
       })
       .eq("id", id);
 
@@ -186,7 +292,7 @@ export default function EditJobPage() {
       return;
     }
 
-    router.push("/");
+    router.push("/jobs");
     router.refresh();
   };
 
@@ -222,13 +328,15 @@ export default function EditJobPage() {
 
   const openCompleteModal = () => {
     if (!form || completing) return;
-    setMileageConfirmed(!!form.vehicle_mileage.trim());
+
+    setMileageConfirmed(Boolean(form.vehicle_mileage.trim()));
     setTorqueConfirmed(false);
     setShowCompleteModal(true);
   };
 
   const closeCompleteModal = () => {
     if (completing) return;
+
     setShowCompleteModal(false);
     setMileageConfirmed(false);
     setTorqueConfirmed(false);
@@ -243,7 +351,9 @@ export default function EditJobPage() {
     }
 
     if (!mileageConfirmed || !torqueConfirmed) {
-      alert("Please confirm mileage and wheel torque before completing the job.");
+      alert(
+        "Please confirm mileage and wheel torque before completing the job."
+      );
       return;
     }
 
@@ -315,14 +425,28 @@ export default function EditJobPage() {
           <div style={heroTop}>
             <div>
               <div style={eyebrow}>Jobs</div>
+
               <h1 style={title}>Edit Job</h1>
+
               <p style={subtitle}>
-                Update job details, billing info, and completion status.
+                Update job details, tire ordering, billing, and
+                completion status.
               </p>
+
+              {form.submitted_by_customer && (
+                <div style={customerOrderBadge}>
+                  Kingdom Support Services order
+                </div>
+              )}
             </div>
 
             <div style={heroActions}>
-              <button type="button" onClick={handleSave} style={saveButton} disabled={saving}>
+              <button
+                type="button"
+                onClick={handleSave}
+                style={saveButton}
+                disabled={saving}
+              >
                 {saving ? "Saving..." : "💾 Save Changes"}
               </button>
 
@@ -333,7 +457,9 @@ export default function EditJobPage() {
                   style={completeButton}
                   disabled={completing}
                 >
-                  {completing ? "Completing..." : "✅ Complete Job"}
+                  {completing
+                    ? "Completing..."
+                    : "✅ Complete Job"}
                 </button>
               ) : (
                 <button
@@ -342,7 +468,9 @@ export default function EditJobPage() {
                   style={reopenButton}
                   disabled={completing}
                 >
-                  {completing ? "Updating..." : "↩️ Reopen Job"}
+                  {completing
+                    ? "Updating..."
+                    : "↩️ Reopen Job"}
                 </button>
               )}
 
@@ -352,7 +480,9 @@ export default function EditJobPage() {
                 style={archiveButton}
                 disabled={archiving}
               >
-                {archiving ? "Archiving..." : "📦 Archive Job"}
+                {archiving
+                  ? "Archiving..."
+                  : "📦 Archive Job"}
               </button>
             </div>
           </div>
@@ -361,14 +491,82 @@ export default function EditJobPage() {
         <div style={card}>
           <div style={sectionTitle}>Job Info</div>
 
-          <input name="customer" value={form.customer} onChange={handleChange} style={input} placeholder="Customer" />
-          <input name="phone" value={form.phone} onChange={handleChange} style={input} placeholder="Phone" />
-          <input name="email" value={form.email} onChange={handleChange} style={input} placeholder="Email" inputMode="email" />
-          <input name="vehicle" value={form.vehicle} onChange={handleChange} style={input} placeholder="Vehicle" />
-          <input name="unit_number" value={form.unit_number} onChange={handleChange} style={input} placeholder="Unit Number" />
-          <input name="vehicle_mileage" value={form.vehicle_mileage} onChange={handleChange} style={input} placeholder="Vehicle Mileage" inputMode="numeric" />
-          <input name="address" value={form.address} onChange={handleChange} style={input} placeholder="Address" />
+          <label style={fieldLabel}>Customer</label>
+          <input
+            name="customer"
+            value={form.customer}
+            onChange={handleChange}
+            style={input}
+            placeholder="Customer"
+          />
 
+          <label style={fieldLabel}>Contact Name</label>
+          <input
+            name="contact_name"
+            value={form.contact_name}
+            onChange={handleChange}
+            style={input}
+            placeholder="Contact Name"
+          />
+
+          <label style={fieldLabel}>Contact Number</label>
+          <input
+            name="phone"
+            value={form.phone}
+            onChange={handleChange}
+            style={input}
+            placeholder="Phone"
+            inputMode="tel"
+          />
+
+          <label style={fieldLabel}>Email</label>
+          <input
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            style={input}
+            placeholder="Email"
+            inputMode="email"
+          />
+
+          <label style={fieldLabel}>Vehicle</label>
+          <input
+            name="vehicle"
+            value={form.vehicle}
+            onChange={handleChange}
+            style={input}
+            placeholder="Vehicle"
+          />
+
+          <label style={fieldLabel}>Unit Number</label>
+          <input
+            name="unit_number"
+            value={form.unit_number}
+            onChange={handleChange}
+            style={input}
+            placeholder="Unit Number"
+          />
+
+          <label style={fieldLabel}>Vehicle Mileage</label>
+          <input
+            name="vehicle_mileage"
+            value={form.vehicle_mileage}
+            onChange={handleChange}
+            style={input}
+            placeholder="Vehicle Mileage"
+            inputMode="numeric"
+          />
+
+          <label style={fieldLabel}>Service Address</label>
+          <input
+            name="address"
+            value={form.address}
+            onChange={handleChange}
+            style={input}
+            placeholder="Address"
+          />
+
+          <label style={fieldLabel}>Scheduled Date and Time</label>
           <input
             type="datetime-local"
             name="scheduled"
@@ -377,9 +575,20 @@ export default function EditJobPage() {
             style={input}
           />
 
-          <VehicleSelect value={form.vehicle_id} onChange={setVehicleId} style={input} />
+          <label style={fieldLabel}>Assigned Service Vehicle</label>
+          <VehicleSelect
+            value={form.vehicle_id}
+            onChange={setVehicleId}
+            style={input}
+          />
 
-          <select name="service_type" value={form.service_type} onChange={handleChange} style={input}>
+          <label style={fieldLabel}>Service Type</label>
+          <select
+            name="service_type"
+            value={form.service_type}
+            onChange={handleChange}
+            style={input}
+          >
             <option value="">Service Type</option>
             <option value="new tires">New Tires</option>
             <option value="repair">Repair</option>
@@ -389,28 +598,219 @@ export default function EditJobPage() {
             <option value="inspection">Inspection</option>
           </select>
 
+          <div style={sectionTitle}>Customer Order</div>
+
+          <label style={fieldLabel}>Job Number / PO Number</label>
+          <input
+            name="po_number"
+            value={form.po_number}
+            onChange={handleChange}
+            style={input}
+            placeholder="Job Number or PO Number"
+          />
+
+          <label style={fieldLabel}>MO Number</label>
+          <input
+            name="mo_number"
+            value={form.mo_number}
+            onChange={handleChange}
+            style={input}
+            placeholder="MO Number"
+          />
+
+          {form.submitted_by_customer && (
+            <>
+              <label style={fieldLabel}>Customer Order Status</label>
+
+              <select
+                name="customer_order_status"
+                value={form.customer_order_status}
+                onChange={handleChange}
+                style={input}
+              >
+                <option value="new">New Request</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </>
+          )}
+
           <div style={sectionTitle}>Tire Info</div>
 
-          <input name="tires" value={form.tires} onChange={handleChange} style={input} placeholder="Tires" />
-          <input name="size" value={form.size} onChange={handleChange} style={input} placeholder="Size" />
-          <input name="qty" value={form.qty} onChange={handleChange} style={input} placeholder="Quantity" inputMode="numeric" />
-          <input name="price_tires" value={form.price_tires} onChange={handleChange} style={input} placeholder="Tire Price (each)" inputMode="decimal" />
+          <label style={fieldLabel}>Tire Brand or Product</label>
+          <input
+            name="tires"
+            value={form.tires}
+            onChange={handleChange}
+            style={input}
+            placeholder="Tires"
+          />
+
+          <label style={fieldLabel}>Tire Size</label>
+          <input
+            name="size"
+            value={form.size}
+            onChange={handleChange}
+            style={input}
+            placeholder="Tire Size"
+          />
+
+          <label style={fieldLabel}>Quantity</label>
+          <input
+            name="qty"
+            value={form.qty}
+            onChange={handleChange}
+            style={input}
+            placeholder="Quantity"
+            inputMode="numeric"
+          />
+
+          <label style={fieldLabel}>Tire Product Number</label>
+          <input
+            name="tire_product_number"
+            value={form.tire_product_number}
+            onChange={handleChange}
+            style={input}
+            placeholder="Tire Product Number"
+          />
+
+          <label style={fieldLabel}>Tire Price Each</label>
+          <input
+            name="price_tires"
+            value={form.price_tires}
+            onChange={handleChange}
+            style={input}
+            placeholder="Tire Price (each)"
+            inputMode="decimal"
+          />
+
+          <div style={sectionTitle}>Tire Ordering</div>
+
+          <div
+            style={
+              form.tires_ordered
+                ? orderedStatusCard
+                : notOrderedStatusCard
+            }
+          >
+            <label style={checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={form.tires_ordered}
+                onChange={handleTiresOrderedChange}
+                style={checkbox}
+              />
+
+              <span>
+                <strong>
+                  {form.tires_ordered
+                    ? "Tires Ordered"
+                    : "Tires Not Ordered"}
+                </strong>
+
+                <span style={checkboxHelp}>
+                  {form.tires_ordered
+                    ? "The tires for this job have been ordered."
+                    : "Check this box after ordering the tires."}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <label style={fieldLabel}>Tire Supplier</label>
+          <input
+            name="tire_supplier"
+            value={form.tire_supplier}
+            onChange={handleChange}
+            style={input}
+            placeholder="Supplier"
+          />
+
+          <label style={fieldLabel}>Ordered By</label>
+          <input
+            name="ordered_by"
+            value={form.ordered_by}
+            onChange={handleChange}
+            style={input}
+            placeholder="Ordered By"
+          />
+
+          <label style={fieldLabel}>Date and Time Ordered</label>
+          <input
+            type="datetime-local"
+            name="ordered_date"
+            value={form.ordered_date}
+            onChange={handleChange}
+            style={input}
+          />
+
+          <label style={fieldLabel}>Tracking Number</label>
+          <input
+            name="tracking_number"
+            value={form.tracking_number}
+            onChange={handleChange}
+            style={input}
+            placeholder="Tracking Number"
+          />
+
+          <label style={fieldLabel}>Expected Arrival</label>
+          <input
+            type="date"
+            name="expected_arrival"
+            value={form.expected_arrival}
+            onChange={handleChange}
+            style={input}
+          />
 
           <div style={sectionTitle}>Billing Info</div>
 
-          <input name="po_number" value={form.po_number} onChange={handleChange} style={input} placeholder="PO Number" />
-          <input name="billing_name" value={form.billing_name} onChange={handleChange} style={input} placeholder="Billing Name" />
-          <input name="job_total" value={form.job_total} onChange={handleChange} style={input} placeholder="Job Total" inputMode="decimal" />
+          <label style={fieldLabel}>Billing Name</label>
+          <input
+            name="billing_name"
+            value={form.billing_name}
+            onChange={handleChange}
+            style={input}
+            placeholder="Billing Name"
+          />
 
-          <select name="payment_status" value={form.payment_status} onChange={handleChange} style={input}>
+          <label style={fieldLabel}>Job Total</label>
+          <input
+            name="job_total"
+            value={form.job_total}
+            onChange={handleChange}
+            style={input}
+            placeholder="Job Total"
+            inputMode="decimal"
+          />
+
+          <label style={fieldLabel}>Payment Status</label>
+          <select
+            name="payment_status"
+            value={form.payment_status}
+            onChange={handleChange}
+            style={input}
+          >
             <option value="unpaid">Unpaid</option>
             <option value="partial">Partial</option>
             <option value="paid">Paid</option>
           </select>
 
-          <input name="invoice_number" value={form.invoice_number} onChange={handleChange} style={input} placeholder="Invoice Number" />
+          <label style={fieldLabel}>Invoice Number</label>
+          <input
+            name="invoice_number"
+            value={form.invoice_number}
+            onChange={handleChange}
+            style={input}
+            placeholder="Invoice Number"
+          />
 
-          <select name="job_status" value={form.job_status} onChange={handleChange} style={input}>
+          <label style={fieldLabel}>Job Status</label>
+          <select
+            name="job_status"
+            value={form.job_status}
+            onChange={handleChange}
+            style={input}
+          >
             <option value="scheduled">Scheduled</option>
             <option value="en_route">En Route</option>
             <option value="on_site">On Site</option>
@@ -421,7 +821,13 @@ export default function EditJobPage() {
 
           <div style={sectionTitle}>Notes</div>
 
-          <textarea name="notes" value={form.notes} onChange={handleChange} style={textarea} placeholder="Notes" />
+          <textarea
+            name="notes"
+            value={form.notes}
+            onChange={handleChange}
+            style={textarea}
+            placeholder="Notes"
+          />
         </div>
       </div>
 
@@ -484,8 +890,20 @@ const title: React.CSSProperties = {
 
 const subtitle: React.CSSProperties = {
   marginTop: 8,
+  marginBottom: 0,
   color: "#4b5563",
   fontSize: 15,
+};
+
+const customerOrderBadge: React.CSSProperties = {
+  display: "inline-block",
+  marginTop: 12,
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: "#fef3c7",
+  color: "#92400e",
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 const heroActions: React.CSSProperties = {
@@ -503,13 +921,24 @@ const card: React.CSSProperties = {
 };
 
 const sectionTitle: React.CSSProperties = {
-  marginTop: 16,
-  marginBottom: 4,
+  marginTop: 28,
+  marginBottom: 6,
+  paddingBottom: 8,
+  borderBottom: "1px solid #e5e7eb",
   fontSize: 13,
   fontWeight: 800,
   color: "#6b7280",
   textTransform: "uppercase",
   letterSpacing: 0.4,
+};
+
+const fieldLabel: React.CSSProperties = {
+  display: "block",
+  marginTop: 14,
+  marginBottom: -5,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#374151",
 };
 
 const input: React.CSSProperties = {
@@ -535,6 +964,46 @@ const textarea: React.CSSProperties = {
   fontSize: 16,
   minHeight: 110,
   background: "#fff",
+  resize: "vertical",
+};
+
+const orderedStatusCard: React.CSSProperties = {
+  marginTop: 12,
+  padding: 14,
+  borderRadius: 12,
+  border: "1px solid #86efac",
+  background: "#f0fdf4",
+};
+
+const notOrderedStatusCard: React.CSSProperties = {
+  marginTop: 12,
+  padding: 14,
+  borderRadius: 12,
+  border: "1px solid #fcd34d",
+  background: "#fffbeb",
+};
+
+const checkboxLabel: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  cursor: "pointer",
+  color: "#111827",
+};
+
+const checkbox: React.CSSProperties = {
+  width: 22,
+  height: 22,
+  marginTop: 1,
+  cursor: "pointer",
+};
+
+const checkboxHelp: React.CSSProperties = {
+  display: "block",
+  marginTop: 3,
+  color: "#6b7280",
+  fontSize: 13,
+  fontWeight: 400,
 };
 
 const saveButton: React.CSSProperties = {
