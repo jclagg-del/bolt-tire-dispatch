@@ -119,6 +119,7 @@ export default function DashboardPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [newOrdersCount, setNewOrdersCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
@@ -158,6 +159,21 @@ export default function DashboardPage() {
     setAssignments(map);
   };
 
+  const fetchNewOrders = async () => {
+    const { count, error } = await supabase
+      .from("customer_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("order_status", "new");
+
+    if (error) {
+      console.error("Dashboard customer order count error:", error.message);
+      setNewOrdersCount(0);
+      return;
+    }
+
+    setNewOrdersCount(count || 0);
+  };
+
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select(`
       id,
@@ -190,7 +206,12 @@ export default function DashboardPage() {
 
   const loadDashboard = async () => {
     setLoading(true);
-    await Promise.all([fetchVehicles(), fetchAssignments(), fetchJobs()]);
+    await Promise.all([
+      fetchVehicles(),
+      fetchAssignments(),
+      fetchJobs(),
+      fetchNewOrders(),
+    ]);
     setLoading(false);
   };
 
@@ -279,8 +300,13 @@ export default function DashboardPage() {
         </div>
 
         <div style={quickGrid}>
+          <QuickCard
+            label="New Orders"
+            value={newOrdersCount}
+            onClick={() => router.push("/orders")}
+          />
           <QuickCard label="Open Jobs" value={scheduledJobs.length} onClick={() => router.push("/jobs")} />
-          <QuickCard label="Today&apos;s Route" value={todaysJobs.length} onClick={() => router.push("/route")} />
+          <QuickCard label="Today's Route" value={todaysJobs.length} onClick={() => router.push("/route")} />
           <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />
           <QuickCard label="Completed" value={completedJobs.length} onClick={() => router.push("/completed")} />
           <QuickCard label="Billing" value={unpaidJobs.length} onClick={() => router.push("/billing")} />
