@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+const PUBLIC_ROUTES = ["/login", "/order/kingdom"];
+
 export default function AuthGate({
   children,
 }: {
@@ -13,24 +15,30 @@ export default function AuthGate({
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
+  const isPublicRoute = PUBLIC_ROUTES.some(
+    (route) =>
+      pathname === route || pathname.startsWith(`${route}/`)
+  );
+
   useEffect(() => {
     let mounted = true;
 
     const checkSession = async () => {
+      if (isPublicRoute) {
+        if (mounted) {
+          setChecking(false);
+        }
+        return;
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!mounted) return;
 
-      if (!session && pathname !== "/login") {
+      if (!session) {
         router.replace("/login");
-        setChecking(false);
-        return;
-      }
-
-      if (session && pathname === "/login") {
-        router.replace("/");
         setChecking(false);
         return;
       }
@@ -43,12 +51,12 @@ export default function AuthGate({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session && pathname !== "/login") {
-        router.replace("/login");
+      if (isPublicRoute) {
+        return;
       }
 
-      if (session && pathname === "/login") {
-        router.replace("/");
+      if (!session) {
+        router.replace("/login");
       }
     });
 
@@ -56,7 +64,7 @@ export default function AuthGate({
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [isPublicRoute, pathname, router]);
 
   if (checking) {
     return (
