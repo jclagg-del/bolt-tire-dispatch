@@ -12,6 +12,7 @@ export default function AppHeader() {
     { label: "Schedule", path: "/schedule" },
     { label: "Route", path: "/route" },
     { label: "Jobs", path: "/jobs" },
+    { label: "Orders", path: "/orders" },
     { label: "Customers", path: "/customers" },
     { label: "Billing", path: "/billing" },
     { label: "Completed", path: "/completed" },
@@ -25,18 +26,36 @@ export default function AppHeader() {
   return (
     <div style={wrap}>
       <div style={inner}>
-        <div onClick={() => router.push("/")} style={logoWrap}>
-          <img src="/bolt-logo.png" alt="Bolt Tire" style={logo} />
+        <div
+          onClick={() => router.push("/")}
+          style={logoWrap}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              router.push("/");
+            }
+          }}
+        >
+          <img
+            src="/bolt-logo.png"
+            alt="Bolt Tire"
+            style={logo}
+          />
         </div>
 
         <div style={rightSide}>
           <div style={nav}>
             {navItems.map((item) => {
-              const active = pathname === item.path;
+              const active =
+                pathname === item.path ||
+                (item.path !== "/" &&
+                  pathname.startsWith(`${item.path}/`));
 
               return (
                 <button
                   key={item.path}
+                  type="button"
                   onClick={() => router.push(item.path)}
                   style={{
                     ...navBtn,
@@ -49,7 +68,11 @@ export default function AppHeader() {
             })}
           </div>
 
-          <button onClick={handleLogout} style={logoutBtn}>
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={logoutBtn}
+          >
             Logout
           </button>
         </div>
@@ -106,6 +129,7 @@ const navBtn: React.CSSProperties = {
   borderRadius: 8,
   border: "none",
   background: "#e5e7eb",
+  color: "#111827",
   cursor: "pointer",
   fontWeight: 600,
 };
