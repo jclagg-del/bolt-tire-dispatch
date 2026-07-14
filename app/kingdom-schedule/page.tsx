@@ -177,7 +177,7 @@ export default function KingdomSchedulePage() {
             Kingdom Support Services portal.
           </p>
 
-          <Link href="/kingdom-order" style={backButton}>
+          <Link href="/order/kingdom" style={backButton}>
             Submit a New Request
           </Link>
         </section>
