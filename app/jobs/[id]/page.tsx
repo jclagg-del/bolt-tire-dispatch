@@ -23,9 +23,8 @@ type JobForm = {
   tires_ordered: boolean;
   tire_supplier: string;
   ordered_by: string;
-  ordered_date: string;
-  tracking_number: string;
-  expected_arrival: string;
+  installation_cost: string;
+  tire_disposal_fee: string;
   address: string;
   notes: string;
   scheduled: string;
@@ -33,7 +32,6 @@ type JobForm = {
   service_type: string;
   po_number: string;
   mo_number: string;
-  billing_name: string;
   job_total: string;
   payment_status: string;
   invoice_number: string;
@@ -55,13 +53,6 @@ function formatLocalDateTimeForDb(value: string) {
   return `${value}:00`;
 }
 
-function getCurrentLocalDateTime() {
-  const now = new Date();
-  const offset = now.getTimezoneOffset();
-  const local = new Date(now.getTime() - offset * 60_000);
-
-  return local.toISOString().substring(0, 16);
-}
 
 export default function EditJobPage() {
   const params = useParams();
@@ -101,9 +92,8 @@ export default function EditJobPage() {
         tires_ordered,
         tire_supplier,
         ordered_by,
-        ordered_date,
-        tracking_number,
-        expected_arrival,
+        installation_cost,
+        tire_disposal_fee,
         address,
         notes,
         scheduled,
@@ -111,7 +101,6 @@ export default function EditJobPage() {
         service_type,
         po_number,
         mo_number,
-        billing_name,
         job_total,
         payment_status,
         invoice_number,
@@ -152,9 +141,16 @@ export default function EditJobPage() {
       tires_ordered: Boolean(data.tires_ordered),
       tire_supplier: data.tire_supplier || "",
       ordered_by: data.ordered_by || "",
-      ordered_date: formatForDateTimeLocal(data.ordered_date),
-      tracking_number: data.tracking_number || "",
-      expected_arrival: data.expected_arrival || "",
+      installation_cost:
+        data.installation_cost !== null &&
+        data.installation_cost !== undefined
+          ? String(data.installation_cost)
+          : "",
+      tire_disposal_fee:
+        data.tire_disposal_fee !== null &&
+        data.tire_disposal_fee !== undefined
+          ? String(data.tire_disposal_fee)
+          : "",
       address: data.address || "",
       notes: data.notes || "",
       scheduled: formatForDateTimeLocal(data.scheduled),
@@ -162,7 +158,6 @@ export default function EditJobPage() {
       service_type: data.service_type || "",
       po_number: data.po_number || "",
       mo_number: data.mo_number || "",
-      billing_name: data.billing_name || "",
       job_total:
         data.job_total !== null && data.job_total !== undefined
           ? String(data.job_total)
@@ -223,10 +218,6 @@ export default function EditJobPage() {
       return {
         ...current,
         tires_ordered: checked,
-        ordered_date:
-          checked && !current.ordered_date
-            ? getCurrentLocalDateTime()
-            : current.ordered_date,
       };
     });
   };
@@ -236,12 +227,19 @@ export default function EditJobPage() {
 
     setSaving(true);
 
+    const quantity = form.qty.trim() ? Number(form.qty) : 0;
+    const tirePrice = form.price_tires.trim()
+      ? Number(form.price_tires)
+      : 0;
+    const installationCost = form.installation_cost.trim()
+      ? Number(form.installation_cost)
+      : 0;
+    const tireDisposalFee = form.tire_disposal_fee.trim()
+      ? Number(form.tire_disposal_fee)
+      : 0;
+
     const calculatedJobTotal =
-      form.job_total.trim() !== ""
-        ? Number(form.job_total)
-        : form.qty.trim() !== "" && form.price_tires.trim() !== ""
-          ? Number(form.qty) * Number(form.price_tires)
-          : null;
+      quantity * tirePrice + installationCost + tireDisposalFee;
 
     const { error } = await supabase
       .from("jobs")
@@ -264,9 +262,12 @@ export default function EditJobPage() {
         tires_ordered: form.tires_ordered,
         tire_supplier: form.tire_supplier.trim() || null,
         ordered_by: form.ordered_by.trim() || null,
-        ordered_date: formatLocalDateTimeForDb(form.ordered_date),
-        tracking_number: form.tracking_number.trim() || null,
-        expected_arrival: form.expected_arrival || null,
+        installation_cost: form.installation_cost.trim()
+          ? Number(form.installation_cost)
+          : null,
+        tire_disposal_fee: form.tire_disposal_fee.trim()
+          ? Number(form.tire_disposal_fee)
+          : null,
         address: form.address.trim() || null,
         notes: form.notes.trim() || null,
         scheduled: formatLocalDateTimeForDb(form.scheduled),
@@ -274,7 +275,6 @@ export default function EditJobPage() {
         service_type: form.service_type.trim() || null,
         po_number: form.po_number.trim() || null,
         mo_number: form.mo_number.trim() || null,
-        billing_name: form.billing_name.trim() || null,
         job_total: calculatedJobTotal,
         payment_status: form.payment_status || "unpaid",
         invoice_number: form.invoice_number.trim() || null,
@@ -429,8 +429,8 @@ export default function EditJobPage() {
               <h1 style={title}>Edit Job</h1>
 
               <p style={subtitle}>
-                Update job details, tire ordering, billing, and
-                completion status.
+                Update job details, tire ordering, costs, billing,
+                and completion status.
               </p>
 
               {form.submitted_by_customer && (
@@ -735,50 +735,79 @@ export default function EditJobPage() {
             placeholder="Ordered By"
           />
 
-          <label style={fieldLabel}>Date and Time Ordered</label>
+          <div style={sectionTitle}>Service Costs</div>
+
+          <label style={fieldLabel}>Installation Cost</label>
           <input
-            type="datetime-local"
-            name="ordered_date"
-            value={form.ordered_date}
+            name="installation_cost"
+            value={form.installation_cost}
             onChange={handleChange}
             style={input}
+            placeholder="Total Installation Cost"
+            inputMode="decimal"
           />
 
-          <label style={fieldLabel}>Tracking Number</label>
+          <label style={fieldLabel}>Tire Disposal Fee</label>
           <input
-            name="tracking_number"
-            value={form.tracking_number}
+            name="tire_disposal_fee"
+            value={form.tire_disposal_fee}
             onChange={handleChange}
             style={input}
-            placeholder="Tracking Number"
+            placeholder="Total Tire Disposal Fee"
+            inputMode="decimal"
           />
 
-          <label style={fieldLabel}>Expected Arrival</label>
-          <input
-            type="date"
-            name="expected_arrival"
-            value={form.expected_arrival}
-            onChange={handleChange}
-            style={input}
-          />
+          <div style={costBreakdown}>
+            <div style={costRow}>
+              <span>Tires</span>
+              <strong>
+                ${(
+                  (Number(form.qty) || 0) *
+                  (Number(form.price_tires) || 0)
+                ).toFixed(2)}
+              </strong>
+            </div>
+
+            <div style={costRow}>
+              <span>Installation</span>
+              <strong>
+                ${(Number(form.installation_cost) || 0).toFixed(2)}
+              </strong>
+            </div>
+
+            <div style={costRow}>
+              <span>Disposal</span>
+              <strong>
+                ${(Number(form.tire_disposal_fee) || 0).toFixed(2)}
+              </strong>
+            </div>
+
+            <div style={costTotalRow}>
+              <span>Job Total</span>
+              <strong>
+                ${(
+                  (Number(form.qty) || 0) *
+                    (Number(form.price_tires) || 0) +
+                  (Number(form.installation_cost) || 0) +
+                  (Number(form.tire_disposal_fee) || 0)
+                ).toFixed(2)}
+              </strong>
+            </div>
+          </div>
 
           <div style={sectionTitle}>Billing Info</div>
-
-          <label style={fieldLabel}>Billing Name</label>
-          <input
-            name="billing_name"
-            value={form.billing_name}
-            onChange={handleChange}
-            style={input}
-            placeholder="Billing Name"
-          />
 
           <label style={fieldLabel}>Job Total</label>
           <input
             name="job_total"
-            value={form.job_total}
-            onChange={handleChange}
-            style={input}
+            value={(
+              (Number(form.qty) || 0) *
+                (Number(form.price_tires) || 0) +
+              (Number(form.installation_cost) || 0) +
+              (Number(form.tire_disposal_fee) || 0)
+            ).toFixed(2)}
+            readOnly
+            style={{ ...input, background: "#f3f4f6" }}
             placeholder="Job Total"
             inputMode="decimal"
           />
@@ -1004,6 +1033,35 @@ const checkboxHelp: React.CSSProperties = {
   color: "#6b7280",
   fontSize: 13,
   fontWeight: 400,
+};
+
+const costBreakdown: React.CSSProperties = {
+  marginTop: 18,
+  padding: 14,
+  borderRadius: 12,
+  border: "1px solid #dbeafe",
+  background: "#f8fafc",
+};
+
+const costRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "6px 0",
+  color: "#374151",
+  fontSize: 14,
+};
+
+const costTotalRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  marginTop: 8,
+  paddingTop: 12,
+  borderTop: "1px solid #cbd5e1",
+  color: "#111827",
+  fontSize: 16,
+  fontWeight: 800,
 };
 
 const saveButton: React.CSSProperties = {
