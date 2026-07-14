@@ -13,7 +13,6 @@ type JobForm = {
   phone: string;
   email: string;
   vehicle: string;
-  unit_number: string;
   vehicle_mileage: string;
   tires: string;
   size: string;
@@ -82,7 +81,6 @@ export default function EditJobPage() {
         phone,
         email,
         vehicle,
-        unit_number,
         vehicle_mileage,
         tires,
         size,
@@ -125,7 +123,6 @@ export default function EditJobPage() {
       phone: data.phone || "",
       email: data.email || "",
       vehicle: data.vehicle || "",
-      unit_number: data.unit_number || "",
       vehicle_mileage: data.vehicle_mileage || "",
       tires: data.tires || "",
       size: data.size || "",
@@ -249,7 +246,6 @@ export default function EditJobPage() {
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         vehicle: form.vehicle.trim() || null,
-        unit_number: form.unit_number.trim() || null,
         vehicle_mileage: form.vehicle_mileage.trim() || null,
         tires: form.tires.trim() || null,
         size: form.size.trim() || null,
@@ -529,22 +525,13 @@ export default function EditJobPage() {
             inputMode="email"
           />
 
-          <label style={fieldLabel}>Vehicle</label>
+          <label style={fieldLabel}>Vehicle Details</label>
           <input
             name="vehicle"
             value={form.vehicle}
             onChange={handleChange}
             style={input}
-            placeholder="Vehicle"
-          />
-
-          <label style={fieldLabel}>Unit Number</label>
-          <input
-            name="unit_number"
-            value={form.unit_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="Unit Number"
+            placeholder="Year Make Model • Color • License Plate"
           />
 
           <label style={fieldLabel}>Vehicle Mileage</label>
