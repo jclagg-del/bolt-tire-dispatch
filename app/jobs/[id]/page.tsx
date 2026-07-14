@@ -13,6 +13,7 @@ type JobForm = {
   phone: string;
   email: string;
   vehicle: string;
+  unit_number: string;
   vehicle_mileage: string;
   tires: string;
   size: string;
@@ -81,6 +82,7 @@ export default function EditJobPage() {
         phone,
         email,
         vehicle,
+        unit_number,
         vehicle_mileage,
         tires,
         size,
@@ -123,6 +125,7 @@ export default function EditJobPage() {
       phone: data.phone || "",
       email: data.email || "",
       vehicle: data.vehicle || "",
+      unit_number: data.unit_number || "",
       vehicle_mileage: data.vehicle_mileage || "",
       tires: data.tires || "",
       size: data.size || "",
@@ -246,6 +249,7 @@ export default function EditJobPage() {
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         vehicle: form.vehicle.trim() || null,
+        unit_number: form.unit_number.trim() || null,
         vehicle_mileage: form.vehicle_mileage.trim() || null,
         tires: form.tires.trim() || null,
         size: form.size.trim() || null,
@@ -485,365 +489,246 @@ export default function EditJobPage() {
         </div>
 
         <div style={card}>
-          <div style={sectionTitle}>Job Info</div>
+          <div style={sectionTitle}>Customer Information</div>
 
-          <label style={fieldLabel}>Customer</label>
-          <input
-            name="customer"
-            value={form.customer}
-            onChange={handleChange}
-            style={input}
-            placeholder="Customer"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Customer</label>
+              <input name="customer" value={form.customer} onChange={handleChange} style={input} placeholder="Customer" />
+            </Field>
 
-          <label style={fieldLabel}>Contact Name</label>
-          <input
-            name="contact_name"
-            value={form.contact_name}
-            onChange={handleChange}
-            style={input}
-            placeholder="Contact Name"
-          />
+            <Field>
+              <label style={fieldLabel}>Submitted By</label>
+              <input name="submitted_by" value={form.submitted_by} onChange={handleChange} style={input} placeholder="Submitted By" />
+            </Field>
 
-          <label style={fieldLabel}>Contact Number</label>
-          <input
-            name="phone"
-            value={form.phone}
-            onChange={handleChange}
-            style={input}
-            placeholder="Phone"
-            inputMode="tel"
-          />
+            <Field>
+              <label style={fieldLabel}>Contact Name</label>
+              <input name="contact_name" value={form.contact_name} onChange={handleChange} style={input} placeholder="Contact Name" />
+            </Field>
 
-          <label style={fieldLabel}>Email</label>
-          <input
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            style={input}
-            placeholder="Email"
-            inputMode="email"
-          />
+            <Field>
+              <label style={fieldLabel}>Contact Number</label>
+              <input name="phone" value={form.phone} onChange={handleChange} style={input} placeholder="Phone" inputMode="tel" />
+            </Field>
 
-          <label style={fieldLabel}>Vehicle Details</label>
-          <input
-            name="vehicle"
-            value={form.vehicle}
-            onChange={handleChange}
-            style={input}
-            placeholder="Year Make Model • Color • License Plate"
-          />
+            <Field fullWidth>
+              <label style={fieldLabel}>Email</label>
+              <input name="email" value={form.email} onChange={handleChange} style={input} placeholder="Email" inputMode="email" />
+            </Field>
+          </div>
 
-          <label style={fieldLabel}>Vehicle Mileage</label>
-          <input
-            name="vehicle_mileage"
-            value={form.vehicle_mileage}
-            onChange={handleChange}
-            style={input}
-            placeholder="Vehicle Mileage"
-            inputMode="numeric"
-          />
+          <div style={sectionTitle}>Vehicle</div>
 
-          <label style={fieldLabel}>Service Address</label>
-          <input
-            name="address"
-            value={form.address}
-            onChange={handleChange}
-            style={input}
-            placeholder="Address"
-          />
+          <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Vehicle Details</label>
+              <input name="vehicle" value={form.vehicle} onChange={handleChange} style={input} placeholder="Year Make Model • Color" />
+            </Field>
 
-          <label style={fieldLabel}>Scheduled Date and Time</label>
-          <input
-            type="datetime-local"
-            name="scheduled"
-            value={form.scheduled}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>License Plate</label>
+              <input name="license_plate" value={form.license_plate} onChange={handleChange} style={input} placeholder="License Plate" autoCapitalize="characters" />
+            </Field>
 
-          <label style={fieldLabel}>Assigned Service Vehicle</label>
-          <VehicleSelect
-            value={form.vehicle_id}
-            onChange={setVehicleId}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>Vehicle Mileage</label>
+              <input name="vehicle_mileage" value={form.vehicle_mileage} onChange={handleChange} style={input} placeholder="Vehicle Mileage" inputMode="numeric" />
+            </Field>
 
-          <label style={fieldLabel}>Service Type</label>
-          <select
-            name="service_type"
-            value={form.service_type}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="">Service Type</option>
-            <option value="new tires">New Tires</option>
-            <option value="repair">Repair</option>
-            <option value="swap">Swap</option>
-            <option value="roadside">Roadside</option>
-            <option value="delivery">Delivery</option>
-            <option value="inspection">Inspection</option>
-          </select>
+            <Field fullWidth>
+              <label style={fieldLabel}>Assigned Service Vehicle</label>
+              <VehicleSelect value={form.vehicle_id} onChange={setVehicleId} style={input} />
+            </Field>
+          </div>
 
-          <div style={sectionTitle}>Customer Order</div>
+          <div style={sectionTitle}>Scheduling and Work Order</div>
 
-          <label style={fieldLabel}>Job Number / PO Number</label>
-          <input
-            name="po_number"
-            value={form.po_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="Job Number or PO Number"
-          />
+          <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Service Address</label>
+              <input name="address" value={form.address} onChange={handleChange} style={input} placeholder="Address" />
+            </Field>
 
-          <label style={fieldLabel}>MO Number</label>
-          <input
-            name="mo_number"
-            value={form.mo_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="MO Number"
-          />
+            <Field>
+              <label style={fieldLabel}>Scheduled Date and Time</label>
+              <input type="datetime-local" name="scheduled" value={form.scheduled} onChange={handleChange} style={input} />
+            </Field>
 
-          {form.submitted_by_customer && (
-            <>
-              <label style={fieldLabel}>Customer Order Status</label>
-
-              <select
-                name="customer_order_status"
-                value={form.customer_order_status}
-                onChange={handleChange}
-                style={input}
-              >
-                <option value="new">New Request</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
+            <Field>
+              <label style={fieldLabel}>Service Type</label>
+              <select name="service_type" value={form.service_type} onChange={handleChange} style={input}>
+                <option value="">Service Type</option>
+                <option value="new tires">New Tires</option>
+                <option value="repair">Repair</option>
+                <option value="swap">Swap</option>
+                <option value="roadside">Roadside</option>
+                <option value="delivery">Delivery</option>
+                <option value="inspection">Inspection</option>
               </select>
-            </>
-          )}
+            </Field>
 
-          <div style={sectionTitle}>Tire Info</div>
+            <Field>
+              <label style={fieldLabel}>Job Number / PO Number</label>
+              <input name="po_number" value={form.po_number} onChange={handleChange} style={input} placeholder="Job Number or PO Number" />
+            </Field>
 
-          <label style={fieldLabel}>Tire Brand or Product</label>
-          <input
-            name="tires"
-            value={form.tires}
-            onChange={handleChange}
-            style={input}
-            placeholder="Tires"
-          />
+            <Field>
+              <label style={fieldLabel}>MO Number</label>
+              <input name="mo_number" value={form.mo_number} onChange={handleChange} style={input} placeholder="MO Number" />
+            </Field>
 
-          <label style={fieldLabel}>Tire Size</label>
-          <input
-            name="size"
-            value={form.size}
-            onChange={handleChange}
-            style={input}
-            placeholder="Tire Size"
-          />
+            {form.submitted_by_customer && (
+              <Field fullWidth>
+                <label style={fieldLabel}>Customer Order Status</label>
+                <select name="customer_order_status" value={form.customer_order_status} onChange={handleChange} style={input}>
+                  <option value="new">New Request</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </Field>
+            )}
+          </div>
 
-          <label style={fieldLabel}>Quantity</label>
-          <input
-            name="qty"
-            value={form.qty}
-            onChange={handleChange}
-            style={input}
-            placeholder="Quantity"
-            inputMode="numeric"
-          />
+          <div style={sectionTitle}>Service and Tire Information</div>
 
-          <label style={fieldLabel}>Tire Product Number</label>
-          <input
-            name="tire_product_number"
-            value={form.tire_product_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="Tire Product Number"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Tire Position</label>
+              <input name="tire_position" value={form.tire_position} onChange={handleChange} style={input} placeholder="Example: Left Front or Rear Axle" />
+            </Field>
 
-          <label style={fieldLabel}>Tire Price Each</label>
-          <input
-            name="price_tires"
-            value={form.price_tires}
-            onChange={handleChange}
-            style={input}
-            placeholder="Tire Price (each)"
-            inputMode="decimal"
-          />
+            <Field>
+              <label style={fieldLabel}>Tire Brand or Product</label>
+              <input name="tires" value={form.tires} onChange={handleChange} style={input} placeholder="Tires" />
+            </Field>
+
+            <Field>
+              <label style={fieldLabel}>Tire Size</label>
+              <input name="size" value={form.size} onChange={handleChange} style={input} placeholder="Tire Size" />
+            </Field>
+
+            <Field>
+              <label style={fieldLabel}>Quantity</label>
+              <input name="qty" value={form.qty} onChange={handleChange} style={input} placeholder="Quantity" inputMode="numeric" />
+            </Field>
+
+            <Field fullWidth>
+              <label style={fieldLabel}>Tire Product Number</label>
+              <input name="tire_product_number" value={form.tire_product_number} onChange={handleChange} style={input} placeholder="Tire Product Number" />
+            </Field>
+          </div>
 
           <div style={sectionTitle}>Tire Ordering</div>
 
-          <div
-            style={
-              form.tires_ordered
-                ? orderedStatusCard
-                : notOrderedStatusCard
-            }
-          >
+          <div style={form.tires_ordered ? orderedStatusCard : notOrderedStatusCard}>
             <label style={checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={form.tires_ordered}
-                onChange={handleTiresOrderedChange}
-                style={checkbox}
-              />
-
+              <input type="checkbox" checked={form.tires_ordered} onChange={handleTiresOrderedChange} style={checkbox} />
               <span>
-                <strong>
-                  {form.tires_ordered
-                    ? "Tires Ordered"
-                    : "Tires Not Ordered"}
-                </strong>
-
+                <strong>{form.tires_ordered ? "Tires Ordered" : "Tires Not Ordered"}</strong>
                 <span style={checkboxHelp}>
-                  {form.tires_ordered
-                    ? "The tires for this job have been ordered."
-                    : "Check this box after ordering the tires."}
+                  {form.tires_ordered ? "The tires for this job have been ordered." : "Check this box after ordering the tires."}
                 </span>
               </span>
             </label>
           </div>
 
-          <label style={fieldLabel}>Tire Supplier</label>
-          <input
-            name="tire_supplier"
-            value={form.tire_supplier}
-            onChange={handleChange}
-            style={input}
-            placeholder="Supplier"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Tire Supplier</label>
+              <input name="tire_supplier" value={form.tire_supplier} onChange={handleChange} style={input} placeholder="Supplier" />
+            </Field>
 
-          <label style={fieldLabel}>Ordered By</label>
-          <input
-            name="ordered_by"
-            value={form.ordered_by}
-            onChange={handleChange}
-            style={input}
-            placeholder="Ordered By"
-          />
+            <Field>
+              <label style={fieldLabel}>Ordered By</label>
+              <input name="ordered_by" value={form.ordered_by} onChange={handleChange} style={input} placeholder="Ordered By" />
+            </Field>
+          </div>
 
-          <div style={sectionTitle}>Service Costs</div>
+          <div style={sectionTitle}>Costs</div>
 
-          <label style={fieldLabel}>Installation Cost</label>
-          <input
-            name="installation_cost"
-            value={form.installation_cost}
-            onChange={handleChange}
-            style={input}
-            placeholder="Total Installation Cost"
-            inputMode="decimal"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Tire Price Each</label>
+              <input name="price_tires" value={form.price_tires} onChange={handleChange} style={input} placeholder="Tire Price (each)" inputMode="decimal" />
+            </Field>
 
-          <label style={fieldLabel}>Tire Disposal Fee</label>
-          <input
-            name="tire_disposal_fee"
-            value={form.tire_disposal_fee}
-            onChange={handleChange}
-            style={input}
-            placeholder="Total Tire Disposal Fee"
-            inputMode="decimal"
-          />
+            <Field>
+              <label style={fieldLabel}>Installation Cost</label>
+              <input name="installation_cost" value={form.installation_cost} onChange={handleChange} style={input} placeholder="Total Installation Cost" inputMode="decimal" />
+            </Field>
+
+            <Field fullWidth>
+              <label style={fieldLabel}>Tire Disposal Fee</label>
+              <input name="tire_disposal_fee" value={form.tire_disposal_fee} onChange={handleChange} style={input} placeholder="Total Tire Disposal Fee" inputMode="decimal" />
+            </Field>
+          </div>
 
           <div style={costBreakdown}>
             <div style={costRow}>
               <span>Tires</span>
-              <strong>
-                ${(
-                  (Number(form.qty) || 0) *
-                  (Number(form.price_tires) || 0)
-                ).toFixed(2)}
-              </strong>
+              <strong>${(((Number(form.qty) || 0) * (Number(form.price_tires) || 0))).toFixed(2)}</strong>
             </div>
-
             <div style={costRow}>
               <span>Installation</span>
-              <strong>
-                ${(Number(form.installation_cost) || 0).toFixed(2)}
-              </strong>
+              <strong>${(Number(form.installation_cost) || 0).toFixed(2)}</strong>
             </div>
-
             <div style={costRow}>
               <span>Disposal</span>
-              <strong>
-                ${(Number(form.tire_disposal_fee) || 0).toFixed(2)}
-              </strong>
+              <strong>${(Number(form.tire_disposal_fee) || 0).toFixed(2)}</strong>
             </div>
-
             <div style={costTotalRow}>
               <span>Job Total</span>
-              <strong>
-                ${(
-                  (Number(form.qty) || 0) *
-                    (Number(form.price_tires) || 0) +
-                  (Number(form.installation_cost) || 0) +
-                  (Number(form.tire_disposal_fee) || 0)
-                ).toFixed(2)}
-              </strong>
+              <strong>${(((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0))).toFixed(2)}</strong>
             </div>
           </div>
 
-          <div style={sectionTitle}>Billing Info</div>
+          <div style={sectionTitle}>Billing</div>
 
-          <label style={fieldLabel}>Job Total</label>
-          <input
-            name="job_total"
-            value={(
-              (Number(form.qty) || 0) *
-                (Number(form.price_tires) || 0) +
-              (Number(form.installation_cost) || 0) +
-              (Number(form.tire_disposal_fee) || 0)
-            ).toFixed(2)}
-            readOnly
-            style={{ ...input, background: "#f3f4f6" }}
-            placeholder="Job Total"
-            inputMode="decimal"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Job Total</label>
+              <input
+                name="job_total"
+                value={((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)).toFixed(2)}
+                readOnly
+                style={{ ...input, background: "#f3f4f6" }}
+                placeholder="Job Total"
+                inputMode="decimal"
+              />
+            </Field>
 
-          <label style={fieldLabel}>Payment Status</label>
-          <select
-            name="payment_status"
-            value={form.payment_status}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="unpaid">Unpaid</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-          </select>
+            <Field>
+              <label style={fieldLabel}>Payment Status</label>
+              <select name="payment_status" value={form.payment_status} onChange={handleChange} style={input}>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+              </select>
+            </Field>
 
-          <label style={fieldLabel}>Invoice Number</label>
-          <input
-            name="invoice_number"
-            value={form.invoice_number}
-            onChange={handleChange}
-            style={input}
-            placeholder="Invoice Number"
-          />
+            <Field>
+              <label style={fieldLabel}>Invoice Number</label>
+              <input name="invoice_number" value={form.invoice_number} onChange={handleChange} style={input} placeholder="Invoice Number" />
+            </Field>
 
-          <label style={fieldLabel}>Job Status</label>
-          <select
-            name="job_status"
-            value={form.job_status}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="scheduled">Scheduled</option>
-            <option value="en_route">En Route</option>
-            <option value="on_site">On Site</option>
-            <option value="completed">Completed</option>
-            <option value="billed">Billed</option>
-            <option value="paid">Paid</option>
-          </select>
+            <Field>
+              <label style={fieldLabel}>Job Status</label>
+              <select name="job_status" value={form.job_status} onChange={handleChange} style={input}>
+                <option value="scheduled">Scheduled</option>
+                <option value="en_route">En Route</option>
+                <option value="on_site">On Site</option>
+                <option value="completed">Completed</option>
+                <option value="billed">Billed</option>
+                <option value="paid">Paid</option>
+              </select>
+            </Field>
+          </div>
 
           <div style={sectionTitle}>Notes</div>
 
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={handleChange}
-            style={textarea}
-            placeholder="Notes"
-          />
+          <textarea name="notes" value={form.notes} onChange={handleChange} style={textarea} placeholder="Notes" />
+        </div>
         </div>
       </div>
 
@@ -858,6 +743,21 @@ export default function EditJobPage() {
         onCancel={closeCompleteModal}
         onConfirm={handleComplete}
       />
+    </div>
+  );
+}
+
+
+function Field({
+  children,
+  fullWidth = false,
+}: {
+  children: React.ReactNode;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div style={fullWidth ? fullWidthField : undefined}>
+      {children}
     </div>
   );
 }
@@ -926,6 +826,16 @@ const heroActions: React.CSSProperties = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
+};
+
+const twoColumnGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: "0 14px",
+};
+
+const fullWidthField: React.CSSProperties = {
+  gridColumn: "1 / -1",
 };
 
 const card: React.CSSProperties = {
