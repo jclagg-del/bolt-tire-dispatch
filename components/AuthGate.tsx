@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const PUBLIC_ROUTES = ["/login", "/order/kingdom"];
+const PUBLIC_ROUTES = [
+  "/login",
+  "/order/kingdom",
+  "/kingdom-schedule",
+];
 
 export default function AuthGate({
   children,
