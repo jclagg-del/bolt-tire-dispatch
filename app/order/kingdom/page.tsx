@@ -1,21 +1,24 @@
 "use client";
 
-import {
-  FormEvent,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type OrderForm = {
+  submitted_by: string;
   contact_name: string;
   contact_number: string;
   address: string;
+  vehicle_year: string;
+  vehicle_make: string;
+  vehicle_model: string;
+  vehicle_color: string;
+  license_plate: string;
   requested_date: string;
   requested_time: string;
   job_number: string;
   mo_number: string;
+  tire_position: string;
   qty: string;
   tire_size: string;
   tire_product_number: string;
@@ -37,7 +40,6 @@ type AppointmentTime = {
 
 const NY_TIMEZONE = "America/New_York";
 const APPOINTMENT_LENGTH_MINUTES = 90;
-
 const ELIGIBLE_VEHICLES = ["stepvan", "sprinter"];
 
 const APPOINTMENT_TIMES: AppointmentTime[] = [
@@ -50,13 +52,20 @@ const APPOINTMENT_TIMES: AppointmentTime[] = [
 ];
 
 const initialForm: OrderForm = {
+  submitted_by: "",
   contact_name: "",
   contact_number: "",
   address: "",
+  vehicle_year: "",
+  vehicle_make: "",
+  vehicle_model: "",
+  vehicle_color: "",
+  license_plate: "",
   requested_date: "",
   requested_time: "",
   job_number: "",
   mo_number: "",
+  tire_position: "",
   qty: "",
   tire_size: "",
   tire_product_number: "",
@@ -79,11 +88,7 @@ function getTodayDate() {
 
 function addDaysToDateKey(dateKey: string, days: number) {
   const [year, month, day] = dateKey.split("-").map(Number);
-
-  const date = new Date(
-    Date.UTC(year, month - 1, day)
-  );
-
+  const date = new Date(Date.UTC(year, month - 1, day));
   date.setUTCDate(date.getUTCDate() + days);
 
   return [
@@ -95,14 +100,11 @@ function addDaysToDateKey(dateKey: string, days: number) {
 
 function parseJobDate(value?: string | null) {
   if (!value) return null;
-
   const cleanValue = value.trim();
-
   if (!cleanValue) return null;
 
   const hasTimezone =
-    cleanValue.endsWith("Z") ||
-    /[+-]\d{2}:\d{2}$/.test(cleanValue);
+    cleanValue.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(cleanValue);
 
   const date = hasTimezone
     ? new Date(cleanValue)
@@ -113,7 +115,6 @@ function parseJobDate(value?: string | null) {
 
 function getNYDateAndMinutes(value: string) {
   const date = parseJobDate(value);
-
   if (!date) return null;
 
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -133,11 +134,8 @@ function getNYDateAndMinutes(value: string) {
   const minuteValue = Number(getPart("minute"));
 
   return {
-    dateKey: `${getPart("year")}-${getPart("month")}-${getPart(
-      "day"
-    )}`,
-    minutes:
-      (hourValue === 24 ? 0 : hourValue) * 60 + minuteValue,
+    dateKey: `${getPart("year")}-${getPart("month")}-${getPart("day")}`,
+    minutes: (hourValue === 24 ? 0 : hourValue) * 60 + minuteValue,
   };
 }
 
@@ -156,21 +154,12 @@ function rangesOverlap(
 }
 
 export default function KingdomOrderPage() {
-  const [form, setForm] =
-    useState<OrderForm>(initialForm);
-
+  const [form, setForm] = useState<OrderForm>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  const [availabilityLoading, setAvailabilityLoading] =
-    useState(false);
-
-  const [availabilityError, setAvailabilityError] =
-    useState("");
-
-  const [availableTimes, setAvailableTimes] =
-    useState<AppointmentTime[]>([]);
-
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
+  const [availableTimes, setAvailableTimes] = useState<AppointmentTime[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
 
   const today = useMemo(() => getTodayDate(), []);
@@ -186,30 +175,12 @@ export default function KingdomOrderPage() {
       setAvailabilityLoading(true);
       setAvailabilityError("");
 
-      /*
-       * We intentionally query a wider date range, then convert
-       * each scheduled job into New York time before comparing it
-       * with the selected date. This avoids timezone edge cases.
-       */
-      const dayBefore = addDaysToDateKey(
-        form.requested_date,
-        -1
-      );
-
-      const dayAfter = addDaysToDateKey(
-        form.requested_date,
-        2
-      );
+      const dayBefore = addDaysToDateKey(form.requested_date, -1);
+      const dayAfter = addDaysToDateKey(form.requested_date, 2);
 
       const { data, error } = await supabase
         .from("jobs")
-        .select(`
-          id,
-          scheduled,
-          vehicle_id,
-          complete,
-          archived
-        `)
+        .select("id, scheduled, vehicle_id, complete, archived")
         .in("vehicle_id", ELIGIBLE_VEHICLES)
         .eq("complete", false)
         .gte("scheduled", `${dayBefore}T00:00:00`)
@@ -225,83 +196,44 @@ export default function KingdomOrderPage() {
         return;
       }
 
-      const scheduledJobs = (
-        (data || []) as ScheduledJob[]
-      ).filter((job) => {
-        if (!job.scheduled) return false;
-        if (job.complete) return false;
-        if (job.archived) return false;
-
-        return ELIGIBLE_VEHICLES.includes(
-          job.vehicle_id || ""
-        );
-      });
-
-      const openTimes = APPOINTMENT_TIMES.filter(
-        (appointment) => {
-          const slotStart = timeValueToMinutes(
-            appointment.value
-          );
-
-          const slotEnd =
-            slotStart + APPOINTMENT_LENGTH_MINUTES;
-
-          const busyVehicles = new Set<string>();
-
-          scheduledJobs.forEach((job) => {
-            if (!job.scheduled || !job.vehicle_id) return;
-
-            const jobTime = getNYDateAndMinutes(
-              job.scheduled
-            );
-
-            if (!jobTime) return;
-
-            if (
-              jobTime.dateKey !== form.requested_date
-            ) {
-              return;
-            }
-
-            const jobStart = jobTime.minutes;
-            const jobEnd =
-              jobStart + APPOINTMENT_LENGTH_MINUTES;
-
-            if (
-              rangesOverlap(
-                slotStart,
-                slotEnd,
-                jobStart,
-                jobEnd
-              )
-            ) {
-              busyVehicles.add(job.vehicle_id);
-            }
-          });
-
-          /*
-           * Keep the time visible when at least one eligible
-           * vehicle remains available. Hide it only when both
-           * Stepvan and Sprinter are occupied.
-           */
-          return busyVehicles.size < ELIGIBLE_VEHICLES.length;
-        }
+      const scheduledJobs = ((data || []) as ScheduledJob[]).filter(
+        (job) =>
+          !!job.scheduled &&
+          !job.complete &&
+          !job.archived &&
+          ELIGIBLE_VEHICLES.includes(job.vehicle_id || "")
       );
+
+      const openTimes = APPOINTMENT_TIMES.filter((appointment) => {
+        const slotStart = timeValueToMinutes(appointment.value);
+        const slotEnd = slotStart + APPOINTMENT_LENGTH_MINUTES;
+        const busyVehicles = new Set<string>();
+
+        scheduledJobs.forEach((job) => {
+          if (!job.scheduled || !job.vehicle_id) return;
+
+          const jobTime = getNYDateAndMinutes(job.scheduled);
+          if (!jobTime || jobTime.dateKey !== form.requested_date) return;
+
+          const jobStart = jobTime.minutes;
+          const jobEnd = jobStart + APPOINTMENT_LENGTH_MINUTES;
+
+          if (rangesOverlap(slotStart, slotEnd, jobStart, jobEnd)) {
+            busyVehicles.add(job.vehicle_id);
+          }
+        });
+
+        return busyVehicles.size < ELIGIBLE_VEHICLES.length;
+      });
 
       setAvailableTimes(openTimes);
 
       setForm((current) => {
         if (
           current.requested_time &&
-          !openTimes.some(
-            (time) =>
-              time.value === current.requested_time
-          )
+          !openTimes.some((time) => time.value === current.requested_time)
         ) {
-          return {
-            ...current,
-            requested_time: "",
-          };
+          return { ...current, requested_time: "" };
         }
 
         return current;
@@ -313,9 +245,7 @@ export default function KingdomOrderPage() {
 
   const handleChange = (
     event: React.ChangeEvent<
-      | HTMLInputElement
-      | HTMLTextAreaElement
-      | HTMLSelectElement
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >
   ) => {
     const { name, value } = event.target;
@@ -323,157 +253,84 @@ export default function KingdomOrderPage() {
     setForm((current) => ({
       ...current,
       [name]: value,
-      ...(name === "requested_date"
-        ? { requested_time: "" }
-        : {}),
+      ...(name === "requested_date" ? { requested_time: "" } : {}),
     }));
 
     setErrorMessage("");
   };
 
   const validateForm = () => {
-    if (!form.contact_name.trim()) {
-      return "Please enter the contact name.";
-    }
+    if (!form.submitted_by.trim()) return "Please enter who submitted this request.";
+    if (!form.contact_name.trim()) return "Please enter the contact person.";
+    if (!form.contact_number.trim()) return "Please enter a contact number.";
+    if (!form.address.trim()) return "Please enter the service address.";
+    if (!form.vehicle_year.trim()) return "Please enter the vehicle year.";
+    if (!form.vehicle_make.trim()) return "Please enter the vehicle make.";
+    if (!form.vehicle_model.trim()) return "Please enter the vehicle model.";
+    if (!form.requested_date) return "Please select a requested service date.";
+    if (!form.requested_time) return "Please select an available service time.";
 
-    if (!form.contact_number.trim()) {
-      return "Please enter a contact number.";
-    }
-
-    if (!form.address.trim()) {
-      return "Please enter the service address.";
-    }
-
-    if (!form.requested_date) {
-      return "Please select a requested service date.";
-    }
-
-    if (!form.requested_time) {
-      return "Please select an available service time.";
-    }
-
-    if (
-      !availableTimes.some(
-        (time) =>
-          time.value === form.requested_time
-      )
-    ) {
+    if (!availableTimes.some((time) => time.value === form.requested_time)) {
       return "That appointment time is no longer available. Please choose another time.";
     }
 
-    if (!form.qty || Number(form.qty) < 1) {
-      return "Please enter the number of tires.";
-    }
-
-    if (!form.tire_size.trim()) {
-      return "Please enter the tire size.";
-    }
+    if (!form.tire_position.trim()) return "Please enter the tire position.";
+    if (!form.qty || Number(form.qty) < 1) return "Please enter the tire quantity.";
+    if (!form.tire_size.trim()) return "Please enter the tire size.";
 
     return "";
   };
 
-  const verifySelectedTimeIsStillAvailable =
-    async () => {
-      const dayBefore = addDaysToDateKey(
-        form.requested_date,
-        -1
-      );
+  const verifySelectedTimeIsStillAvailable = async () => {
+    const dayBefore = addDaysToDateKey(form.requested_date, -1);
+    const dayAfter = addDaysToDateKey(form.requested_date, 2);
 
-      const dayAfter = addDaysToDateKey(
-        form.requested_date,
-        2
-      );
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("id, scheduled, vehicle_id, complete, archived")
+      .in("vehicle_id", ELIGIBLE_VEHICLES)
+      .eq("complete", false)
+      .gte("scheduled", `${dayBefore}T00:00:00`)
+      .lt("scheduled", `${dayAfter}T00:00:00`);
 
-      const { data, error } = await supabase
-        .from("jobs")
-        .select(`
-          id,
-          scheduled,
-          vehicle_id,
-          complete,
-          archived
-        `)
-        .in("vehicle_id", ELIGIBLE_VEHICLES)
-        .eq("complete", false)
-        .gte("scheduled", `${dayBefore}T00:00:00`)
-        .lt("scheduled", `${dayAfter}T00:00:00`);
+    if (error) {
+      return { available: false, error: error.message };
+    }
 
-      if (error) {
-        return {
-          available: false,
-          error: error.message,
-        };
+    const selectedStart = timeValueToMinutes(form.requested_time);
+    const selectedEnd = selectedStart + APPOINTMENT_LENGTH_MINUTES;
+    const busyVehicles = new Set<string>();
+
+    ((data || []) as ScheduledJob[]).forEach((job) => {
+      if (
+        !job.scheduled ||
+        !job.vehicle_id ||
+        job.complete ||
+        job.archived ||
+        !ELIGIBLE_VEHICLES.includes(job.vehicle_id)
+      ) {
+        return;
       }
 
-      const selectedStart = timeValueToMinutes(
-        form.requested_time
-      );
+      const jobTime = getNYDateAndMinutes(job.scheduled);
+      if (!jobTime || jobTime.dateKey !== form.requested_date) return;
 
-      const selectedEnd =
-        selectedStart + APPOINTMENT_LENGTH_MINUTES;
+      const jobStart = jobTime.minutes;
+      const jobEnd = jobStart + APPOINTMENT_LENGTH_MINUTES;
 
-      const busyVehicles = new Set<string>();
+      if (rangesOverlap(selectedStart, selectedEnd, jobStart, jobEnd)) {
+        busyVehicles.add(job.vehicle_id);
+      }
+    });
 
-      ((data || []) as ScheduledJob[]).forEach(
-        (job) => {
-          if (
-            !job.scheduled ||
-            !job.vehicle_id ||
-            job.complete ||
-            job.archived
-          ) {
-            return;
-          }
-
-          if (
-            !ELIGIBLE_VEHICLES.includes(
-              job.vehicle_id
-            )
-          ) {
-            return;
-          }
-
-          const jobTime = getNYDateAndMinutes(
-            job.scheduled
-          );
-
-          if (
-            !jobTime ||
-            jobTime.dateKey !== form.requested_date
-          ) {
-            return;
-          }
-
-          const jobStart = jobTime.minutes;
-          const jobEnd =
-            jobStart + APPOINTMENT_LENGTH_MINUTES;
-
-          if (
-            rangesOverlap(
-              selectedStart,
-              selectedEnd,
-              jobStart,
-              jobEnd
-            )
-          ) {
-            busyVehicles.add(job.vehicle_id);
-          }
-        }
-      );
-
-      return {
-        available:
-          busyVehicles.size <
-          ELIGIBLE_VEHICLES.length,
-        error: "",
-      };
+    return {
+      available: busyVehicles.size < ELIGIBLE_VEHICLES.length,
+      error: "",
     };
+  };
 
-  const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>
-  ) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     if (submitting) return;
 
     const validationError = validateForm();
@@ -486,59 +343,47 @@ export default function KingdomOrderPage() {
     setSubmitting(true);
     setErrorMessage("");
 
-    /*
-     * Check availability again immediately before inserting.
-     * This helps prevent a request from using a slot that became
-     * unavailable after the customer opened the page.
-     */
-    const availabilityCheck =
-      await verifySelectedTimeIsStillAvailable();
+    const availabilityCheck = await verifySelectedTimeIsStillAvailable();
 
     if (!availabilityCheck.available) {
       setSubmitting(false);
-
-      setForm((current) => ({
-        ...current,
-        requested_time: "",
-      }));
-
+      setForm((current) => ({ ...current, requested_time: "" }));
       setErrorMessage(
         availabilityCheck.error
           ? `We could not verify availability. ${availabilityCheck.error}`
           : "That appointment time was just filled. Please select another available time."
       );
-
       return;
     }
 
-    const { error } = await supabase
-      .from("customer_orders")
-      .insert({
-        customer: "Kingdom Support Services",
-        contact_name: form.contact_name.trim(),
-        contact_number:
-          form.contact_number.trim(),
-        address: form.address.trim(),
-        requested_date: form.requested_date,
-        requested_time: form.requested_time,
-        job_number:
-          form.job_number.trim() || null,
-        mo_number: form.mo_number.trim() || null,
-        qty: Number(form.qty),
-        tire_size: form.tire_size.trim(),
-        tire_product_number:
-          form.tire_product_number.trim() || null,
-        notes: form.notes.trim() || null,
-        order_status: "new",
-        tires_ordered: false,
-      });
+    const { error } = await supabase.from("customer_orders").insert({
+      customer: "Kingdom Support Services",
+      submitted_by: form.submitted_by.trim(),
+      contact_name: form.contact_name.trim(),
+      contact_number: form.contact_number.trim(),
+      address: form.address.trim(),
+      vehicle_year: form.vehicle_year.trim(),
+      vehicle_make: form.vehicle_make.trim(),
+      vehicle_model: form.vehicle_model.trim(),
+      vehicle_color: form.vehicle_color.trim() || null,
+      license_plate: form.license_plate.trim() || null,
+      requested_date: form.requested_date,
+      requested_time: form.requested_time,
+      job_number: form.job_number.trim() || null,
+      mo_number: form.mo_number.trim() || null,
+      tire_position: form.tire_position.trim(),
+      qty: Number(form.qty),
+      tire_size: form.tire_size.trim(),
+      tire_product_number: form.tire_product_number.trim() || null,
+      notes: form.notes.trim() || null,
+      order_status: "new",
+      tires_ordered: false,
+    });
 
     setSubmitting(false);
 
     if (error) {
-      setErrorMessage(
-        `We could not submit the request. ${error.message}`
-      );
+      setErrorMessage(`We could not submit the request. ${error.message}`);
       return;
     }
 
@@ -559,20 +404,10 @@ export default function KingdomOrderPage() {
     <main style={pageShell}>
       <header style={header}>
         <div style={headerInner}>
-          <img
-            src="/bolt-logo.png"
-            alt="Bolt Tire"
-            style={logo}
-          />
-
+          <img src="/bolt-logo.png" alt="Bolt Tire" style={logo} />
           <div style={headerText}>
-            <strong style={brandName}>
-              Bolt Tire
-            </strong>
-
-            <span style={brandSubtitle}>
-              Mobile Tire Service
-            </span>
+            <strong style={brandName}>Bolt Tire</strong>
+            <span style={brandSubtitle}>Mobile Tire Service</span>
           </div>
         </div>
       </header>
@@ -581,26 +416,15 @@ export default function KingdomOrderPage() {
         {submitted ? (
           <section style={successCard}>
             <div style={successIcon}>✓</div>
-
-            <div style={eyebrow}>
-              Kingdom Support Services
-            </div>
-
-            <h1 style={successTitle}>
-              Request Received
-            </h1>
-
+            <div style={eyebrow}>Kingdom Support Services</div>
+            <h1 style={successTitle}>Request Received</h1>
             <p style={successText}>
-              Your tire service request has been sent
-              to Bolt Tire.
+              Your tire service request has been sent to Bolt Tire.
             </p>
-
             <p style={successText}>
-              We will review the requested date, time,
-              and tire information before confirming
-              the appointment.
+              We will review the requested date, time, vehicle, and tire
+              information before confirming the appointment.
             </p>
-
             <button
               type="button"
               onClick={startAnotherRequest}
@@ -612,54 +436,46 @@ export default function KingdomOrderPage() {
         ) : (
           <>
             <section style={heroCard}>
-              <div style={eyebrow}>
-                Customer Service Portal
-              </div>
-
-              <h1 style={title}>
-                Kingdom Support Services
-              </h1>
-
-              <h2 style={portalTitle}>
-                Request Tire Service
-              </h2>
-
+              <div style={eyebrow}>Customer Service Portal</div>
+              <h1 style={title}>Kingdom Support Services</h1>
+              <h2 style={portalTitle}>Request Tire Service</h2>
               <p style={subtitle}>
-                Enter the service and tire information
-                below. Bolt Tire will review your
-                request and confirm the appointment.
+                Enter the service, vehicle, and tire information below. Bolt
+                Tire will review your request and confirm the appointment.
               </p>
+
+              <Link href="/kingdom-schedule" style={scheduleLinkButton}>
+                View Scheduled Work
+              </Link>
             </section>
 
-            <form
-              onSubmit={handleSubmit}
-              style={formCard}
-            >
+            <form onSubmit={handleSubmit} style={formCard}>
               <section style={formSection}>
-                <div style={sectionHeading}>
-                  Contact Information
-                </div>
+                <div style={sectionHeading}>Contact Information</div>
 
-                <label style={label}>
-                  Contact Name
-                  <span style={required}> *</span>
-                </label>
+                <FieldLabel text="Submitted By" required />
+                <input
+                  type="text"
+                  name="submitted_by"
+                  value={form.submitted_by}
+                  onChange={handleChange}
+                  style={input}
+                  placeholder="Name of person submitting request"
+                  autoComplete="name"
+                />
 
+                <FieldLabel text="Contact Person" required />
                 <input
                   type="text"
                   name="contact_name"
                   value={form.contact_name}
                   onChange={handleChange}
                   style={input}
-                  placeholder="Full name"
+                  placeholder="On-site contact person"
                   autoComplete="name"
                 />
 
-                <label style={label}>
-                  Contact Number
-                  <span style={required}> *</span>
-                </label>
-
+                <FieldLabel text="Contact Number" required />
                 <input
                   type="tel"
                   name="contact_number"
@@ -671,11 +487,7 @@ export default function KingdomOrderPage() {
                   autoComplete="tel"
                 />
 
-                <label style={label}>
-                  Service Address
-                  <span style={required}> *</span>
-                </label>
-
+                <FieldLabel text="Service Address" required />
                 <input
                   type="text"
                   name="address"
@@ -688,21 +500,84 @@ export default function KingdomOrderPage() {
               </section>
 
               <section style={formSection}>
-                <div style={sectionHeading}>
-                  Requested Appointment
+                <div style={sectionHeading}>Vehicle Information</div>
+
+                <div style={threeColumnGrid}>
+                  <div>
+                    <FieldLabel text="Year" required />
+                    <input
+                      type="text"
+                      name="vehicle_year"
+                      value={form.vehicle_year}
+                      onChange={handleChange}
+                      style={input}
+                      placeholder="2022"
+                      inputMode="numeric"
+                      maxLength={4}
+                    />
+                  </div>
+
+                  <div>
+                    <FieldLabel text="Make" required />
+                    <input
+                      type="text"
+                      name="vehicle_make"
+                      value={form.vehicle_make}
+                      onChange={handleChange}
+                      style={input}
+                      placeholder="Ford"
+                    />
+                  </div>
+
+                  <div>
+                    <FieldLabel text="Model" required />
+                    <input
+                      type="text"
+                      name="vehicle_model"
+                      value={form.vehicle_model}
+                      onChange={handleChange}
+                      style={input}
+                      placeholder="Transit"
+                    />
+                  </div>
                 </div>
 
+                <div style={twoColumnGrid}>
+                  <div>
+                    <FieldLabel text="Color" />
+                    <input
+                      type="text"
+                      name="vehicle_color"
+                      value={form.vehicle_color}
+                      onChange={handleChange}
+                      style={input}
+                      placeholder="White"
+                    />
+                  </div>
+
+                  <div>
+                    <FieldLabel text="License Plate" />
+                    <input
+                      type="text"
+                      name="license_plate"
+                      value={form.license_plate}
+                      onChange={handleChange}
+                      style={input}
+                      placeholder="Plate number"
+                      autoCapitalize="characters"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section style={formSection}>
+                <div style={sectionHeading}>Requested Appointment</div>
                 <p style={sectionHelp}>
-                  Choose a preferred date. Only
-                  appointment times that are currently
-                  available will appear.
+                  Choose a preferred date. Only appointment times that are
+                  currently available will appear.
                 </p>
 
-                <label style={label}>
-                  Requested Date
-                  <span style={required}> *</span>
-                </label>
-
+                <FieldLabel text="Requested Date" required />
                 <input
                   type="date"
                   name="requested_date"
@@ -712,11 +587,7 @@ export default function KingdomOrderPage() {
                   style={input}
                 />
 
-                <label style={label}>
-                  Requested Time
-                  <span style={required}> *</span>
-                </label>
-
+                <FieldLabel text="Requested Time" required />
                 <select
                   name="requested_time"
                   value={form.requested_time}
@@ -739,10 +610,7 @@ export default function KingdomOrderPage() {
                   </option>
 
                   {availableTimes.map((time) => (
-                    <option
-                      key={time.value}
-                      value={time.value}
-                    >
+                    <option key={time.value} value={time.value}>
                       {time.label}
                     </option>
                   ))}
@@ -759,28 +627,20 @@ export default function KingdomOrderPage() {
                   availableTimes.length === 0 &&
                   !availabilityError && (
                     <div style={noAvailabilityBox}>
-                      No appointment times are currently
-                      available on this date. Please
-                      choose another date.
+                      No appointment times are currently available on this
+                      date. Please choose another date.
                     </div>
                   )}
 
                 {availabilityError && (
-                  <div style={errorBox}>
-                    {availabilityError}
-                  </div>
+                  <div style={errorBox}>{availabilityError}</div>
                 )}
               </section>
 
               <section style={formSection}>
-                <div style={sectionHeading}>
-                  Work Order Information
-                </div>
+                <div style={sectionHeading}>Work Order Information</div>
 
-                <label style={label}>
-                  Job Number
-                </label>
-
+                <FieldLabel text="Job Number" />
                 <input
                   type="text"
                   name="job_number"
@@ -790,10 +650,7 @@ export default function KingdomOrderPage() {
                   placeholder="Job or work-order number"
                 />
 
-                <label style={label}>
-                  MO Number
-                </label>
-
+                <FieldLabel text="MO Number" />
                 <input
                   type="text"
                   name="mo_number"
@@ -805,15 +662,19 @@ export default function KingdomOrderPage() {
               </section>
 
               <section style={formSection}>
-                <div style={sectionHeading}>
-                  Tire Information
-                </div>
+                <div style={sectionHeading}>Tire Information</div>
 
-                <label style={label}>
-                  Number of Tires
-                  <span style={required}> *</span>
-                </label>
+                <FieldLabel text="Tire Position" required />
+                <input
+                  type="text"
+                  name="tire_position"
+                  value={form.tire_position}
+                  onChange={handleChange}
+                  style={input}
+                  placeholder="Example: Left front, rear axle, all positions"
+                />
 
+                <FieldLabel text="Quantity" required />
                 <input
                   type="number"
                   name="qty"
@@ -826,11 +687,7 @@ export default function KingdomOrderPage() {
                   max={100}
                 />
 
-                <label style={label}>
-                  Tire Size
-                  <span style={required}> *</span>
-                </label>
-
+                <FieldLabel text="Tire Size" required />
                 <input
                   type="text"
                   name="tire_size"
@@ -841,10 +698,7 @@ export default function KingdomOrderPage() {
                   autoCapitalize="characters"
                 />
 
-                <label style={label}>
-                  Tire Product Number
-                </label>
-
+                <FieldLabel text="Tire Product Number" />
                 <input
                   type="text"
                   name="tire_product_number"
@@ -856,26 +710,19 @@ export default function KingdomOrderPage() {
               </section>
 
               <section style={formSection}>
-                <div style={sectionHeading}>
-                  Additional Information
-                </div>
+                <div style={sectionHeading}>Additional Information</div>
 
-                <label style={label}>Notes</label>
-
+                <FieldLabel text="Notes" />
                 <textarea
                   name="notes"
                   value={form.notes}
                   onChange={handleChange}
                   style={textarea}
-                  placeholder="Vehicle, unit number, special instructions, or other details"
+                  placeholder="Special instructions or other details"
                 />
               </section>
 
-              {errorMessage && (
-                <div style={errorBox}>
-                  {errorMessage}
-                </div>
-              )}
+              {errorMessage && <div style={errorBox}>{errorMessage}</div>}
 
               <button
                 type="submit"
@@ -899,15 +746,29 @@ export default function KingdomOrderPage() {
               </button>
 
               <p style={footerNote}>
-                Submitting this form sends a service
-                request. Your appointment is not
-                confirmed until Bolt Tire approves it.
+                Submitting this form sends a service request. Your appointment
+                is not confirmed until Bolt Tire approves it.
               </p>
             </form>
           </>
         )}
       </div>
     </main>
+  );
+}
+
+function FieldLabel({
+  text,
+  required: isRequired = false,
+}: {
+  text: string;
+  required?: boolean;
+}) {
+  return (
+    <label style={label}>
+      {text}
+      {isRequired && <span style={required}> *</span>}
+    </label>
   );
 }
 
@@ -970,8 +831,7 @@ const heroCard: React.CSSProperties = {
   borderRadius: 18,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
-  boxShadow:
-    "0 3px 12px rgba(15, 23, 42, 0.06)",
+  boxShadow: "0 3px 12px rgba(15, 23, 42, 0.06)",
 };
 
 const eyebrow: React.CSSProperties = {
@@ -1004,13 +864,27 @@ const subtitle: React.CSSProperties = {
   color: "#4b5563",
 };
 
+const scheduleLinkButton: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: 16,
+  padding: "11px 15px",
+  borderRadius: 10,
+  border: "1px solid #2563eb",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  textDecoration: "none",
+  fontSize: 14,
+  fontWeight: 800,
+};
+
 const formCard: React.CSSProperties = {
   padding: "4px 20px 22px",
   borderRadius: 18,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
-  boxShadow:
-    "0 3px 12px rgba(15, 23, 42, 0.06)",
+  boxShadow: "0 3px 12px rgba(15, 23, 42, 0.06)",
 };
 
 const formSection: React.CSSProperties = {
@@ -1065,6 +939,18 @@ const textarea: React.CSSProperties = {
   fontFamily: "inherit",
 };
 
+const twoColumnGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const threeColumnGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 12,
+};
+
 const availabilityMessage: React.CSSProperties = {
   marginTop: 9,
   color: "#2563eb",
@@ -1107,8 +993,7 @@ const submitButton: React.CSSProperties = {
   cursor: "pointer",
   fontSize: 16,
   fontWeight: 800,
-  boxShadow:
-    "0 4px 10px rgba(37, 99, 235, 0.22)",
+  boxShadow: "0 4px 10px rgba(37, 99, 235, 0.22)",
 };
 
 const disabledButton: React.CSSProperties = {
@@ -1130,8 +1015,7 @@ const successCard: React.CSSProperties = {
   border: "1px solid #bbf7d0",
   background: "#ffffff",
   textAlign: "center",
-  boxShadow:
-    "0 3px 12px rgba(15, 23, 42, 0.06)",
+  boxShadow: "0 3px 12px rgba(15, 23, 42, 0.06)",
 };
 
 const successIcon: React.CSSProperties = {
