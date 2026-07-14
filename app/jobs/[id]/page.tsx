@@ -13,6 +13,9 @@ type JobForm = {
   phone: string;
   email: string;
   vehicle: string;
+  submitted_by: string;
+  tire_position: string;
+  license_plate: string;
   vehicle_mileage: string;
   tires: string;
   size: string;
@@ -81,6 +84,9 @@ export default function EditJobPage() {
         phone,
         email,
         vehicle,
+        submitted_by,
+        tire_position,
+        license_plate,
         vehicle_mileage,
         tires,
         size,
@@ -123,6 +129,9 @@ export default function EditJobPage() {
       phone: data.phone || "",
       email: data.email || "",
       vehicle: data.vehicle || "",
+      submitted_by: data.submitted_by || "",
+      tire_position: data.tire_position || "",
+      license_plate: data.license_plate || "",
       vehicle_mileage: data.vehicle_mileage || "",
       tires: data.tires || "",
       size: data.size || "",
@@ -246,6 +255,9 @@ export default function EditJobPage() {
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         vehicle: form.vehicle.trim() || null,
+        submitted_by: form.submitted_by.trim() || null,
+        tire_position: form.tire_position.trim() || null,
+        license_plate: form.license_plate.trim() || null,
         vehicle_mileage: form.vehicle_mileage.trim() || null,
         tires: form.tires.trim() || null,
         size: form.size.trim() || null,
