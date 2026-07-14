@@ -15,23 +15,26 @@ type VehicleOption = {
 
 type FormState = {
   customer: string;
-  contact_person: string;
+  contact_name: string;
   phone: string;
   email: string;
+  submitted_by: string;
   vehicle: string;
-  unit_number: string;
+  license_plate: string;
   vehicle_mileage: string;
+  tire_position: string;
   tires: string;
   size: string;
   qty: string;
   price_tires: string;
+  installation_cost: string;
+  tire_disposal_fee: string;
   address: string;
   scheduled: string;
   vehicle_id: string;
   notes: string;
   service_type: string;
   po_number: string;
-  billing_name: string;
   job_total: string;
   payment_status: string;
   invoice_number: string;
@@ -75,23 +78,26 @@ export default function NewJobPage() {
 
   const [form, setForm] = useState<FormState>({
     customer: "",
-    contact_person: "",
+    contact_name: "",
+    submitted_by: "",
     phone: "",
     email: "",
     vehicle: "",
-    unit_number: "",
+    license_plate: "",
     vehicle_mileage: "",
+    tire_position: "",
     tires: "",
     size: "",
     qty: "",
     price_tires: "",
+    installation_cost: "",
+    tire_disposal_fee: "",
     address: "",
     scheduled: "",
     vehicle_id: "stepvan",
     notes: "",
     service_type: "",
     po_number: "",
-    billing_name: "",
     job_total: "",
     payment_status: "unpaid",
     invoice_number: "",
@@ -140,7 +146,7 @@ export default function NewJobPage() {
     const timer = setTimeout(async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("contact_person,phone,email,address")
+        .select("contact_name,phone,email,address")
         .ilike("customer", customer)
         .order("scheduled", { ascending: false, nullsFirst: false })
         .limit(1);
@@ -159,7 +165,7 @@ export default function NewJobPage() {
 
       setForm((prev) => ({
         ...prev,
-        contact_person: prev.contact_person || match.contact_person || "",
+        contact_name: prev.contact_name || match.contact_name || "",
         phone: prev.phone || match.phone || "",
         email: prev.email || match.email || "",
         address: prev.address || match.address || "",
@@ -184,28 +190,34 @@ export default function NewJobPage() {
 
     const payload = {
       customer: form.customer.trim(),
-      contact_person: form.contact_person.trim() || null,
+      contact_name: form.contact_name.trim() || null,
+      submitted_by: form.submitted_by.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       vehicle: form.vehicle.trim() || null,
-      unit_number: form.unit_number.trim() || null,
+      license_plate: form.license_plate.trim() || null,
       vehicle_mileage: form.vehicle_mileage.trim() || null,
+      tire_position: form.tire_position.trim() || null,
       tires: form.tires.trim() || null,
       size: form.size.trim() || null,
       qty: form.qty.trim() ? Number(form.qty) : null,
       price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
+      installation_cost: form.installation_cost.trim()
+        ? Number(form.installation_cost)
+        : null,
+      tire_disposal_fee: form.tire_disposal_fee.trim()
+        ? Number(form.tire_disposal_fee)
+        : null,
       address: form.address.trim() || null,
       scheduled: formatLocalDateTimeForDb(form.scheduled),
       vehicle_id: form.vehicle_id || vehicles[0]?.id || "stepvan",
       notes: form.notes.trim() || null,
       service_type: form.service_type.trim() || null,
       po_number: form.po_number.trim() || null,
-      billing_name: form.billing_name.trim() || null,
-      job_total: form.job_total.trim()
-        ? Number(form.job_total)
-        : form.qty && form.price_tires
-        ? Number(form.qty) * Number(form.price_tires)
-        : null,
+      job_total:
+        (Number(form.qty) || 0) * (Number(form.price_tires) || 0) +
+        (Number(form.installation_cost) || 0) +
+        (Number(form.tire_disposal_fee) || 0),
       payment_status: form.payment_status || "unpaid",
       invoice_number: form.invoice_number.trim() || null,
       job_status: form.job_status || "scheduled",
@@ -242,215 +254,372 @@ export default function NewJobPage() {
         </div>
 
         <form onSubmit={handleSubmit} style={card}>
-          <div style={sectionTitle}>Customer Info</div>
+          <div style={sectionTitle}>Customer Information</div>
 
-          <input
-            name="customer"
-            placeholder="Customer"
-            value={form.customer}
-            onChange={handleChange}
-            style={input}
-            autoComplete="organization"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Customer</label>
+              <input
+                name="customer"
+                placeholder="Customer"
+                value={form.customer}
+                onChange={handleChange}
+                style={input}
+                autoComplete="organization"
+              />
+            </Field>
 
-          <input
-            name="contact_person"
-            placeholder="Contact Person"
-            value={form.contact_person}
-            onChange={handleChange}
-            style={input}
-            autoComplete="name"
-          />
+            <Field>
+              <label style={fieldLabel}>Submitted By</label>
+              <input
+                name="submitted_by"
+                placeholder="Submitted By"
+                value={form.submitted_by}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
 
-          <input
-            name="phone"
-            placeholder="Phone"
-            value={form.phone}
-            onChange={handleChange}
-            style={input}
-            inputMode="tel"
-            autoComplete="tel"
-          />
+            <Field>
+              <label style={fieldLabel}>Contact Name</label>
+              <input
+                name="contact_name"
+                placeholder="Contact Name"
+                value={form.contact_name}
+                onChange={handleChange}
+                style={input}
+                autoComplete="name"
+              />
+            </Field>
 
-          <input
-            name="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={handleChange}
-            style={input}
-            inputMode="email"
-            autoComplete="email"
-          />
+            <Field>
+              <label style={fieldLabel}>Contact Number</label>
+              <input
+                name="phone"
+                placeholder="Phone"
+                value={form.phone}
+                onChange={handleChange}
+                style={input}
+                inputMode="tel"
+                autoComplete="tel"
+              />
+            </Field>
 
-          <input
-            name="address"
-            placeholder="Address"
-            value={form.address}
-            onChange={handleChange}
-            style={input}
-            autoComplete="street-address"
-          />
+            <Field fullWidth>
+              <label style={fieldLabel}>Email</label>
+              <input
+                name="email"
+                placeholder="Email"
+                value={form.email}
+                onChange={handleChange}
+                style={input}
+                inputMode="email"
+                autoComplete="email"
+              />
+            </Field>
+          </div>
 
           {lookupMessage ? <div style={notice}>{lookupMessage}</div> : null}
 
-          <div style={sectionTitle}>Job Info</div>
+          <div style={sectionTitle}>Vehicle</div>
 
-          <input
-            name="vehicle"
-            placeholder="Vehicle"
-            value={form.vehicle}
-            onChange={handleChange}
-            style={input}
-          />
+          <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Vehicle Details</label>
+              <input
+                name="vehicle"
+                placeholder="Year Make Model • Color"
+                value={form.vehicle}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
 
-          <input
-            name="unit_number"
-            placeholder="Unit Number"
-            value={form.unit_number}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>License Plate</label>
+              <input
+                name="license_plate"
+                placeholder="License Plate"
+                value={form.license_plate}
+                onChange={handleChange}
+                style={input}
+                autoCapitalize="characters"
+              />
+            </Field>
 
-          <input
-            name="vehicle_mileage"
-            placeholder="Vehicle Mileage"
-            value={form.vehicle_mileage}
-            onChange={handleChange}
-            style={input}
-            inputMode="numeric"
-          />
+            <Field>
+              <label style={fieldLabel}>Vehicle Mileage</label>
+              <input
+                name="vehicle_mileage"
+                placeholder="Vehicle Mileage"
+                value={form.vehicle_mileage}
+                onChange={handleChange}
+                style={input}
+                inputMode="numeric"
+              />
+            </Field>
 
-          <input
-            type="datetime-local"
-            name="scheduled"
-            value={form.scheduled}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field fullWidth>
+              <label style={fieldLabel}>Assigned Service Vehicle</label>
+              <select
+                name="vehicle_id"
+                value={form.vehicle_id}
+                onChange={handleChange}
+                style={input}
+              >
+                {vehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
-          <select
-            name="vehicle_id"
-            value={form.vehicle_id}
-            onChange={handleChange}
-            style={input}
-          >
-            {vehicles.map((vehicle) => (
-              <option key={vehicle.id} value={vehicle.id}>
-                {vehicle.name}
-              </option>
-            ))}
-          </select>
+          <div style={sectionTitle}>Scheduling and Work Order</div>
 
-          <select
-            name="service_type"
-            value={form.service_type}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="">Service Type</option>
-            <option value="new tires">New Tires</option>
-            <option value="repair">Repair</option>
-            <option value="swap">Swap</option>
-            <option value="roadside">Roadside</option>
-            <option value="delivery">Delivery</option>
-            <option value="inspection">Inspection</option>
-          </select>
+          <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Service Address</label>
+              <input
+                name="address"
+                placeholder="Address"
+                value={form.address}
+                onChange={handleChange}
+                style={input}
+                autoComplete="street-address"
+              />
+            </Field>
 
-          <div style={sectionTitle}>Tire Info</div>
+            <Field>
+              <label style={fieldLabel}>Scheduled Date and Time</label>
+              <input
+                type="datetime-local"
+                name="scheduled"
+                value={form.scheduled}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
 
-          <input
-            name="tires"
-            placeholder="Tires"
-            value={form.tires}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>Service Type</label>
+              <select
+                name="service_type"
+                value={form.service_type}
+                onChange={handleChange}
+                style={input}
+              >
+                <option value="">Service Type</option>
+                <option value="new tires">New Tires</option>
+                <option value="repair">Repair</option>
+                <option value="swap">Swap</option>
+                <option value="roadside">Roadside</option>
+                <option value="delivery">Delivery</option>
+                <option value="inspection">Inspection</option>
+              </select>
+            </Field>
 
-          <input
-            name="size"
-            placeholder="Size"
-            value={form.size}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field fullWidth>
+              <label style={fieldLabel}>Job Number / PO Number</label>
+              <input
+                name="po_number"
+                placeholder="Job Number or PO Number"
+                value={form.po_number}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
+          </div>
 
-          <input
-            name="qty"
-            placeholder="Quantity"
-            value={form.qty}
-            onChange={handleChange}
-            style={input}
-            inputMode="numeric"
-          />
+          <div style={sectionTitle}>Service and Tire Information</div>
 
-          <input
-            name="price_tires"
-            placeholder="Tire Price (each)"
-            value={form.price_tires}
-            onChange={handleChange}
-            style={input}
-            inputMode="decimal"
-          />
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Tire Position</label>
+              <input
+                name="tire_position"
+                placeholder="Example: Left Front or Rear Axle"
+                value={form.tire_position}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
 
-          <div style={sectionTitle}>Billing Info</div>
+            <Field>
+              <label style={fieldLabel}>Tire Brand or Product</label>
+              <input
+                name="tires"
+                placeholder="Tires"
+                value={form.tires}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
 
-          <input
-            name="po_number"
-            placeholder="PO Number"
-            value={form.po_number}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>Tire Size</label>
+              <input
+                name="size"
+                placeholder="Tire Size"
+                value={form.size}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
 
-          <input
-            name="billing_name"
-            placeholder="Billing Name"
-            value={form.billing_name}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>Quantity</label>
+              <input
+                name="qty"
+                placeholder="Quantity"
+                value={form.qty}
+                onChange={handleChange}
+                style={input}
+                inputMode="numeric"
+              />
+            </Field>
+          </div>
 
-          <input
-            name="job_total"
-            placeholder="Job Total"
-            value={form.job_total}
-            onChange={handleChange}
-            style={input}
-            inputMode="decimal"
-          />
+          <div style={sectionTitle}>Costs</div>
 
-          <select
-            name="payment_status"
-            value={form.payment_status}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="unpaid">Unpaid</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-          </select>
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Tire Price Each</label>
+              <input
+                name="price_tires"
+                placeholder="Tire Price (each)"
+                value={form.price_tires}
+                onChange={handleChange}
+                style={input}
+                inputMode="decimal"
+              />
+            </Field>
 
-          <input
-            name="invoice_number"
-            placeholder="Invoice Number"
-            value={form.invoice_number}
-            onChange={handleChange}
-            style={input}
-          />
+            <Field>
+              <label style={fieldLabel}>Installation Cost</label>
+              <input
+                name="installation_cost"
+                placeholder="Total Installation Cost"
+                value={form.installation_cost}
+                onChange={handleChange}
+                style={input}
+                inputMode="decimal"
+              />
+            </Field>
 
-          <select
-            name="job_status"
-            value={form.job_status}
-            onChange={handleChange}
-            style={input}
-          >
-            <option value="scheduled">Scheduled</option>
-            <option value="en_route">En Route</option>
-            <option value="on_site">On Site</option>
-            <option value="completed">Completed</option>
-            <option value="billed">Billed</option>
-            <option value="paid">Paid</option>
-          </select>
+            <Field fullWidth>
+              <label style={fieldLabel}>Tire Disposal Fee</label>
+              <input
+                name="tire_disposal_fee"
+                placeholder="Total Tire Disposal Fee"
+                value={form.tire_disposal_fee}
+                onChange={handleChange}
+                style={input}
+                inputMode="decimal"
+              />
+            </Field>
+          </div>
+
+          <div style={costBreakdown}>
+            <div style={costRow}>
+              <span>Tires</span>
+              <strong>
+                ${(
+                  (Number(form.qty) || 0) *
+                  (Number(form.price_tires) || 0)
+                ).toFixed(2)}
+              </strong>
+            </div>
+
+            <div style={costRow}>
+              <span>Installation</span>
+              <strong>
+                ${(Number(form.installation_cost) || 0).toFixed(2)}
+              </strong>
+            </div>
+
+            <div style={costRow}>
+              <span>Disposal</span>
+              <strong>
+                ${(Number(form.tire_disposal_fee) || 0).toFixed(2)}
+              </strong>
+            </div>
+
+            <div style={costTotalRow}>
+              <span>Job Total</span>
+              <strong>
+                ${(
+                  (Number(form.qty) || 0) *
+                    (Number(form.price_tires) || 0) +
+                  (Number(form.installation_cost) || 0) +
+                  (Number(form.tire_disposal_fee) || 0)
+                ).toFixed(2)}
+              </strong>
+            </div>
+          </div>
+
+          <div style={sectionTitle}>Billing</div>
+
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Job Total</label>
+              <input
+                name="job_total"
+                value={(
+                  (Number(form.qty) || 0) *
+                    (Number(form.price_tires) || 0) +
+                  (Number(form.installation_cost) || 0) +
+                  (Number(form.tire_disposal_fee) || 0)
+                ).toFixed(2)}
+                readOnly
+                style={{ ...input, background: "#f3f4f6" }}
+                inputMode="decimal"
+              />
+            </Field>
+
+            <Field>
+              <label style={fieldLabel}>Payment Status</label>
+              <select
+                name="payment_status"
+                value={form.payment_status}
+                onChange={handleChange}
+                style={input}
+              >
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+              </select>
+            </Field>
+
+            <Field>
+              <label style={fieldLabel}>Invoice Number</label>
+              <input
+                name="invoice_number"
+                placeholder="Invoice Number"
+                value={form.invoice_number}
+                onChange={handleChange}
+                style={input}
+              />
+            </Field>
+
+            <Field>
+              <label style={fieldLabel}>Job Status</label>
+              <select
+                name="job_status"
+                value={form.job_status}
+                onChange={handleChange}
+                style={input}
+              >
+                <option value="scheduled">Scheduled</option>
+                <option value="en_route">En Route</option>
+                <option value="on_site">On Site</option>
+                <option value="completed">Completed</option>
+                <option value="billed">Billed</option>
+                <option value="paid">Paid</option>
+              </select>
+            </Field>
+          </div>
 
           <div style={sectionTitle}>Notes</div>
 
@@ -467,6 +636,21 @@ export default function NewJobPage() {
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+
+
+function Field({
+  children,
+  fullWidth = false,
+}: {
+  children: React.ReactNode;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div style={fullWidth ? fullWidthField : undefined}>
+      {children}
     </div>
   );
 }
@@ -528,13 +712,63 @@ const card: React.CSSProperties = {
 };
 
 const sectionTitle: React.CSSProperties = {
-  marginTop: 16,
-  marginBottom: 4,
+  marginTop: 28,
+  marginBottom: 6,
+  paddingBottom: 8,
+  borderBottom: "1px solid #e5e7eb",
   fontSize: 13,
   fontWeight: 800,
   color: "#6b7280",
   textTransform: "uppercase",
   letterSpacing: 0.4,
+};
+
+const twoColumnGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: "0 14px",
+};
+
+const fullWidthField: React.CSSProperties = {
+  gridColumn: "1 / -1",
+};
+
+const fieldLabel: React.CSSProperties = {
+  display: "block",
+  marginTop: 14,
+  marginBottom: -5,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#374151",
+};
+
+const costBreakdown: React.CSSProperties = {
+  marginTop: 18,
+  padding: 14,
+  borderRadius: 12,
+  border: "1px solid #dbeafe",
+  background: "#f8fafc",
+};
+
+const costRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "6px 0",
+  color: "#374151",
+  fontSize: 14,
+};
+
+const costTotalRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  marginTop: 8,
+  paddingTop: 12,
+  borderTop: "1px solid #cbd5e1",
+  color: "#111827",
+  fontSize: 16,
+  fontWeight: 800,
 };
 
 const input: React.CSSProperties = {
