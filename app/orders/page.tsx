@@ -8,13 +8,20 @@ import AppHeader from "@/components/AppHeader";
 type CustomerOrder = {
   id: number;
   customer: string;
+  submitted_by: string | null;
   contact_name: string;
   contact_number: string;
   address: string;
+  vehicle_year: string | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_color: string | null;
+  license_plate: string | null;
   requested_date: string;
   requested_time: string;
   job_number: string | null;
   mo_number: string | null;
+  tire_position: string | null;
   qty: number;
   tire_size: string;
   tire_product_number: string | null;
@@ -57,6 +64,34 @@ function createScheduledValue(
   return `${dateValue}T${cleanTime}:00`;
 }
 
+
+function buildVehicleDescription(order: CustomerOrder) {
+  const mainVehicle = [
+    order.vehicle_year,
+    order.vehicle_make,
+    order.vehicle_model,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const details = [
+    order.vehicle_color ? `Color: ${order.vehicle_color}` : "",
+    order.license_plate ? `Plate: ${order.license_plate}` : "",
+  ].filter(Boolean);
+
+  return [mainVehicle, ...details].filter(Boolean).join(" • ");
+}
+
+function buildJobNotes(order: CustomerOrder) {
+  const noteParts = [
+    order.tire_position ? `Tire Position: ${order.tire_position}` : "",
+    order.submitted_by ? `Submitted By: ${order.submitted_by}` : "",
+    order.notes || "",
+  ].filter(Boolean);
+
+  return noteParts.length > 0 ? noteParts.join("\n") : null;
+}
+
 export default function OrdersPage() {
   const router = useRouter();
 
@@ -74,13 +109,20 @@ export default function OrdersPage() {
       .select(`
         id,
         customer,
+        submitted_by,
         contact_name,
         contact_number,
         address,
+        vehicle_year,
+        vehicle_make,
+        vehicle_model,
+        vehicle_color,
+        license_plate,
         requested_date,
         requested_time,
         job_number,
         mo_number,
+        tire_position,
         qty,
         tire_size,
         tire_product_number,
@@ -234,17 +276,17 @@ export default function OrdersPage() {
       .from("jobs")
       .insert({
         customer: "Kingdom Support Services",
-        billing_name: "Kingdom Support Services",
         contact_name: order.contact_name,
         phone: order.contact_number,
         address: order.address,
+        vehicle: buildVehicleDescription(order) || null,
         scheduled,
         po_number: order.job_number,
         mo_number: order.mo_number,
         qty: order.qty,
         size: order.tire_size,
         tire_product_number: order.tire_product_number,
-        notes: order.notes,
+        notes: buildJobNotes(order),
         tires_ordered: order.tires_ordered,
         submitted_by_customer: true,
         customer_order_status: "approved",
@@ -447,8 +489,14 @@ function OrderSection({
                     </h3>
 
                     <div style={contactName}>
-                      {order.contact_name}
+                      Contact: {order.contact_name}
                     </div>
+
+                    {order.submitted_by && (
+                      <div style={submittedBy}>
+                        Submitted by: {order.submitted_by}
+                      </div>
+                    )}
                   </div>
 
                   <div
@@ -475,6 +523,16 @@ function OrderSection({
                 </div>
 
                 <div style={detailsGrid}>
+                  <Detail
+                    label="Vehicle"
+                    value={buildVehicleDescription(order) || "—"}
+                  />
+
+                  <Detail
+                    label="Tire Position"
+                    value={order.tire_position || "—"}
+                  />
+
                   <Detail
                     label="Tires"
                     value={`${order.qty} × ${order.tire_size}`}
@@ -709,6 +767,12 @@ const customerName: React.CSSProperties = {
 const contactName: React.CSSProperties = {
   color: "#4b5563",
   fontSize: 14,
+};
+
+const submittedBy: React.CSSProperties = {
+  marginTop: 3,
+  color: "#6b7280",
+  fontSize: 13,
 };
 
 const newBadge: React.CSSProperties = {
