@@ -729,7 +729,6 @@ export default function EditJobPage() {
 
           <textarea name="notes" value={form.notes} onChange={handleChange} style={textarea} placeholder="Notes" />
         </div>
-        </div>
       </div>
 
       <CompletionModal
