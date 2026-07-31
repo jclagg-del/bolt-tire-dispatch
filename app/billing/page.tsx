@@ -62,6 +62,7 @@ export default function BillingPage() {
   const [connecting, setConnecting] = useState(false);
   const [invoicingId, setInvoicingId] = useState<string | number | null>(null);
   const [numberingId, setNumberingId] = useState<string | number | null>(null);
+  const [linkingId, setLinkingId] = useState<string | number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -145,6 +146,23 @@ export default function BillingPage() {
     if (!response.ok) return alert(data.error || "Invoice number update failed.");
     await fetchJobs();
     alert(`QuickBooks invoice number set to ${data.invoice.DocNumber}.`);
+  };
+
+  const linkExistingInvoice = async (job: BillingJob) => {
+    const docNumber = window.prompt("Enter the existing QuickBooks invoice number to link to this job:");
+    if (!docNumber) return;
+    if (!window.confirm(`Link this job to QuickBooks invoice ${docNumber}? Payment syncing will follow that invoice.`)) return;
+    setLinkingId(job.id);
+    const response = await authenticatedFetch("/api/quickbooks/invoices", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, docNumber }),
+    });
+    const data = await response.json();
+    setLinkingId(null);
+    if (!response.ok) return alert(data.error || "Invoice relinking failed.");
+    await fetchJobs();
+    alert(`Job linked to QuickBooks invoice ${data.invoice.DocNumber}.`);
   };
 
   const disconnectQuickBooks = async () => {
@@ -316,14 +334,24 @@ export default function BillingPage() {
                           ) : (
                             <div style={actionButtons}>
                               {job.quickbooks_invoice_id && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); setInvoiceNumber(job); }}
-                                  style={numberButton}
-                                  disabled={numberingId === job.id}
-                                >
-                                  {numberingId === job.id ? "Updating..." : "Set Invoice #"}
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setInvoiceNumber(job); }}
+                                    style={numberButton}
+                                    disabled={numberingId === job.id}
+                                  >
+                                    {numberingId === job.id ? "Updating..." : "Set Invoice #"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); linkExistingInvoice(job); }}
+                                    style={linkButton}
+                                    disabled={linkingId === job.id}
+                                  >
+                                    {linkingId === job.id ? "Linking..." : "Link Existing"}
+                                  </button>
+                                </>
                               )}
                               <button
                                 type="button"
@@ -390,6 +418,7 @@ const connectionHelp: React.CSSProperties = { marginTop: 4, color: "#4b5563", fo
 const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0, borderRadius: 8, background: "#2ca01c", color: "white", fontWeight: 800, cursor: "pointer" };
 const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
 const numberButton: React.CSSProperties = { ...quickBooksButton, background: "#7c3aed", padding: "8px 12px" };
+const linkButton: React.CSSProperties = { ...quickBooksButton, background: "#0369a1", padding: "8px 12px" };
 const actionButtons: React.CSSProperties = { display: "flex", gap: 6, flexWrap: "wrap" };
 const disconnectButton: React.CSSProperties = { ...quickBooksButton, background: "#6b7280" };
 

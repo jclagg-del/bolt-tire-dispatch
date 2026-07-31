@@ -63,6 +63,7 @@ export async function POST(request: Request) {
     }
 
     const taxCode = job.tax_exempt ? "NON" : "TAX";
+    const serviceDate = job.scheduled ? String(job.scheduled).slice(0, 10) : null;
     const lines: Record<string, unknown>[] = [];
     const addLine = (item: { Id: string; Name: string }, description: string, amount: number, taxable = true, quantity?: number, unitPrice?: number) => {
       if (amount <= 0) return;
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
         Amount: Number(amount.toFixed(2)),
         Description: description,
         DetailType: "SalesItemLineDetail",
+        ...(serviceDate ? { ServiceDate: serviceDate } : {}),
         SalesItemLineDetail: {
           ItemRef: { value: item.Id, name: item.Name },
           TaxCodeRef: { value: taxable ? taxCode : "NON" },
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
     const invoicePayload: Record<string, unknown> = {
       CustomerRef: { value: customer.Id, name: customer.DisplayName },
       Line: lines,
+      ...(serviceDate ? { TxnDate: serviceDate } : {}),
       PrivateNote: `Bolt Tire job ${job.id}${job.po_number ? ` • PO ${job.po_number}` : ""}`,
       CustomerMemo: { value: [job.vehicle, job.notes].filter(Boolean).join(" • ").slice(0, 1000) },
       ...(job.email ? { BillEmail: { Address: job.email } } : {}),
@@ -172,5 +175,51 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ invoice });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invoice number update failed." }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { jobId, docNumber: rawDocNumber } = await request.json();
+    const docNumber = String(rawDocNumber || "").trim();
+    if (!/^\d+$/.test(docNumber)) {
+      return NextResponse.json({ error: "Enter a numeric invoice number." }, { status: 400 });
+    }
+
+    const query = encodeURIComponent(
+      `select * from Invoice where DocNumber = '${escapeQueryValue(docNumber)}' maxresults 2`
+    );
+    const result = await quickBooksRequest(`/query?query=${query}`);
+    const matches = result.QueryResponse?.Invoice || [];
+    if (matches.length === 0) {
+      return NextResponse.json({ error: `QuickBooks invoice ${docNumber} was not found.` }, { status: 404 });
+    }
+    if (matches.length > 1) {
+      return NextResponse.json({ error: `QuickBooks has more than one invoice numbered ${docNumber}. Resolve the duplicate in QuickBooks first.` }, { status: 409 });
+    }
+
+    const invoice = matches[0];
+    const total = Number(invoice.TotalAmt) || 0;
+    const tax = Number(invoice.TxnTaxDetail?.TotalTax) || 0;
+    const balance = Number(invoice.Balance) || 0;
+    const subtotal = Math.max(0, total - tax);
+    const admin = createAdminClient();
+    const { error: updateError } = await admin.from("jobs").update({
+      quickbooks_invoice_id: invoice.Id,
+      invoice_number: invoice.DocNumber,
+      quickbooks_balance: balance,
+      quickbooks_synced_at: new Date().toISOString(),
+      subtotal,
+      sales_tax_amount: tax,
+      sales_tax_rate: subtotal ? (tax / subtotal) * 100 : 0,
+      job_total: total,
+      payment_status: balance === 0 ? "paid" : balance < total ? "partial" : "unpaid",
+      job_status: balance === 0 ? "paid" : "billed",
+    }).eq("id", jobId);
+    if (updateError) throw updateError;
+    return NextResponse.json({ invoice });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invoice relinking failed." }, { status: 500 });
   }
 }
