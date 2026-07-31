@@ -29,6 +29,7 @@ type FormState = {
   price_tires: string;
   installation_cost: string;
   tire_disposal_fee: string;
+  ny_state_tire_fee: string;
   address: string;
   scheduled: string;
   vehicle_id: string;
@@ -41,6 +42,15 @@ type FormState = {
   job_status: string;
   sales_tax_rate: string;
   tax_exempt: boolean;
+  quickbooks_customer_id: string;
+};
+
+type QuickBooksCustomer = {
+  id: string;
+  displayName: string;
+  email: string;
+  phone: string;
+  address: string;
 };
 
 function formatLocalDateTimeForDb(value: string) {
@@ -78,6 +88,7 @@ export default function NewJobPage() {
   const [lookupMessage, setLookupMessage] = useState("");
   const [vehicles, setVehicles] = useState<VehicleOption[]>(fallbackVehicles);
   const [customerOptions, setCustomerOptions] = useState<string[]>([]);
+  const [quickBooksCustomers, setQuickBooksCustomers] = useState<QuickBooksCustomer[]>([]);
 
   const [form, setForm] = useState<FormState>({
     customer: "",
@@ -95,6 +106,7 @@ export default function NewJobPage() {
     price_tires: "",
     installation_cost: "",
     tire_disposal_fee: "",
+    ny_state_tire_fee: "",
     address: "",
     scheduled: "",
     vehicle_id: "stepvan",
@@ -107,6 +119,7 @@ export default function NewJobPage() {
     job_status: "scheduled",
     sales_tax_rate: "",
     tax_exempt: false,
+    quickbooks_customer_id: "",
   });
 
   useEffect(() => {
@@ -154,7 +167,14 @@ export default function NewJobPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === "qty" ? {
+        tire_disposal_fee: ((Number(value) || 0) * 4).toFixed(2),
+        ny_state_tire_fee: ((Number(value) || 0) * 2.5).toFixed(2),
+      } : {}),
+    }));
   };
 
   useEffect(() => {
@@ -166,6 +186,14 @@ export default function NewJobPage() {
     }
 
     const timer = setTimeout(async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const quickBooksResponse = await fetch(`/api/quickbooks/customers?q=${encodeURIComponent(customer)}`, {
+        headers: { Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
+      });
+      const quickBooksData = await quickBooksResponse.json().catch(() => ({ customers: [] }));
+      const matches = (quickBooksData.customers || []) as QuickBooksCustomer[];
+      setQuickBooksCustomers(matches);
+
       const { data, error } = await supabase
         .from("jobs")
         .select("contact_name,phone,email,address,sales_tax_rate,tax_exempt")
@@ -180,22 +208,27 @@ export default function NewJobPage() {
 
       const match = data?.[0];
 
-      if (!match) {
-        setLookupMessage("");
+      const quickBooksMatch = matches.find(
+        (candidate) => candidate.displayName.toLowerCase() === customer.toLowerCase()
+      );
+
+      if (!match && !quickBooksMatch) {
+        setLookupMessage(matches.length ? "Select a QuickBooks customer from the suggestions." : "");
         return;
       }
 
       setForm((prev) => ({
         ...prev,
-        contact_name: prev.contact_name || match.contact_name || "",
-        phone: prev.phone || match.phone || "",
-        email: prev.email || match.email || "",
-        address: prev.address || match.address || "",
-        sales_tax_rate: prev.sales_tax_rate || (match.sales_tax_rate != null ? String(match.sales_tax_rate) : ""),
-        tax_exempt: Boolean(match.tax_exempt),
+        contact_name: prev.contact_name || match?.contact_name || "",
+        phone: prev.phone || quickBooksMatch?.phone || match?.phone || "",
+        email: prev.email || quickBooksMatch?.email || match?.email || "",
+        address: prev.address || quickBooksMatch?.address || match?.address || "",
+        sales_tax_rate: prev.sales_tax_rate || (match?.sales_tax_rate != null ? String(match.sales_tax_rate) : ""),
+        tax_exempt: Boolean(match?.tax_exempt),
+        quickbooks_customer_id: quickBooksMatch?.id || prev.quickbooks_customer_id,
       }));
 
-      setLookupMessage("Repeat customer info filled from last job.");
+      setLookupMessage(quickBooksMatch ? "QuickBooks customer info filled." : "Repeat customer info filled from last job.");
     }, 500);
 
     return () => clearTimeout(timer);
@@ -215,9 +248,11 @@ export default function NewJobPage() {
     const subtotal =
       (Number(form.qty) || 0) * (Number(form.price_tires) || 0) +
       (Number(form.installation_cost) || 0) +
-      (Number(form.tire_disposal_fee) || 0);
+      (Number(form.tire_disposal_fee) || 0) +
+      (Number(form.ny_state_tire_fee) || 0);
+    const taxableSubtotal = subtotal - (Number(form.ny_state_tire_fee) || 0);
     const salesTaxRate = form.tax_exempt ? 0 : Number(form.sales_tax_rate) || 0;
-    const salesTaxAmount = subtotal * (salesTaxRate / 100);
+    const salesTaxAmount = taxableSubtotal * (salesTaxRate / 100);
 
     const payload = {
       customer: form.customer.trim(),
@@ -239,6 +274,7 @@ export default function NewJobPage() {
       tire_disposal_fee: form.tire_disposal_fee.trim()
         ? Number(form.tire_disposal_fee)
         : null,
+      ny_state_tire_fee: Number(form.ny_state_tire_fee) || 0,
       address: form.address.trim() || null,
       scheduled: formatLocalDateTimeForDb(form.scheduled),
       vehicle_id: form.vehicle_id || vehicles[0]?.id || "stepvan",
@@ -249,6 +285,7 @@ export default function NewJobPage() {
       sales_tax_rate: salesTaxRate,
       sales_tax_amount: salesTaxAmount,
       tax_exempt: form.tax_exempt,
+      quickbooks_customer_id: form.quickbooks_customer_id || null,
       job_total: subtotal + salesTaxAmount,
       payment_status: form.payment_status || "unpaid",
       invoice_number: form.invoice_number.trim() || null,
@@ -301,7 +338,7 @@ export default function NewJobPage() {
                 autoComplete="organization"
               />
               <datalist id="customer-options">
-                {customerOptions.map((customer) => (
+                {Array.from(new Set([...quickBooksCustomers.map((customer) => customer.displayName), ...customerOptions])).map((customer) => (
                   <option key={customer} value={customer} />
                 ))}
               </datalist>
@@ -547,15 +584,19 @@ export default function NewJobPage() {
             </Field>
 
             <Field fullWidth>
-              <label style={fieldLabel}>Tire Disposal Fee</label>
+              <label style={fieldLabel}>Waste Tire Fee ($4.00 per tire)</label>
               <input
                 name="tire_disposal_fee"
-                placeholder="Total Tire Disposal Fee"
+                placeholder="Waste Tire Fee"
                 value={form.tire_disposal_fee}
-                onChange={handleChange}
-                style={input}
+                readOnly
+                style={{ ...input, background: "#f3f4f6" }}
                 inputMode="decimal"
               />
+            </Field>
+            <Field fullWidth>
+              <label style={fieldLabel}>NY State Tire Tax ($2.50 per tire)</label>
+              <input name="ny_state_tire_fee" value={form.ny_state_tire_fee} readOnly style={{ ...input, background: "#f3f4f6" }} inputMode="decimal" />
             </Field>
           </div>
 
@@ -592,10 +633,14 @@ export default function NewJobPage() {
             </div>
 
             <div style={costRow}>
-              <span>Disposal</span>
+              <span>Waste tire fee</span>
               <strong>
                 ${(Number(form.tire_disposal_fee) || 0).toFixed(2)}
               </strong>
+            </div>
+            <div style={costRow}>
+              <span>NY State tire tax (non-taxable)</span>
+              <strong>${(Number(form.ny_state_tire_fee) || 0).toFixed(2)}</strong>
             </div>
             <div style={costRow}>
               <span>Sales tax</span>
@@ -610,6 +655,7 @@ export default function NewJobPage() {
                     (Number(form.price_tires) || 0) +
                   (Number(form.installation_cost) || 0) +
                   (Number(form.tire_disposal_fee) || 0) +
+                  (Number(form.ny_state_tire_fee) || 0) +
                   (form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100)))
                 ).toFixed(2)}
               </strong>
@@ -628,6 +674,7 @@ export default function NewJobPage() {
                     (Number(form.price_tires) || 0) +
                   (Number(form.installation_cost) || 0) +
                   (Number(form.tire_disposal_fee) || 0) +
+                  (Number(form.ny_state_tire_fee) || 0) +
                   (form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100)))
                 ).toFixed(2)}
                 readOnly

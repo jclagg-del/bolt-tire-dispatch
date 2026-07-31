@@ -29,6 +29,7 @@ type JobForm = {
   tires_received: boolean;
   installation_cost: string;
   tire_disposal_fee: string;
+  ny_state_tire_fee: string;
   address: string;
   notes: string;
   scheduled: string;
@@ -104,6 +105,7 @@ export default function EditJobPage() {
         tires_received,
         installation_cost,
         tire_disposal_fee,
+        ny_state_tire_fee,
         address,
         notes,
         scheduled,
@@ -167,6 +169,10 @@ export default function EditJobPage() {
         data.tire_disposal_fee !== undefined
           ? String(data.tire_disposal_fee)
           : "",
+      ny_state_tire_fee:
+        data.ny_state_tire_fee !== null && data.ny_state_tire_fee !== undefined
+          ? String(data.ny_state_tire_fee)
+          : String((Number(data.qty) || 0) * 2.5),
       address: data.address || "",
       notes: data.notes || "",
       scheduled: formatForDateTimeLocal(data.scheduled),
@@ -210,6 +216,10 @@ export default function EditJobPage() {
       return {
         ...current,
         [name]: value,
+        ...(name === "qty" ? {
+          tire_disposal_fee: ((Number(value) || 0) * 4).toFixed(2),
+          ny_state_tire_fee: ((Number(value) || 0) * 2.5).toFixed(2),
+        } : {}),
       };
     });
   };
@@ -263,11 +273,14 @@ export default function EditJobPage() {
     const tireDisposalFee = form.tire_disposal_fee.trim()
       ? Number(form.tire_disposal_fee)
       : 0;
+    const nyStateTireFee = form.ny_state_tire_fee.trim()
+      ? Number(form.ny_state_tire_fee)
+      : 0;
 
-    const subtotal =
-      quantity * tirePrice + installationCost + tireDisposalFee;
+    const taxableSubtotal = quantity * tirePrice + installationCost + tireDisposalFee;
+    const subtotal = taxableSubtotal + nyStateTireFee;
     const salesTaxRate = form.tax_exempt ? 0 : Number(form.sales_tax_rate) || 0;
-    const salesTaxAmount = subtotal * (salesTaxRate / 100);
+    const salesTaxAmount = taxableSubtotal * (salesTaxRate / 100);
     const calculatedJobTotal = subtotal + salesTaxAmount;
 
     const { error } = await supabase
@@ -300,6 +313,7 @@ export default function EditJobPage() {
         tire_disposal_fee: form.tire_disposal_fee.trim()
           ? Number(form.tire_disposal_fee)
           : null,
+        ny_state_tire_fee: nyStateTireFee,
         address: form.address.trim() || null,
         notes: form.notes.trim() || null,
         scheduled: formatLocalDateTimeForDb(form.scheduled),
@@ -705,8 +719,12 @@ export default function EditJobPage() {
             </Field>
 
             <Field fullWidth>
-              <label style={fieldLabel}>Tire Disposal Fee</label>
-              <input name="tire_disposal_fee" value={form.tire_disposal_fee} onChange={handleChange} style={input} placeholder="Total Tire Disposal Fee" inputMode="decimal" />
+              <label style={fieldLabel}>Waste Tire Fee ($4.00 per tire)</label>
+              <input name="tire_disposal_fee" value={form.tire_disposal_fee} readOnly style={{ ...input, background: "#f3f4f6" }} placeholder="Waste Tire Fee" inputMode="decimal" />
+            </Field>
+            <Field fullWidth>
+              <label style={fieldLabel}>NY State Tire Tax ($2.50 per tire)</label>
+              <input name="ny_state_tire_fee" value={form.ny_state_tire_fee} readOnly style={{ ...input, background: "#f3f4f6" }} inputMode="decimal" />
             </Field>
           </div>
 
@@ -734,8 +752,12 @@ export default function EditJobPage() {
               <strong>${(Number(form.installation_cost) || 0).toFixed(2)}</strong>
             </div>
             <div style={costRow}>
-              <span>Disposal</span>
+              <span>Waste tire fee</span>
               <strong>${(Number(form.tire_disposal_fee) || 0).toFixed(2)}</strong>
+            </div>
+            <div style={costRow}>
+              <span>NY State tire tax (non-taxable)</span>
+              <strong>${(Number(form.ny_state_tire_fee) || 0).toFixed(2)}</strong>
             </div>
             <div style={costRow}>
               <span>Sales tax</span>
@@ -743,7 +765,7 @@ export default function EditJobPage() {
             </div>
             <div style={costTotalRow}>
               <span>Job Total</span>
-              <strong>${(((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}</strong>
+              <strong>${((Number(form.ny_state_tire_fee) || 0) + (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100)))).toFixed(2)}</strong>
             </div>
           </div>
 
@@ -754,7 +776,7 @@ export default function EditJobPage() {
               <label style={fieldLabel}>Job Total</label>
               <input
                 name="job_total"
-                value={(((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}
+                value={((Number(form.ny_state_tire_fee) || 0) + (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100)))).toFixed(2)}
                 readOnly
                 style={{ ...input, background: "#f3f4f6" }}
                 placeholder="Job Total"

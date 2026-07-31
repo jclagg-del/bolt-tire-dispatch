@@ -14,9 +14,14 @@ export async function POST(request: Request) {
 
     const customerName = String(job.billing_name || job.customer || "").trim();
     if (!customerName) throw new Error("The job needs a customer or billing name.");
+    let customer = job.quickbooks_customer_id
+      ? (await quickBooksRequest(`/customer/${job.quickbooks_customer_id}`)).Customer
+      : null;
     const customerQuery = encodeURIComponent(`select * from Customer where DisplayName = '${escapeQueryValue(customerName)}' maxresults 1`);
-    const customerResult = await quickBooksRequest(`/query?query=${customerQuery}`);
-    let customer = customerResult.QueryResponse?.Customer?.[0];
+    if (!customer) {
+      const customerResult = await quickBooksRequest(`/query?query=${customerQuery}`);
+      customer = customerResult.QueryResponse?.Customer?.[0];
+    }
     if (!customer) {
       const payload: Record<string, unknown> = { DisplayName: customerName };
       if (job.email) payload.PrimaryEmailAddr = { Address: job.email };
@@ -37,11 +42,13 @@ export async function POST(request: Request) {
     );
     const tireItem = findItem("Tires");
     const installationItem = findItem("On-site Mount and Balance");
-    const disposalItem = findItem("NY Tire Disposal");
+    const stateTireFeeItem = findItem("NY State Tire Tax");
+    const disposalItem = findItem("Waste Tire Fee");
     const missingItems = [
       !tireItem && "Tires",
       !installationItem && "On-site Mount and Balance",
-      !disposalItem && "NY Tire Disposal",
+      !stateTireFeeItem && "NY State Tire Tax",
+      !disposalItem && "Waste Tire Fee",
     ].filter(Boolean);
     if (missingItems.length) {
       throw new Error(`Create these products/services in QuickBooks before invoicing: ${missingItems.join(", ")}.`);
@@ -49,7 +56,7 @@ export async function POST(request: Request) {
 
     const taxCode = job.tax_exempt ? "NON" : "TAX";
     const lines: Record<string, unknown>[] = [];
-    const addLine = (item: { Id: string; Name: string }, description: string, amount: number, quantity?: number, unitPrice?: number) => {
+    const addLine = (item: { Id: string; Name: string }, description: string, amount: number, taxable = true, quantity?: number, unitPrice?: number) => {
       if (amount <= 0) return;
       lines.push({
         Amount: Number(amount.toFixed(2)),
@@ -57,7 +64,7 @@ export async function POST(request: Request) {
         DetailType: "SalesItemLineDetail",
         SalesItemLineDetail: {
           ItemRef: { value: item.Id, name: item.Name },
-          TaxCodeRef: { value: taxCode },
+          TaxCodeRef: { value: taxable ? taxCode : "NON" },
           ...(quantity && unitPrice ? { Qty: quantity, UnitPrice: unitPrice } : {}),
         },
       });
@@ -65,9 +72,10 @@ export async function POST(request: Request) {
 
     const qty = Number(job.qty) || 0;
     const tirePrice = Number(job.price_tires) || 0;
-    addLine(tireItem, [job.tires, job.size].filter(Boolean).join(" • ") || "Tires", qty * tirePrice, qty, tirePrice);
+    addLine(tireItem, [job.tires, job.size].filter(Boolean).join(" • ") || "Tires", qty * tirePrice, true, qty, tirePrice);
     addLine(installationItem, "On-site mount and balance", Number(job.installation_cost) || 0);
-    addLine(disposalItem, "NY tire disposal", Number(job.tire_disposal_fee) || 0);
+    addLine(stateTireFeeItem, "NY State tire tax", Number(job.ny_state_tire_fee) || qty * 2.5, false, qty, 2.5);
+    addLine(disposalItem, "Waste tire fee", Number(job.tire_disposal_fee) || qty * 4, true, qty, 4);
     if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
 
     const invoicePayload: Record<string, unknown> = {
