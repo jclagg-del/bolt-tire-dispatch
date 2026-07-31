@@ -10,7 +10,26 @@ export async function POST(request: Request) {
     if (error) throw error;
     let updated = 0;
     for (const job of jobs || []) {
-      const result = await quickBooksRequest(`/invoice/${job.quickbooks_invoice_id}`);
+      let result;
+      try {
+        result = await quickBooksRequest(`/invoice/${job.quickbooks_invoice_id}`);
+      } catch (invoiceError) {
+        const message = invoiceError instanceof Error ? invoiceError.message : "";
+        if (message.includes("Object Not Found") || message.includes("made inactive")) {
+          const { error: resetError } = await admin.from("jobs").update({
+            quickbooks_invoice_id: null,
+            invoice_number: null,
+            quickbooks_balance: null,
+            quickbooks_synced_at: new Date().toISOString(),
+            payment_status: "unpaid",
+            job_status: "completed",
+          }).eq("id", job.id);
+          if (resetError) throw resetError;
+          updated += 1;
+          continue;
+        }
+        throw invoiceError;
+      }
       const invoice = result.Invoice;
       const balance = Number(invoice.Balance) || 0;
       const total = Number(invoice.TotalAmt) || 0;
