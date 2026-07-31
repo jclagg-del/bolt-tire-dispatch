@@ -25,6 +25,10 @@
     "autoprefixer": "latest",
     "postcss": "latest",
     "tailwindcss": "latest",
-    "typescript": "latest"
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "postcss": "$postcss",
+    "sharp": "0.35.0"
   }
 }
