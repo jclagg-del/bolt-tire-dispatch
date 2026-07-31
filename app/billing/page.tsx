@@ -311,29 +311,32 @@ export default function BillingPage() {
                             >
                               {invoicingId === job.id ? "Creating..." : "Create invoice"}
                             </button>
-                          ) : job.quickbooks_invoice_id && job.invoice_number === job.quickbooks_invoice_id ? (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setInvoiceNumber(job); }}
-                              style={numberButton}
-                              disabled={numberingId === job.id}
-                            >
-                              {numberingId === job.id ? "Updating..." : "Set Invoice #"}
-                            </button>
                           ) : isPaid ? (
                             <span style={paidText}>Paid</span>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleMarkPaid(job.id);
-                              }}
-                              style={payButton}
-                              disabled={isUpdating}
-                            >
-                              {isUpdating ? "Updating..." : "Mark Paid"}
-                            </button>
+                            <div style={actionButtons}>
+                              {job.quickbooks_invoice_id && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setInvoiceNumber(job); }}
+                                  style={numberButton}
+                                  disabled={numberingId === job.id}
+                                >
+                                  {numberingId === job.id ? "Updating..." : "Set Invoice #"}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkPaid(job.id);
+                                }}
+                                style={payButton}
+                                disabled={isUpdating}
+                              >
+                                {isUpdating ? "Updating..." : "Mark Paid"}
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -387,6 +390,7 @@ const connectionHelp: React.CSSProperties = { marginTop: 4, color: "#4b5563", fo
 const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0, borderRadius: 8, background: "#2ca01c", color: "white", fontWeight: 800, cursor: "pointer" };
 const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
 const numberButton: React.CSSProperties = { ...quickBooksButton, background: "#7c3aed", padding: "8px 12px" };
+const actionButtons: React.CSSProperties = { display: "flex", gap: 6, flexWrap: "wrap" };
 const disconnectButton: React.CSSProperties = { ...quickBooksButton, background: "#6b7280" };
 
 const summaryRow: React.CSSProperties = {
