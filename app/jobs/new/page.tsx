@@ -27,6 +27,11 @@ type FormState = {
   size: string;
   qty: string;
   price_tires: string;
+  tire_product_number: string;
+  tires_ordered: boolean;
+  tire_supplier: string;
+  estimated_delivery_date: string;
+  tires_received: boolean;
   installation_cost: string;
   tire_disposal_fee: string;
   ny_state_tire_fee: string;
@@ -36,6 +41,7 @@ type FormState = {
   notes: string;
   service_type: string;
   po_number: string;
+  mo_number: string;
   job_total: string;
   payment_status: string;
   invoice_number: string;
@@ -104,6 +110,11 @@ export default function NewJobPage() {
     size: "",
     qty: "",
     price_tires: "",
+    tire_product_number: "",
+    tires_ordered: false,
+    tire_supplier: "",
+    estimated_delivery_date: "",
+    tires_received: false,
     installation_cost: "",
     tire_disposal_fee: "",
     ny_state_tire_fee: "",
@@ -113,6 +124,7 @@ export default function NewJobPage() {
     notes: "",
     service_type: "",
     po_number: "",
+    mo_number: "",
     job_total: "",
     payment_status: "unpaid",
     invoice_number: "",
@@ -268,6 +280,11 @@ export default function NewJobPage() {
       size: form.size.trim() || null,
       qty: form.qty.trim() ? Number(form.qty) : null,
       price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
+      tire_product_number: form.tire_product_number.trim() || null,
+      tires_ordered: form.tires_ordered,
+      tire_supplier: form.tire_supplier.trim() || null,
+      estimated_delivery_date: form.estimated_delivery_date || null,
+      tires_received: form.tires_received,
       installation_cost: form.installation_cost.trim()
         ? Number(form.installation_cost)
         : null,
@@ -281,6 +298,7 @@ export default function NewJobPage() {
       notes: form.notes.trim() || null,
       service_type: form.service_type.trim() || null,
       po_number: form.po_number.trim() || null,
+      mo_number: form.mo_number.trim() || null,
       subtotal,
       sales_tax_rate: salesTaxRate,
       sales_tax_amount: salesTaxAmount,
@@ -495,7 +513,7 @@ export default function NewJobPage() {
               </select>
             </Field>
 
-            <Field fullWidth>
+            <Field>
               <label style={fieldLabel}>Job Number / PO Number</label>
               <input
                 name="po_number"
@@ -504,6 +522,10 @@ export default function NewJobPage() {
                 onChange={handleChange}
                 style={input}
               />
+            </Field>
+            <Field>
+              <label style={fieldLabel}>MO Number</label>
+              <input name="mo_number" placeholder="MO Number" value={form.mo_number} onChange={handleChange} style={input} />
             </Field>
           </div>
 
@@ -554,6 +576,43 @@ export default function NewJobPage() {
                 inputMode="numeric"
               />
             </Field>
+            <Field fullWidth>
+              <label style={fieldLabel}>Tire Product Number</label>
+              <input name="tire_product_number" placeholder="Tire Product Number" value={form.tire_product_number} onChange={handleChange} style={input} />
+            </Field>
+          </div>
+
+          <div style={sectionTitle}>Tire Ordering</div>
+
+          <div style={form.tires_ordered ? orderedStatusCard : notOrderedStatusCard}>
+            <label style={checkboxLabel}>
+              <input type="checkbox" checked={form.tires_ordered} onChange={(e) => setForm((prev) => ({ ...prev, tires_ordered: e.target.checked }))} style={checkbox} />
+              <span>
+                <strong>{form.tires_ordered ? "Tires Ordered" : "Tires Not Ordered"}</strong>
+                <span style={checkboxHelp}>Check this box after ordering the tires.</span>
+              </span>
+            </label>
+          </div>
+
+          <div style={twoColumnGrid}>
+            <Field>
+              <label style={fieldLabel}>Tire Supplier</label>
+              <input name="tire_supplier" value={form.tire_supplier} onChange={handleChange} style={input} placeholder="Supplier" />
+            </Field>
+            <Field>
+              <label style={fieldLabel}>Estimated Delivery Date</label>
+              <input type="date" name="estimated_delivery_date" value={form.estimated_delivery_date} onChange={handleChange} style={input} />
+            </Field>
+          </div>
+
+          <div style={form.tires_received ? receivedStatusCard : awaitingStatusCard}>
+            <label style={checkboxLabel}>
+              <input type="checkbox" checked={form.tires_received} onChange={(e) => setForm((prev) => ({ ...prev, tires_received: e.target.checked }))} style={checkbox} />
+              <span>
+                <strong>{form.tires_received ? "Tires Received" : "Awaiting Tire Delivery"}</strong>
+                <span style={checkboxHelp}>Check this box when all tires for the job have arrived.</span>
+              </span>
+            </label>
           </div>
 
           <div style={sectionTitle}>Costs</div>
@@ -914,6 +973,10 @@ const notice: React.CSSProperties = {
 
 const taxCard: React.CSSProperties = { marginTop: 18, padding: 14, borderRadius: 12, border: "1px solid #bfdbfe", background: "#eff6ff" };
 const taxExemptCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const orderedStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const notOrderedStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid #fcd34d", background: "#fffbeb" };
+const receivedStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const awaitingStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid #fcd34d", background: "#fffbeb" };
 const checkboxLabel: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", color: "#111827" };
 const checkbox: React.CSSProperties = { width: 22, height: 22, marginTop: 1 };
 const checkboxHelp: React.CSSProperties = { display: "block", marginTop: 3, color: "#6b7280", fontSize: 13, fontWeight: 400 };
