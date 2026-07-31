@@ -1,8 +1,32 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
+
+function encryptionKey() {
+  const encoded = process.env.QUICKBOOKS_TOKEN_ENCRYPTION_KEY;
+  if (!encoded) throw new Error("QuickBooks token encryption is not configured.");
+  const key = Buffer.from(encoded, "base64");
+  if (key.length !== 32) throw new Error("QuickBooks token encryption key must be 32 bytes.");
+  return key;
+}
+
+function encrypt(value: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${iv.toString("base64")}:${tag.toString("base64")}:${ciphertext.toString("base64")}`;
+}
+
+function decrypt(value: string) {
+  if (!value.startsWith("v1:")) return value;
+  const [, iv, tag, ciphertext] = value.split(":");
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(iv, "base64"));
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64")), decipher.final()]).toString("utf8");
+}
 
 export function quickBooksConfig() {
   const clientId = process.env.QUICKBOOKS_CLIENT_ID;
@@ -71,10 +95,10 @@ export async function saveConnection(realmId: string, tokens: Awaited<ReturnType
   const now = Date.now();
   const { error } = await admin.from("quickbooks_connections").upsert({
     id: true,
-    realm_id: realmId,
+    realm_id: encrypt(realmId),
     environment: quickBooksConfig().environment,
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
+    access_token: encrypt(tokens.access_token),
+    refresh_token: encrypt(tokens.refresh_token),
     access_expires_at: new Date(now + tokens.expires_in * 1000).toISOString(),
     refresh_expires_at: new Date(now + tokens.x_refresh_token_expires_in * 1000).toISOString(),
     updated_at: new Date().toISOString(),
@@ -111,7 +135,22 @@ export async function getConnection() {
   const admin = createAdminClient();
   const { data, error } = await admin.from("quickbooks_connections").select("*").eq("id", true).single();
   if (error || !data) throw new Error("QuickBooks is not connected.");
-  const connection = data as Connection;
+  const stored = data as Connection;
+  const connection = {
+    ...stored,
+    realm_id: decrypt(stored.realm_id),
+    access_token: decrypt(stored.access_token),
+    refresh_token: decrypt(stored.refresh_token),
+  };
+  if (!stored.realm_id.startsWith("v1:") || !stored.access_token.startsWith("v1:") || !stored.refresh_token.startsWith("v1:")) {
+    const { error: encryptionError } = await admin.from("quickbooks_connections").update({
+      realm_id: encrypt(connection.realm_id),
+      access_token: encrypt(connection.access_token),
+      refresh_token: encrypt(connection.refresh_token),
+      updated_at: new Date().toISOString(),
+    }).eq("id", true);
+    if (encryptionError) throw new Error(encryptionError.message);
+  }
   if (new Date(connection.access_expires_at).getTime() <= Date.now() + 120000) {
     return refreshConnection(connection);
   }
