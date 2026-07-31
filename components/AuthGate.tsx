@@ -8,6 +8,9 @@ const PUBLIC_ROUTES = [
   "/login",
   "/order/kingdom",
   "/kingdom-schedule",
+  "/privacy",
+  "/terms",
+  "/quickbooks/disconnected",
 ];
 
 export default function AuthGate({

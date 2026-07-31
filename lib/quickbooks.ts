@@ -151,3 +151,24 @@ export async function quickBooksRequest(path: string, init: RequestInit = {}) {
 export function escapeQueryValue(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
+
+export async function disconnectQuickBooks() {
+  const connection = await getConnection();
+  const config = quickBooksConfig();
+  const response = await fetch("https://developer.api.intuit.com/v2/oauth2/tokens/revoke", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+    },
+    body: JSON.stringify({ token: connection.refresh_token }),
+    cache: "no-store",
+  });
+  if (!response.ok && response.status !== 400) {
+    throw new Error("QuickBooks did not accept the disconnect request.");
+  }
+  const admin = createAdminClient();
+  const { error } = await admin.from("quickbooks_connections").delete().eq("id", true);
+  if (error) throw new Error(error.message);
+}

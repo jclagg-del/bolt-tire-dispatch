@@ -60,6 +60,7 @@ export default function BillingPage() {
   const [connecting, setConnecting] = useState(false);
   const [invoicingId, setInvoicingId] = useState<string | number | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select("*");
@@ -126,6 +127,16 @@ export default function BillingPage() {
     await fetchJobs();
   };
 
+  const disconnectQuickBooks = async () => {
+    if (!window.confirm("Disconnect Bolt Tire Dispatch from QuickBooks? Invoice synchronization will stop until you reconnect.")) return;
+    setDisconnecting(true);
+    const response = await authenticatedFetch("/api/quickbooks/disconnect", { method: "POST" });
+    const data = await response.json();
+    setDisconnecting(false);
+    if (!response.ok) return alert(data.error || "QuickBooks disconnect failed.");
+    setQuickBooksConnected(false);
+  };
+
   const handleMarkPaid = async (id: string | number) => {
     if (payingId) return;
 
@@ -185,9 +196,14 @@ export default function BillingPage() {
             </button>
           )}
           {quickBooksConnected && (
-            <button type="button" onClick={syncQuickBooks} disabled={syncing} style={quickBooksButton}>
-              {syncing ? "Syncing..." : "Sync payments"}
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" onClick={syncQuickBooks} disabled={syncing} style={quickBooksButton}>
+                {syncing ? "Syncing..." : "Sync payments"}
+              </button>
+              <button type="button" onClick={disconnectQuickBooks} disabled={disconnecting} style={disconnectButton}>
+                {disconnecting ? "Disconnecting..." : "Disconnect"}
+              </button>
+            </div>
           )}
         </div>
 
@@ -339,6 +355,7 @@ const connectedCard: React.CSSProperties = { ...connectCard, border: "1px solid 
 const connectionHelp: React.CSSProperties = { marginTop: 4, color: "#4b5563", fontSize: 14 };
 const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0, borderRadius: 8, background: "#2ca01c", color: "white", fontWeight: 800, cursor: "pointer" };
 const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
+const disconnectButton: React.CSSProperties = { ...quickBooksButton, background: "#6b7280" };
 
 const summaryRow: React.CSSProperties = {
   display: "grid",
