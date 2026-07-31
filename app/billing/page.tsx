@@ -56,6 +56,8 @@ export default function BillingPage() {
 
   const [jobs, setJobs] = useState<BillingJob[]>([]);
   const [payingId, setPayingId] = useState<string | number | null>(null);
+  const [quickBooksConnected, setQuickBooksConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select("*");
@@ -70,7 +72,34 @@ export default function BillingPage() {
 
   useEffect(() => {
     fetchJobs();
+    checkQuickBooks();
   }, []);
+
+  const authenticatedFetch = async (url: string, options: RequestInit = {}) => {
+    const { data } = await supabase.auth.getSession();
+    return fetch(url, {
+      ...options,
+      headers: { ...options.headers, Authorization: `Bearer ${data.session?.access_token || ""}` },
+    });
+  };
+
+  const checkQuickBooks = async () => {
+    const response = await authenticatedFetch("/api/quickbooks/status");
+    const data = await response.json();
+    setQuickBooksConnected(Boolean(data.connected));
+  };
+
+  const connectQuickBooks = async () => {
+    setConnecting(true);
+    const response = await authenticatedFetch("/api/quickbooks/connect", { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) {
+      alert(data.error || "Could not start the QuickBooks connection.");
+      setConnecting(false);
+      return;
+    }
+    window.location.href = data.url;
+  };
 
   const handleMarkPaid = async (id: string | number) => {
     if (payingId) return;
@@ -116,6 +145,20 @@ export default function BillingPage() {
           <p style={description}>
             Track jobs that are ready to bill, already billed, and fully paid.
           </p>
+        </div>
+
+        <div style={quickBooksConnected ? connectedCard : connectCard}>
+          <div>
+            <strong>{quickBooksConnected ? "QuickBooks connected" : "Connect QuickBooks Online"}</strong>
+            <div style={connectionHelp}>
+              {quickBooksConnected ? "Ready for invoice and payment synchronization." : "Connect your Intuit sandbox company to begin testing invoices."}
+            </div>
+          </div>
+          {!quickBooksConnected && (
+            <button type="button" onClick={connectQuickBooks} disabled={connecting} style={quickBooksButton}>
+              {connecting ? "Connecting..." : "Connect to QuickBooks"}
+            </button>
+          )}
         </div>
 
         <div style={summaryRow}>
@@ -251,6 +294,11 @@ const title: React.CSSProperties = {
 const description: React.CSSProperties = {
   color: "#4b5563",
 };
+
+const connectCard: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap", padding: 16, marginBottom: 18, borderRadius: 12, border: "1px solid #93c5fd", background: "#eff6ff" };
+const connectedCard: React.CSSProperties = { ...connectCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const connectionHelp: React.CSSProperties = { marginTop: 4, color: "#4b5563", fontSize: 14 };
+const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0, borderRadius: 8, background: "#2ca01c", color: "white", fontWeight: 800, cursor: "pointer" };
 
 const summaryRow: React.CSSProperties = {
   display: "grid",
