@@ -81,3 +81,73 @@ export async function saveConnection(realmId: string, tokens: Awaited<ReturnType
   });
   if (error) throw new Error(error.message);
 }
+
+type Connection = {
+  realm_id: string;
+  access_token: string;
+  refresh_token: string;
+  access_expires_at: string;
+};
+
+async function refreshConnection(connection: Connection) {
+  const config = quickBooksConfig();
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+    },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: connection.refresh_token }),
+    cache: "no-store",
+  });
+  const tokens = await response.json();
+  if (!response.ok) throw new Error(tokens.error_description || "QuickBooks token refresh failed.");
+  await saveConnection(connection.realm_id, tokens);
+  return { ...connection, access_token: tokens.access_token, refresh_token: tokens.refresh_token };
+}
+
+export async function getConnection() {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("quickbooks_connections").select("*").eq("id", true).single();
+  if (error || !data) throw new Error("QuickBooks is not connected.");
+  const connection = data as Connection;
+  if (new Date(connection.access_expires_at).getTime() <= Date.now() + 120000) {
+    return refreshConnection(connection);
+  }
+  return connection;
+}
+
+export async function quickBooksRequest(path: string, init: RequestInit = {}) {
+  let connection = await getConnection();
+  const base = quickBooksConfig().environment === "production"
+    ? "https://quickbooks.api.intuit.com"
+    : "https://sandbox-quickbooks.api.intuit.com";
+
+  const send = () => fetch(`${base}/v3/company/${connection.realm_id}${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${connection.access_token}`,
+      ...init.headers,
+    },
+    cache: "no-store",
+  });
+
+  let response = await send();
+  if (response.status === 401) {
+    connection = await refreshConnection(connection);
+    response = await send();
+  }
+  const data = await response.json();
+  if (!response.ok) {
+    const message = data?.Fault?.Error?.[0]?.Detail || data?.Fault?.Error?.[0]?.Message || "QuickBooks request failed.";
+    throw new Error(message);
+  }
+  return data;
+}
+
+export function escapeQueryValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}

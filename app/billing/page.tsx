@@ -58,6 +58,8 @@ export default function BillingPage() {
   const [payingId, setPayingId] = useState<string | number | null>(null);
   const [quickBooksConnected, setQuickBooksConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [invoicingId, setInvoicingId] = useState<string | number | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select("*");
@@ -99,6 +101,29 @@ export default function BillingPage() {
       return;
     }
     window.location.href = data.url;
+  };
+
+  const createInvoice = async (id: string | number) => {
+    setInvoicingId(id);
+    const response = await authenticatedFetch("/api/quickbooks/invoices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: id }),
+    });
+    const data = await response.json();
+    setInvoicingId(null);
+    if (!response.ok) return alert(data.error || "Invoice creation failed.");
+    await fetchJobs();
+    alert(`QuickBooks invoice ${data.invoice.DocNumber || data.invoice.Id} created.`);
+  };
+
+  const syncQuickBooks = async () => {
+    setSyncing(true);
+    const response = await authenticatedFetch("/api/quickbooks/sync", { method: "POST" });
+    const data = await response.json();
+    setSyncing(false);
+    if (!response.ok) return alert(data.error || "QuickBooks sync failed.");
+    await fetchJobs();
   };
 
   const handleMarkPaid = async (id: string | number) => {
@@ -157,6 +182,11 @@ export default function BillingPage() {
           {!quickBooksConnected && (
             <button type="button" onClick={connectQuickBooks} disabled={connecting} style={quickBooksButton}>
               {connecting ? "Connecting..." : "Connect to QuickBooks"}
+            </button>
+          )}
+          {quickBooksConnected && (
+            <button type="button" onClick={syncQuickBooks} disabled={syncing} style={quickBooksButton}>
+              {syncing ? "Syncing..." : "Sync payments"}
             </button>
           )}
         </div>
@@ -234,7 +264,16 @@ export default function BillingPage() {
                         </td>
 
                         <td style={td}>
-                          {isPaid ? (
+                          {!job.invoice_number && quickBooksConnected ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); createInvoice(job.id); }}
+                              style={invoiceButton}
+                              disabled={invoicingId === job.id}
+                            >
+                              {invoicingId === job.id ? "Creating..." : "Create invoice"}
+                            </button>
+                          ) : isPaid ? (
                             <span style={paidText}>Paid</span>
                           ) : (
                             <button
@@ -299,6 +338,7 @@ const connectCard: React.CSSProperties = { display: "flex", justifyContent: "spa
 const connectedCard: React.CSSProperties = { ...connectCard, border: "1px solid #86efac", background: "#f0fdf4" };
 const connectionHelp: React.CSSProperties = { marginTop: 4, color: "#4b5563", fontSize: 14 };
 const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0, borderRadius: 8, background: "#2ca01c", color: "white", fontWeight: 800, cursor: "pointer" };
+const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
 
 const summaryRow: React.CSSProperties = {
   display: "grid",
