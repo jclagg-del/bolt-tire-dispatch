@@ -60,6 +60,20 @@ function formatLocalDateTimeForDb(value: string) {
   return `${value}:00`;
 }
 
+function formatCreatedAt(value: string | null) {
+  if (!value) return "Not recorded for this older job";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 
 export default function EditJobPage() {
   const params = useParams();
@@ -69,6 +83,7 @@ export default function EditJobPage() {
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [form, setForm] = useState<JobForm | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -132,6 +147,13 @@ export default function EditJobPage() {
     }
 
     if (!data) return;
+
+    const { data: creationData } = await supabase
+      .from("jobs")
+      .select("created_at")
+      .eq("id", id)
+      .maybeSingle();
+    setCreatedAt(creationData?.created_at || null);
 
     setForm({
       customer: data.customer || "",
@@ -527,6 +549,11 @@ export default function EditJobPage() {
 
         <div style={card}>
           <div style={sectionTitle}>Customer Information</div>
+
+          <div style={createdOn}>
+            <span style={createdOnLabel}>Created On</span>
+            <strong>{formatCreatedAt(createdAt)}</strong>
+          </div>
 
           <div style={twoColumnGrid}>
             <Field>
@@ -1015,6 +1042,27 @@ const costBreakdown: React.CSSProperties = {
   borderRadius: 12,
   border: "1px solid #dbeafe",
   background: "#f8fafc",
+};
+
+const createdOn: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 18,
+  padding: "10px 12px",
+  borderRadius: 10,
+  background: "#f8fafc",
+  color: "#374151",
+  fontSize: 14,
+};
+
+const createdOnLabel: React.CSSProperties = {
+  color: "#6b7280",
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: 0.6,
+  textTransform: "uppercase",
 };
 
 const costRow: React.CSSProperties = {
