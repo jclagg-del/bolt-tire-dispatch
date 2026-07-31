@@ -40,6 +40,8 @@ type JobForm = {
   job_status: string;
   submitted_by_customer: boolean;
   customer_order_status: string;
+  sales_tax_rate: string;
+  tax_exempt: boolean;
   complete?: boolean;
 };
 
@@ -111,7 +113,9 @@ export default function EditJobPage() {
         job_status,
         submitted_by_customer,
         customer_order_status,
-        complete
+        complete,
+        sales_tax_rate,
+        tax_exempt
       `)
       .eq("id", id)
       .single();
@@ -174,6 +178,8 @@ export default function EditJobPage() {
       submitted_by_customer: Boolean(data.submitted_by_customer),
       customer_order_status: data.customer_order_status || "new",
       complete: Boolean(data.complete),
+      sales_tax_rate: data.sales_tax_rate != null ? String(data.sales_tax_rate) : "",
+      tax_exempt: Boolean(data.tax_exempt),
     });
   };
 
@@ -228,6 +234,10 @@ export default function EditJobPage() {
     });
   };
 
+  const handleTaxExemptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((current) => current ? { ...current, tax_exempt: e.target.checked } : current);
+  };
+
   const handleSave = async () => {
     if (!form || !id || saving) return;
 
@@ -244,8 +254,11 @@ export default function EditJobPage() {
       ? Number(form.tire_disposal_fee)
       : 0;
 
-    const calculatedJobTotal =
+    const subtotal =
       quantity * tirePrice + installationCost + tireDisposalFee;
+    const salesTaxRate = form.tax_exempt ? 0 : Number(form.sales_tax_rate) || 0;
+    const salesTaxAmount = subtotal * (salesTaxRate / 100);
+    const calculatedJobTotal = subtotal + salesTaxAmount;
 
     const { error } = await supabase
       .from("jobs")
@@ -284,6 +297,10 @@ export default function EditJobPage() {
         po_number: form.po_number.trim() || null,
         mo_number: form.mo_number.trim() || null,
         job_total: calculatedJobTotal,
+        subtotal,
+        sales_tax_rate: salesTaxRate,
+        sales_tax_amount: salesTaxAmount,
+        tax_exempt: form.tax_exempt,
         payment_status: form.payment_status || "unpaid",
         invoice_number: form.invoice_number.trim() || null,
         job_status: form.job_status || "scheduled",
@@ -672,6 +689,20 @@ export default function EditJobPage() {
             </Field>
           </div>
 
+          <div style={form.tax_exempt ? taxExemptCard : taxCard}>
+            <label style={checkboxLabel}>
+              <input type="checkbox" checked={form.tax_exempt} onChange={handleTaxExemptChange} style={checkbox} />
+              <span><strong>Tax-exempt client</strong><span style={checkboxHelp}>No sales tax will be added to this job.</span></span>
+            </label>
+          </div>
+
+          <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Service-address sales tax rate (%)</label>
+              <input name="sales_tax_rate" value={form.sales_tax_rate} onChange={handleChange} style={{ ...input, background: form.tax_exempt ? "#f3f4f6" : "#fff" }} placeholder="Example: 8.125" inputMode="decimal" disabled={form.tax_exempt} />
+            </Field>
+          </div>
+
           <div style={costBreakdown}>
             <div style={costRow}>
               <span>Tires</span>
@@ -685,9 +716,13 @@ export default function EditJobPage() {
               <span>Disposal</span>
               <strong>${(Number(form.tire_disposal_fee) || 0).toFixed(2)}</strong>
             </div>
+            <div style={costRow}>
+              <span>Sales tax</span>
+              <strong>${(form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}</strong>
+            </div>
             <div style={costTotalRow}>
               <span>Job Total</span>
-              <strong>${(((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0))).toFixed(2)}</strong>
+              <strong>${(((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}</strong>
             </div>
           </div>
 
@@ -698,7 +733,7 @@ export default function EditJobPage() {
               <label style={fieldLabel}>Job Total</label>
               <input
                 name="job_total"
-                value={((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)).toFixed(2)}
+                value={(((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}
                 readOnly
                 style={{ ...input, background: "#f3f4f6" }}
                 placeholder="Job Total"
@@ -915,6 +950,9 @@ const notOrderedStatusCard: React.CSSProperties = {
   border: "1px solid #fcd34d",
   background: "#fffbeb",
 };
+
+const taxCard: React.CSSProperties = { marginTop: 18, padding: 14, borderRadius: 12, border: "1px solid #bfdbfe", background: "#eff6ff" };
+const taxExemptCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
 
 const checkboxLabel: React.CSSProperties = {
   display: "flex",

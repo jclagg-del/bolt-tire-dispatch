@@ -39,6 +39,8 @@ type FormState = {
   payment_status: string;
   invoice_number: string;
   job_status: string;
+  sales_tax_rate: string;
+  tax_exempt: boolean;
 };
 
 function formatLocalDateTimeForDb(value: string) {
@@ -102,6 +104,8 @@ export default function NewJobPage() {
     payment_status: "unpaid",
     invoice_number: "",
     job_status: "scheduled",
+    sales_tax_rate: "",
+    tax_exempt: false,
   });
 
   useEffect(() => {
@@ -146,7 +150,7 @@ export default function NewJobPage() {
     const timer = setTimeout(async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("contact_name,phone,email,address")
+        .select("contact_name,phone,email,address,sales_tax_rate,tax_exempt")
         .ilike("customer", customer)
         .order("scheduled", { ascending: false, nullsFirst: false })
         .limit(1);
@@ -169,6 +173,8 @@ export default function NewJobPage() {
         phone: prev.phone || match.phone || "",
         email: prev.email || match.email || "",
         address: prev.address || match.address || "",
+        sales_tax_rate: prev.sales_tax_rate || (match.sales_tax_rate != null ? String(match.sales_tax_rate) : ""),
+        tax_exempt: Boolean(match.tax_exempt),
       }));
 
       setLookupMessage("Repeat customer info filled from last job.");
@@ -187,6 +193,13 @@ export default function NewJobPage() {
     }
 
     setSaving(true);
+
+    const subtotal =
+      (Number(form.qty) || 0) * (Number(form.price_tires) || 0) +
+      (Number(form.installation_cost) || 0) +
+      (Number(form.tire_disposal_fee) || 0);
+    const salesTaxRate = form.tax_exempt ? 0 : Number(form.sales_tax_rate) || 0;
+    const salesTaxAmount = subtotal * (salesTaxRate / 100);
 
     const payload = {
       customer: form.customer.trim(),
@@ -214,10 +227,11 @@ export default function NewJobPage() {
       notes: form.notes.trim() || null,
       service_type: form.service_type.trim() || null,
       po_number: form.po_number.trim() || null,
-      job_total:
-        (Number(form.qty) || 0) * (Number(form.price_tires) || 0) +
-        (Number(form.installation_cost) || 0) +
-        (Number(form.tire_disposal_fee) || 0),
+      subtotal,
+      sales_tax_rate: salesTaxRate,
+      sales_tax_amount: salesTaxAmount,
+      tax_exempt: form.tax_exempt,
+      job_total: subtotal + salesTaxAmount,
       payment_status: form.payment_status || "unpaid",
       invoice_number: form.invoice_number.trim() || null,
       job_status: form.job_status || "scheduled",
@@ -521,6 +535,20 @@ export default function NewJobPage() {
             </Field>
           </div>
 
+          <div style={form.tax_exempt ? taxExemptCard : taxCard}>
+            <label style={checkboxLabel}>
+              <input type="checkbox" checked={form.tax_exempt} onChange={(e) => setForm((prev) => ({ ...prev, tax_exempt: e.target.checked }))} style={checkbox} />
+              <span><strong>Tax-exempt client</strong><span style={checkboxHelp}>No sales tax will be added to this job.</span></span>
+            </label>
+          </div>
+
+          <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Service-address sales tax rate (%)</label>
+              <input name="sales_tax_rate" value={form.sales_tax_rate} onChange={handleChange} style={{ ...input, background: form.tax_exempt ? "#f3f4f6" : "#fff" }} placeholder="Example: 8.125" inputMode="decimal" disabled={form.tax_exempt} />
+            </Field>
+          </div>
+
           <div style={costBreakdown}>
             <div style={costRow}>
               <span>Tires</span>
@@ -545,6 +573,10 @@ export default function NewJobPage() {
                 ${(Number(form.tire_disposal_fee) || 0).toFixed(2)}
               </strong>
             </div>
+            <div style={costRow}>
+              <span>Sales tax</span>
+              <strong>${(form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}</strong>
+            </div>
 
             <div style={costTotalRow}>
               <span>Job Total</span>
@@ -553,7 +585,8 @@ export default function NewJobPage() {
                   (Number(form.qty) || 0) *
                     (Number(form.price_tires) || 0) +
                   (Number(form.installation_cost) || 0) +
-                  (Number(form.tire_disposal_fee) || 0)
+                  (Number(form.tire_disposal_fee) || 0) +
+                  (form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100)))
                 ).toFixed(2)}
               </strong>
             </div>
@@ -570,7 +603,8 @@ export default function NewJobPage() {
                   (Number(form.qty) || 0) *
                     (Number(form.price_tires) || 0) +
                   (Number(form.installation_cost) || 0) +
-                  (Number(form.tire_disposal_fee) || 0)
+                  (Number(form.tire_disposal_fee) || 0) +
+                  (form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100)))
                 ).toFixed(2)}
                 readOnly
                 style={{ ...input, background: "#f3f4f6" }}
@@ -806,6 +840,12 @@ const notice: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
 };
+
+const taxCard: React.CSSProperties = { marginTop: 18, padding: 14, borderRadius: 12, border: "1px solid #bfdbfe", background: "#eff6ff" };
+const taxExemptCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const checkboxLabel: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", color: "#111827" };
+const checkbox: React.CSSProperties = { width: 22, height: 22, marginTop: 1 };
+const checkboxHelp: React.CSSProperties = { display: "block", marginTop: 3, color: "#6b7280", fontSize: 13, fontWeight: 400 };
 
 const button: React.CSSProperties = {
   marginTop: 16,
