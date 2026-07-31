@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
-import { quickBooksRequest } from "@/lib/quickbooks";
+import { QuickBooksApiError, quickBooksRequest } from "@/lib/quickbooks";
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,11 @@ export async function POST(request: Request) {
         result = await quickBooksRequest(`/invoice/${job.quickbooks_invoice_id}`);
       } catch (invoiceError) {
         const message = invoiceError instanceof Error ? invoiceError.message : "";
-        if (message.includes("Object Not Found") || message.includes("made inactive")) {
+        if (
+          (invoiceError instanceof QuickBooksApiError && invoiceError.status === 404) ||
+          message.includes("Object Not Found") ||
+          message.includes("made inactive")
+        ) {
           const { error: resetError } = await admin.from("jobs").update({
             quickbooks_invoice_id: null,
             invoice_number: null,

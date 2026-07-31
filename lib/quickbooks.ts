@@ -192,9 +192,16 @@ export async function quickBooksRequest(path: string, init: RequestInit = {}) {
   if (!response.ok) {
     const message = data?.Fault?.Error?.[0]?.Detail || data?.Fault?.Error?.[0]?.Message || data?.error_description || data?.error || `QuickBooks request failed with status ${response.status}.`;
     console.error("QuickBooks API error", { status: response.status, intuitTid, path });
-    throw new Error(`${message}${intuitTid ? ` (Intuit reference: ${intuitTid})` : ""}`);
+    throw new QuickBooksApiError(`${message}${intuitTid ? ` (Intuit reference: ${intuitTid})` : ""}`, response.status, intuitTid);
   }
   return data;
+}
+
+export class QuickBooksApiError extends Error {
+  constructor(message: string, public status: number, public intuitTid: string | null) {
+    super(message);
+    this.name = "QuickBooksApiError";
+  }
 }
 
 export function escapeQueryValue(value: string) {

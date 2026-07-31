@@ -57,6 +57,7 @@ export default function BillingPage() {
   const [jobs, setJobs] = useState<BillingJob[]>([]);
   const [payingId, setPayingId] = useState<string | number | null>(null);
   const [quickBooksConnected, setQuickBooksConnected] = useState(false);
+  const [quickBooksEnvironment, setQuickBooksEnvironment] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [invoicingId, setInvoicingId] = useState<string | number | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -90,6 +91,7 @@ export default function BillingPage() {
     const response = await authenticatedFetch("/api/quickbooks/status");
     const data = await response.json();
     setQuickBooksConnected(Boolean(data.connected));
+    setQuickBooksEnvironment(data.environment || "");
   };
 
   const connectQuickBooks = async () => {
@@ -187,7 +189,9 @@ export default function BillingPage() {
           <div>
             <strong>{quickBooksConnected ? "QuickBooks connected" : "Connect QuickBooks Online"}</strong>
             <div style={connectionHelp}>
-              {quickBooksConnected ? "Ready for invoice and payment synchronization." : "Connect your Intuit sandbox company to begin testing invoices."}
+              {quickBooksConnected
+                ? `Connected to ${quickBooksEnvironment === "production" ? "REAL QuickBooks (Production)" : "QuickBooks Sandbox"}.`
+                : "Connect your QuickBooks Online company to create invoices and sync payments."}
             </div>
           </div>
           {!quickBooksConnected && (
