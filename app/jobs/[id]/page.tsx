@@ -25,6 +25,8 @@ type JobForm = {
   tires_ordered: boolean;
   tire_supplier: string;
   ordered_by: string;
+  estimated_delivery_date: string;
+  tires_received: boolean;
   installation_cost: string;
   tire_disposal_fee: string;
   address: string;
@@ -98,6 +100,8 @@ export default function EditJobPage() {
         tires_ordered,
         tire_supplier,
         ordered_by,
+        estimated_delivery_date,
+        tires_received,
         installation_cost,
         tire_disposal_fee,
         address,
@@ -151,6 +155,8 @@ export default function EditJobPage() {
       tires_ordered: Boolean(data.tires_ordered),
       tire_supplier: data.tire_supplier || "",
       ordered_by: data.ordered_by || "",
+      estimated_delivery_date: data.estimated_delivery_date || "",
+      tires_received: Boolean(data.tires_received),
       installation_cost:
         data.installation_cost !== null &&
         data.installation_cost !== undefined
@@ -238,6 +244,10 @@ export default function EditJobPage() {
     setForm((current) => current ? { ...current, tax_exempt: e.target.checked } : current);
   };
 
+  const handleTiresReceivedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((current) => current ? { ...current, tires_received: e.target.checked } : current);
+  };
+
   const handleSave = async () => {
     if (!form || !id || saving) return;
 
@@ -282,7 +292,8 @@ export default function EditJobPage() {
           form.tire_product_number.trim() || null,
         tires_ordered: form.tires_ordered,
         tire_supplier: form.tire_supplier.trim() || null,
-        ordered_by: form.ordered_by.trim() || null,
+        estimated_delivery_date: form.estimated_delivery_date || null,
+        tires_received: form.tires_received,
         installation_cost: form.installation_cost.trim()
           ? Number(form.installation_cost)
           : null,
@@ -665,9 +676,19 @@ export default function EditJobPage() {
             </Field>
 
             <Field>
-              <label style={fieldLabel}>Ordered By</label>
-              <input name="ordered_by" value={form.ordered_by} onChange={handleChange} style={input} placeholder="Ordered By" />
+              <label style={fieldLabel}>Estimated Delivery Date</label>
+              <input type="date" name="estimated_delivery_date" value={form.estimated_delivery_date} onChange={handleChange} style={input} />
             </Field>
+          </div>
+
+          <div style={form.tires_received ? receivedStatusCard : awaitingStatusCard}>
+            <label style={checkboxLabel}>
+              <input type="checkbox" checked={form.tires_received} onChange={handleTiresReceivedChange} style={checkbox} />
+              <span>
+                <strong>{form.tires_received ? "Tires Received" : "Awaiting Tire Delivery"}</strong>
+                <span style={checkboxHelp}>Check this box when all tires for the job have arrived.</span>
+              </span>
+            </label>
           </div>
 
           <div style={sectionTitle}>Costs</div>
@@ -953,6 +974,8 @@ const notOrderedStatusCard: React.CSSProperties = {
 
 const taxCard: React.CSSProperties = { marginTop: 18, padding: 14, borderRadius: 12, border: "1px solid #bfdbfe", background: "#eff6ff" };
 const taxExemptCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const receivedStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid #86efac", background: "#f0fdf4" };
+const awaitingStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid #fcd34d", background: "#fffbeb" };
 
 const checkboxLabel: React.CSSProperties = {
   display: "flex",

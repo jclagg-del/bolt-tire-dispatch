@@ -77,6 +77,7 @@ export default function NewJobPage() {
   const [saving, setSaving] = useState(false);
   const [lookupMessage, setLookupMessage] = useState("");
   const [vehicles, setVehicles] = useState<VehicleOption[]>(fallbackVehicles);
+  const [customerOptions, setCustomerOptions] = useState<string[]>([]);
 
   const [form, setForm] = useState<FormState>({
     customer: "",
@@ -107,6 +108,23 @@ export default function NewJobPage() {
     sales_tax_rate: "",
     tax_exempt: false,
   });
+
+  useEffect(() => {
+    const loadCustomers = async () => {
+      const { data } = await supabase
+        .from("jobs")
+        .select("customer")
+        .not("customer", "is", null)
+        .order("customer", { ascending: true });
+
+      const names = Array.from(
+        new Set((data || []).map((row) => String(row.customer || "").trim()).filter(Boolean))
+      );
+      setCustomerOptions(names);
+    };
+
+    loadCustomers();
+  }, []);
 
   useEffect(() => {
     const loadVehicles = async () => {
@@ -275,12 +293,18 @@ export default function NewJobPage() {
               <label style={fieldLabel}>Customer</label>
               <input
                 name="customer"
+                list="customer-options"
                 placeholder="Customer"
                 value={form.customer}
                 onChange={handleChange}
                 style={input}
                 autoComplete="organization"
               />
+              <datalist id="customer-options">
+                {customerOptions.map((customer) => (
+                  <option key={customer} value={customer} />
+                ))}
+              </datalist>
             </Field>
 
             <Field>
