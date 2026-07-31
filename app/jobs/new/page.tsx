@@ -257,12 +257,15 @@ export default function NewJobPage() {
 
     setSaving(true);
 
+    const quantity = Number(form.qty) || 0;
+    const tireDisposalFee = quantity * 4;
+    const nyStateTireFee = quantity * 2.5;
     const subtotal =
-      (Number(form.qty) || 0) * (Number(form.price_tires) || 0) +
+      quantity * (Number(form.price_tires) || 0) +
       (Number(form.installation_cost) || 0) +
-      (Number(form.tire_disposal_fee) || 0) +
-      (Number(form.ny_state_tire_fee) || 0);
-    const taxableSubtotal = subtotal - (Number(form.ny_state_tire_fee) || 0);
+      tireDisposalFee +
+      nyStateTireFee;
+    const taxableSubtotal = subtotal - nyStateTireFee;
     const salesTaxRate = form.tax_exempt ? 0 : Number(form.sales_tax_rate) || 0;
     const salesTaxAmount = taxableSubtotal * (salesTaxRate / 100);
 
@@ -288,10 +291,8 @@ export default function NewJobPage() {
       installation_cost: form.installation_cost.trim()
         ? Number(form.installation_cost)
         : null,
-      tire_disposal_fee: form.tire_disposal_fee.trim()
-        ? Number(form.tire_disposal_fee)
-        : null,
-      ny_state_tire_fee: Number(form.ny_state_tire_fee) || 0,
+      tire_disposal_fee: tireDisposalFee,
+      ny_state_tire_fee: nyStateTireFee,
       address: form.address.trim() || null,
       scheduled: formatLocalDateTimeForDb(form.scheduled),
       vehicle_id: form.vehicle_id || vehicles[0]?.id || "stepvan",

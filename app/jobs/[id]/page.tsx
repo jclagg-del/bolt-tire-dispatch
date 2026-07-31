@@ -164,15 +164,8 @@ export default function EditJobPage() {
         data.installation_cost !== undefined
           ? String(data.installation_cost)
           : "",
-      tire_disposal_fee:
-        data.tire_disposal_fee !== null &&
-        data.tire_disposal_fee !== undefined
-          ? String(data.tire_disposal_fee)
-          : "",
-      ny_state_tire_fee:
-        data.ny_state_tire_fee !== null && data.ny_state_tire_fee !== undefined
-          ? String(data.ny_state_tire_fee)
-          : String((Number(data.qty) || 0) * 2.5),
+      tire_disposal_fee: ((Number(data.qty) || 0) * 4).toFixed(2),
+      ny_state_tire_fee: ((Number(data.qty) || 0) * 2.5).toFixed(2),
       address: data.address || "",
       notes: data.notes || "",
       scheduled: formatForDateTimeLocal(data.scheduled),
@@ -270,12 +263,8 @@ export default function EditJobPage() {
     const installationCost = form.installation_cost.trim()
       ? Number(form.installation_cost)
       : 0;
-    const tireDisposalFee = form.tire_disposal_fee.trim()
-      ? Number(form.tire_disposal_fee)
-      : 0;
-    const nyStateTireFee = form.ny_state_tire_fee.trim()
-      ? Number(form.ny_state_tire_fee)
-      : 0;
+    const tireDisposalFee = quantity * 4;
+    const nyStateTireFee = quantity * 2.5;
 
     const taxableSubtotal = quantity * tirePrice + installationCost + tireDisposalFee;
     const subtotal = taxableSubtotal + nyStateTireFee;
@@ -310,9 +299,7 @@ export default function EditJobPage() {
         installation_cost: form.installation_cost.trim()
           ? Number(form.installation_cost)
           : null,
-        tire_disposal_fee: form.tire_disposal_fee.trim()
-          ? Number(form.tire_disposal_fee)
-          : null,
+        tire_disposal_fee: tireDisposalFee,
         ny_state_tire_fee: nyStateTireFee,
         address: form.address.trim() || null,
         notes: form.notes.trim() || null,
