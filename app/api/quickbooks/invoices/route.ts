@@ -36,9 +36,10 @@ export async function POST(request: Request) {
     const items = itemResult.QueryResponse?.Item || [];
     const normalizeItemName = (value?: string) => (value || "").trim().toLowerCase();
     const findItem = (name: string) => items.find(
-      (item: { Name?: string; FullyQualifiedName?: string }) =>
-        normalizeItemName(item.Name) === normalizeItemName(name) ||
-        normalizeItemName(item.FullyQualifiedName) === normalizeItemName(name)
+      (item: { Name?: string; FullyQualifiedName?: string; Type?: string }) =>
+        item.Type !== "Category" &&
+        (normalizeItemName(item.Name) === normalizeItemName(name) ||
+          normalizeItemName(item.FullyQualifiedName) === normalizeItemName(name))
     );
     const tireItem = findItem("Tires");
     const installationItem = findItem("On-site Mount and Balance");
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
       !disposalItem && "Waste Tire Fee",
     ].filter(Boolean);
     if (missingItems.length) {
-      throw new Error(`Create these products/services in QuickBooks before invoicing: ${missingItems.join(", ")}.`);
+      throw new Error(`Create these as invoiceable products/services—not categories—in QuickBooks: ${missingItems.join(", ")}.`);
     }
 
     const taxCode = job.tax_exempt ? "NON" : "TAX";
