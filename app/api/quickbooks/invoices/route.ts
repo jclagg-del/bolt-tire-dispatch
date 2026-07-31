@@ -74,7 +74,12 @@ export async function POST(request: Request) {
     const qty = Number(job.qty) || 0;
     const tirePrice = Number(job.price_tires) || 0;
     addLine(tireItem, [job.tires, job.size].filter(Boolean).join(" • ") || "Tires", qty * tirePrice, true, qty, tirePrice);
-    addLine(installationItem, "On-site mount and balance", Number(job.installation_cost) || 0);
+    const installationDescription = [
+      "On-site mount and balance",
+      job.vehicle,
+      job.vehicle_mileage ? `${job.vehicle_mileage} miles` : null,
+    ].filter(Boolean).join(" • ");
+    addLine(installationItem, installationDescription, Number(job.installation_cost) || 0);
     addLine(stateTireFeeItem, "NY State tire tax", Number(job.ny_state_tire_fee) || qty * 2.5, false, qty, 2.5);
     addLine(disposalItem, "Waste tire fee", Number(job.tire_disposal_fee) || qty * 4, true, qty, 4);
     if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
