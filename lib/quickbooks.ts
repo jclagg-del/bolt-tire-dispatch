@@ -32,7 +32,7 @@ export function quickBooksConfig() {
   const clientId = process.env.QUICKBOOKS_CLIENT_ID;
   const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
   const redirectUri = process.env.QUICKBOOKS_REDIRECT_URI;
-  const environment = process.env.QUICKBOOKS_ENVIRONMENT || "sandbox";
+  const environment = (process.env.QUICKBOOKS_ENVIRONMENT || "sandbox").trim().toLowerCase();
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error("QuickBooks environment variables are not configured.");
   }
@@ -85,7 +85,8 @@ export async function exchangeAuthorizationCode(code: string) {
     }),
     cache: "no-store",
   });
-  const data = await response.json();
+  const responseText = await response.text();
+  const data = responseText ? JSON.parse(responseText) : {};
   if (!response.ok) throw new Error(data.error_description || data.error || "QuickBooks token exchange failed.");
   return data as { access_token: string; refresh_token: string; expires_in: number; x_refresh_token_expires_in: number };
 }
@@ -125,7 +126,8 @@ async function refreshConnection(connection: Connection) {
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: connection.refresh_token }),
     cache: "no-store",
   });
-  const tokens = await response.json();
+  const responseText = await response.text();
+  const tokens = responseText ? JSON.parse(responseText) : {};
   if (!response.ok) throw new Error(tokens.error_description || "QuickBooks token refresh failed.");
   await saveConnection(connection.realm_id, tokens);
   return { ...connection, access_token: tokens.access_token, refresh_token: tokens.refresh_token };
@@ -179,10 +181,18 @@ export async function quickBooksRequest(path: string, init: RequestInit = {}) {
     connection = await refreshConnection(connection);
     response = await send();
   }
-  const data = await response.json();
+  const intuitTid = response.headers.get("intuit_tid");
+  const responseText = await response.text();
+  let data: Record<string, any> = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = {};
+  }
   if (!response.ok) {
-    const message = data?.Fault?.Error?.[0]?.Detail || data?.Fault?.Error?.[0]?.Message || "QuickBooks request failed.";
-    throw new Error(message);
+    const message = data?.Fault?.Error?.[0]?.Detail || data?.Fault?.Error?.[0]?.Message || data?.error_description || data?.error || `QuickBooks request failed with status ${response.status}.`;
+    console.error("QuickBooks API error", { status: response.status, intuitTid, path });
+    throw new Error(`${message}${intuitTid ? ` (Intuit reference: ${intuitTid})` : ""}`);
   }
   return data;
 }

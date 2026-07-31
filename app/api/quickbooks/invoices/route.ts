@@ -14,9 +14,16 @@ export async function POST(request: Request) {
 
     const customerName = String(job.billing_name || job.customer || "").trim();
     if (!customerName) throw new Error("The job needs a customer or billing name.");
-    let customer = job.quickbooks_customer_id
-      ? (await quickBooksRequest(`/customer/${job.quickbooks_customer_id}`)).Customer
-      : null;
+    let customer = null;
+    if (job.quickbooks_customer_id) {
+      try {
+        customer = (await quickBooksRequest(`/customer/${job.quickbooks_customer_id}`)).Customer;
+      } catch {
+        // A customer ID saved during sandbox testing will not exist in the
+        // production company. Fall back to matching the customer by name.
+        customer = null;
+      }
+    }
     const customerQuery = encodeURIComponent(`select * from Customer where DisplayName = '${escapeQueryValue(customerName)}' maxresults 1`);
     if (!customer) {
       const customerResult = await quickBooksRequest(`/query?query=${customerQuery}`);
