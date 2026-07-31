@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   try {
     if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const admin = createAdminClient();
-    const { data: jobs, error } = await admin.from("jobs").select("id,quickbooks_invoice_id").not("quickbooks_invoice_id", "is", null);
+    const { data: jobs, error } = await admin.from("jobs").select("id,quickbooks_invoice_id,paid_date").not("quickbooks_invoice_id", "is", null);
     if (error) throw error;
     let updated = 0;
     for (const job of jobs || []) {
@@ -46,6 +46,7 @@ export async function POST(request: Request) {
         sales_tax_amount: tax,
         payment_status: balance === 0 ? "paid" : balance < total ? "partial" : "unpaid",
         job_status: balance === 0 ? "paid" : "billed",
+        paid_date: balance === 0 ? job.paid_date || new Date().toISOString() : null,
       }).eq("id", job.id);
       if (updateError) throw updateError;
       updated += 1;

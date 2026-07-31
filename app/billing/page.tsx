@@ -18,6 +18,7 @@ type BillingJob = {
   job_status?: string | null;
   billing_name?: string | null;
   complete?: boolean | null;
+  paid_date?: string | Date | null;
 };
 
 const NY_TIMEZONE = "America/New_York";
@@ -185,6 +186,7 @@ export default function BillingPage() {
       .update({
         payment_status: "paid",
         job_status: "paid",
+        paid_date: new Date().toISOString(),
       })
       .eq("id", id);
 
@@ -206,7 +208,17 @@ export default function BillingPage() {
     (j) => j.invoice_number && j.payment_status !== "paid"
   );
 
-  const paidJobs = jobs.filter((j) => j.payment_status === "paid");
+  const paidJobs = jobs
+    .filter((j) => j.payment_status === "paid")
+    .sort((a, b) => {
+      const aDate = parseJobDate(a.paid_date) || parseJobDate(a.scheduled);
+      const bDate = parseJobDate(b.paid_date) || parseJobDate(b.scheduled);
+      return (bDate?.getTime() || 0) - (aDate?.getTime() || 0);
+    });
+  const billedUnpaidTotal = billedUnpaid.reduce(
+    (sum, job) => sum + (Number(job.job_total) || 0),
+    0
+  );
 
   return (
     <div style={shell}>
@@ -256,6 +268,7 @@ export default function BillingPage() {
           <div style={summaryCard}>
             <div style={summaryLabel}>Billed / Unpaid</div>
             <div style={summaryValue}>{billedUnpaid.length}</div>
+            <div style={summaryAmount}>{formatMoney(billedUnpaidTotal)}</div>
           </div>
 
           <div style={summaryCard}>
@@ -265,15 +278,18 @@ export default function BillingPage() {
         </div>
 
         {[
-          { title: "Ready to bill", jobs: readyToBill },
-          { title: "Billed, unpaid", jobs: billedUnpaid },
-          { title: "Paid", jobs: paidJobs },
+          { title: "Ready to bill", jobs: readyToBill, paidSection: false },
+          { title: "Billed, unpaid", jobs: billedUnpaid, paidSection: false, amount: billedUnpaidTotal },
+          { title: "Paid", jobs: paidJobs, paidSection: true },
         ].map((section) => (
           <div key={section.title} style={sectionCard}>
             <div style={sectionHeader}>
               <h2 style={sectionTitle}>
                 {section.title} ({section.jobs.length})
               </h2>
+              {section.amount !== undefined && (
+                <strong style={sectionAmount}>{formatMoney(section.amount)} outstanding</strong>
+              )}
             </div>
 
             {section.jobs.length === 0 ? (
@@ -284,7 +300,7 @@ export default function BillingPage() {
                   <tr>
                     <th style={th}>Customer</th>
                     <th style={th}>Vehicle</th>
-                    <th style={th}>Scheduled</th>
+                    <th style={th}>{section.paidSection ? "Date Paid" : "Scheduled"}</th>
                     <th style={th}>Total</th>
                     <th style={th}>Payment</th>
                     <th style={th}>Action</th>
@@ -305,7 +321,7 @@ export default function BillingPage() {
                         <td style={td}>
                           {job.unit_number || job.vehicle || "—"}
                         </td>
-                        <td style={td}>{formatScheduled(job.scheduled)}</td>
+                        <td style={td}>{formatScheduled(section.paidSection ? job.paid_date || job.scheduled : job.scheduled)}</td>
                         <td style={tdStrong}>{formatMoney(job.job_total)}</td>
 
                         <td style={td}>
@@ -446,6 +462,13 @@ const summaryValue: React.CSSProperties = {
   fontWeight: 800,
 };
 
+const summaryAmount: React.CSSProperties = {
+  marginTop: 4,
+  color: "#b45309",
+  fontSize: 14,
+  fontWeight: 800,
+};
+
 const sectionCard: React.CSSProperties = {
   background: "white",
   border: "1px solid #e5e7eb",
@@ -457,11 +480,21 @@ const sectionCard: React.CSSProperties = {
 const sectionHeader: React.CSSProperties = {
   padding: 16,
   borderBottom: "1px solid #e5e7eb",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
 };
 
 const sectionTitle: React.CSSProperties = {
   fontSize: 20,
   fontWeight: 800,
+};
+
+const sectionAmount: React.CSSProperties = {
+  color: "#b45309",
+  fontSize: 16,
 };
 
 const emptyState: React.CSSProperties = {

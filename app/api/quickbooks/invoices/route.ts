@@ -120,6 +120,7 @@ export async function POST(request: Request) {
       job_total: total,
       payment_status: Number(invoice.Balance) === 0 ? "paid" : "unpaid",
       job_status: Number(invoice.Balance) === 0 ? "paid" : "billed",
+      paid_date: Number(invoice.Balance) === 0 ? new Date().toISOString() : null,
     }).eq("id", job.id);
     if (updateError) throw updateError;
     return NextResponse.json({ invoice });
@@ -216,6 +217,7 @@ export async function PUT(request: Request) {
       job_total: total,
       payment_status: balance === 0 ? "paid" : balance < total ? "partial" : "unpaid",
       job_status: balance === 0 ? "paid" : "billed",
+      paid_date: balance === 0 ? new Date().toISOString() : null,
     }).eq("id", jobId);
     if (updateError) throw updateError;
     return NextResponse.json({ invoice });
