@@ -30,6 +30,8 @@ type CustomerOrder = {
   tires_ordered: boolean;
   approved_job_id: number | null;
   submitted_at: string;
+  job_complete: boolean;
+  job_completed_at: string | null;
 };
 
 function formatDate(dateValue: string) {
@@ -141,7 +143,55 @@ export default function OrdersPage() {
       return;
     }
 
-    setOrders((data || []) as CustomerOrder[]);
+    const loadedOrders = (data || []) as Omit<
+      CustomerOrder,
+      "job_complete" | "job_completed_at"
+    >[];
+    const approvedJobIds = loadedOrders
+      .map((order) => order.approved_job_id)
+      .filter((jobId): jobId is number => jobId !== null);
+
+    let completedJobs = new Map<
+      number,
+      { complete: boolean; completed_at: string | null }
+    >();
+
+    if (approvedJobIds.length > 0) {
+      const { data: jobs, error: jobsError } = await supabase
+        .from("jobs")
+        .select("id, complete, completed_at")
+        .in("id", approvedJobIds);
+
+      if (jobsError) {
+        setErrorMessage(
+          `Orders loaded, but job status could not be refreshed: ${jobsError.message}`
+        );
+      } else {
+        completedJobs = new Map(
+          (jobs || []).map((job) => [
+            job.id,
+            {
+              complete: Boolean(job.complete),
+              completed_at: job.completed_at || null,
+            },
+          ])
+        );
+      }
+    }
+
+    setOrders(
+      loadedOrders.map((order) => {
+        const linkedJob = order.approved_job_id
+          ? completedJobs.get(order.approved_job_id)
+          : undefined;
+
+        return {
+          ...order,
+          job_complete: Boolean(linkedJob?.complete),
+          job_completed_at: linkedJob?.completed_at || null,
+        };
+      })
+    );
   }, []);
 
   useEffect(() => {
@@ -340,7 +390,19 @@ export default function OrdersPage() {
   );
 
   const approvedOrders = orders.filter(
-    (order) => order.order_status === "approved"
+    (order) =>
+      order.order_status === "approved" && !order.job_complete
+  );
+
+  const completedOrders = orders
+    .filter(
+      (order) =>
+        order.order_status === "approved" && order.job_complete
+    )
+    .sort((a, b) =>
+      (b.job_completed_at || "").localeCompare(
+        a.job_completed_at || ""
+      )
   );
 
   const rejectedOrders = orders.filter(
@@ -406,6 +468,20 @@ export default function OrdersPage() {
               router={router}
             />
 
+            {completedOrders.length > 0 && (
+              <OrderSection
+                title={`Completed Orders (${completedOrders.length})`}
+                orders={completedOrders}
+                emptyText="No completed orders yet."
+                workingId={workingId}
+                onToggleTires={toggleTiresOrdered}
+                onApprove={approveOrder}
+                onReject={rejectOrder}
+                onDelete={deleteOrder}
+                router={router}
+              />
+            )}
+
             {rejectedOrders.length > 0 && (
               <OrderSection
                 title={`Rejected Orders (${rejectedOrders.length})`}
@@ -463,6 +539,7 @@ function OrderSection({
               order.order_status === "approved";
             const rejected =
               order.order_status === "rejected";
+            const completed = order.job_complete;
 
             return (
               <article key={order.id} style={orderCard}>
@@ -470,14 +547,18 @@ function OrderSection({
                   <div>
                     <span
                       style={
-                        approved
+                        completed
+                          ? completedBadge
+                          : approved
                           ? approvedBadge
                           : rejected
                             ? rejectedBadge
                             : newBadge
                       }
                     >
-                      {approved
+                      {completed
+                        ? "Completed"
+                        : approved
                         ? "Approved"
                         : rejected
                           ? "Rejected"
@@ -601,7 +682,7 @@ function OrderSection({
                 </label>
 
                 <div style={actions}>
-                  {approved && order.approved_job_id ? (
+                  {(approved || completed) && order.approved_job_id ? (
                     <button
                       type="button"
                       onClick={() =>
@@ -790,6 +871,12 @@ const approvedBadge: React.CSSProperties = {
   ...newBadge,
   background: "#dcfce7",
   color: "#166534",
+};
+
+const completedBadge: React.CSSProperties = {
+  ...newBadge,
+  background: "#dbeafe",
+  color: "#1d4ed8",
 };
 
 const rejectedBadge: React.CSSProperties = {
