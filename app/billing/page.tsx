@@ -14,6 +14,7 @@ type BillingJob = {
   job_total?: number | string | null;
   payment_status?: string | null;
   invoice_number?: string | null;
+  quickbooks_invoice_id?: string | null;
   job_status?: string | null;
   billing_name?: string | null;
   complete?: boolean | null;
@@ -60,6 +61,7 @@ export default function BillingPage() {
   const [quickBooksEnvironment, setQuickBooksEnvironment] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [invoicingId, setInvoicingId] = useState<string | number | null>(null);
+  const [numberingId, setNumberingId] = useState<string | number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -127,6 +129,22 @@ export default function BillingPage() {
     setSyncing(false);
     if (!response.ok) return alert(data.error || "QuickBooks sync failed.");
     await fetchJobs();
+  };
+
+  const setInvoiceNumber = async (job: BillingJob) => {
+    const docNumber = window.prompt("Enter the QuickBooks invoice number for this invoice:", "5434");
+    if (!docNumber) return;
+    setNumberingId(job.id);
+    const response = await authenticatedFetch("/api/quickbooks/invoices", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, docNumber }),
+    });
+    const data = await response.json();
+    setNumberingId(null);
+    if (!response.ok) return alert(data.error || "Invoice number update failed.");
+    await fetchJobs();
+    alert(`QuickBooks invoice number set to ${data.invoice.DocNumber}.`);
   };
 
   const disconnectQuickBooks = async () => {
@@ -293,6 +311,15 @@ export default function BillingPage() {
                             >
                               {invoicingId === job.id ? "Creating..." : "Create invoice"}
                             </button>
+                          ) : job.quickbooks_invoice_id && job.invoice_number === job.quickbooks_invoice_id ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setInvoiceNumber(job); }}
+                              style={numberButton}
+                              disabled={numberingId === job.id}
+                            >
+                              {numberingId === job.id ? "Updating..." : "Set Invoice #"}
+                            </button>
                           ) : isPaid ? (
                             <span style={paidText}>Paid</span>
                           ) : (
@@ -359,6 +386,7 @@ const connectedCard: React.CSSProperties = { ...connectCard, border: "1px solid 
 const connectionHelp: React.CSSProperties = { marginTop: 4, color: "#4b5563", fontSize: 14 };
 const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0, borderRadius: 8, background: "#2ca01c", color: "white", fontWeight: 800, cursor: "pointer" };
 const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
+const numberButton: React.CSSProperties = { ...quickBooksButton, background: "#7c3aed", padding: "8px 12px" };
 const disconnectButton: React.CSSProperties = { ...quickBooksButton, background: "#6b7280" };
 
 const summaryRow: React.CSSProperties = {

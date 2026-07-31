@@ -124,3 +124,53 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invoice creation failed." }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { jobId, docNumber: rawDocNumber } = await request.json();
+    const docNumber = String(rawDocNumber || "").trim();
+    if (!/^\d+$/.test(docNumber)) {
+      return NextResponse.json({ error: "Enter a numeric invoice number." }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+    const { data: job, error: jobError } = await admin
+      .from("jobs")
+      .select("id,quickbooks_invoice_id")
+      .eq("id", jobId)
+      .single();
+    if (jobError || !job?.quickbooks_invoice_id) {
+      return NextResponse.json({ error: "This job is not linked to a QuickBooks invoice." }, { status: 404 });
+    }
+
+    const duplicateQuery = encodeURIComponent(
+      `select * from Invoice where DocNumber = '${escapeQueryValue(docNumber)}' maxresults 1`
+    );
+    const duplicateResult = await quickBooksRequest(`/query?query=${duplicateQuery}`);
+    const duplicate = duplicateResult.QueryResponse?.Invoice?.[0];
+    if (duplicate && String(duplicate.Id) !== String(job.quickbooks_invoice_id)) {
+      return NextResponse.json({ error: `Invoice number ${docNumber} is already in use.` }, { status: 409 });
+    }
+
+    const current = (await quickBooksRequest(`/invoice/${job.quickbooks_invoice_id}`)).Invoice;
+    const updated = await quickBooksRequest("/invoice?operation=update", {
+      method: "POST",
+      body: JSON.stringify({
+        Id: current.Id,
+        SyncToken: current.SyncToken,
+        sparse: true,
+        DocNumber: docNumber,
+      }),
+    });
+    const invoice = updated.Invoice;
+    const { error: updateError } = await admin.from("jobs").update({
+      invoice_number: invoice.DocNumber,
+      quickbooks_synced_at: new Date().toISOString(),
+    }).eq("id", job.id);
+    if (updateError) throw updateError;
+    return NextResponse.json({ invoice });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invoice number update failed." }, { status: 500 });
+  }
+}
