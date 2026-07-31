@@ -29,21 +29,34 @@ export async function POST(request: Request) {
     const itemQuery = encodeURIComponent("select * from Item where Active = true maxresults 1000");
     const itemResult = await quickBooksRequest(`/query?query=${itemQuery}`);
     const items = itemResult.QueryResponse?.Item || [];
-    const serviceItem = items.find((item: { Name?: string }) => item.Name?.toLowerCase() === "services")
-      || items.find((item: { Type?: string }) => item.Type === "Service")
-      || items.find((item: { Type?: string }) => item.Type === "NonInventory");
-    if (!serviceItem) throw new Error('Create a QuickBooks product/service named "Services" before invoicing.');
+    const normalizeItemName = (value?: string) => (value || "").trim().toLowerCase();
+    const findItem = (name: string) => items.find(
+      (item: { Name?: string; FullyQualifiedName?: string }) =>
+        normalizeItemName(item.Name) === normalizeItemName(name) ||
+        normalizeItemName(item.FullyQualifiedName) === normalizeItemName(name)
+    );
+    const tireItem = findItem("Tires");
+    const installationItem = findItem("On-site Mount and Balance");
+    const disposalItem = findItem("NY Tire Disposal");
+    const missingItems = [
+      !tireItem && "Tires",
+      !installationItem && "On-site Mount and Balance",
+      !disposalItem && "NY Tire Disposal",
+    ].filter(Boolean);
+    if (missingItems.length) {
+      throw new Error(`Create these products/services in QuickBooks before invoicing: ${missingItems.join(", ")}.`);
+    }
 
     const taxCode = job.tax_exempt ? "NON" : "TAX";
     const lines: Record<string, unknown>[] = [];
-    const addLine = (description: string, amount: number, quantity?: number, unitPrice?: number) => {
+    const addLine = (item: { Id: string; Name: string }, description: string, amount: number, quantity?: number, unitPrice?: number) => {
       if (amount <= 0) return;
       lines.push({
         Amount: Number(amount.toFixed(2)),
         Description: description,
         DetailType: "SalesItemLineDetail",
         SalesItemLineDetail: {
-          ItemRef: { value: serviceItem.Id, name: serviceItem.Name },
+          ItemRef: { value: item.Id, name: item.Name },
           TaxCodeRef: { value: taxCode },
           ...(quantity && unitPrice ? { Qty: quantity, UnitPrice: unitPrice } : {}),
         },
@@ -52,10 +65,10 @@ export async function POST(request: Request) {
 
     const qty = Number(job.qty) || 0;
     const tirePrice = Number(job.price_tires) || 0;
-    addLine([job.tires, job.size].filter(Boolean).join(" • ") || "Tires", qty * tirePrice, qty, tirePrice);
-    addLine("Installation", Number(job.installation_cost) || 0);
-    addLine("Tire disposal fee", Number(job.tire_disposal_fee) || 0);
-    if (!lines.length) addLine("Mobile tire service", Number(job.subtotal || job.job_total) || 0);
+    addLine(tireItem, [job.tires, job.size].filter(Boolean).join(" • ") || "Tires", qty * tirePrice, qty, tirePrice);
+    addLine(installationItem, "On-site mount and balance", Number(job.installation_cost) || 0);
+    addLine(disposalItem, "NY tire disposal", Number(job.tire_disposal_fee) || 0);
+    if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
 
     const invoicePayload: Record<string, unknown> = {
       CustomerRef: { value: customer.Id, name: customer.DisplayName },
