@@ -85,6 +85,7 @@ export default function EditJobPage() {
   const [form, setForm] = useState<JobForm | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [archiving, setArchiving] = useState(false);
 
@@ -155,6 +156,14 @@ export default function EditJobPage() {
       .maybeSingle();
     setCreatedAt(creationData?.created_at || null);
 
+    const defaultDisposalFee = (Number(data.qty) || 0) * 4;
+    const savedDisposalFee = data.tire_disposal_fee;
+    setDisposalFeeOverridden(
+      savedDisposalFee !== null &&
+      savedDisposalFee !== undefined &&
+      Number(savedDisposalFee) !== defaultDisposalFee
+    );
+
     setForm({
       customer: data.customer || "",
       contact_name: data.contact_name || "",
@@ -186,7 +195,10 @@ export default function EditJobPage() {
         data.installation_cost !== undefined
           ? String(data.installation_cost)
           : "",
-      tire_disposal_fee: ((Number(data.qty) || 0) * 4).toFixed(2),
+      tire_disposal_fee:
+        savedDisposalFee !== null && savedDisposalFee !== undefined
+          ? Number(savedDisposalFee).toFixed(2)
+          : defaultDisposalFee.toFixed(2),
       ny_state_tire_fee: ((Number(data.qty) || 0) * 2.5).toFixed(2),
       address: data.address || "",
       notes: data.notes || "",
@@ -224,6 +236,9 @@ export default function EditJobPage() {
     if (!form) return;
 
     const { name, value } = e.target;
+    if (name === "tire_disposal_fee") {
+      setDisposalFeeOverridden(true);
+    }
 
     setForm((current) => {
       if (!current) return current;
@@ -231,8 +246,10 @@ export default function EditJobPage() {
       return {
         ...current,
         [name]: value,
-        ...(name === "qty" ? {
+        ...(name === "qty" && !disposalFeeOverridden ? {
           tire_disposal_fee: ((Number(value) || 0) * 4).toFixed(2),
+          ny_state_tire_fee: ((Number(value) || 0) * 2.5).toFixed(2),
+        } : name === "qty" ? {
           ny_state_tire_fee: ((Number(value) || 0) * 2.5).toFixed(2),
         } : {}),
       };
@@ -285,7 +302,7 @@ export default function EditJobPage() {
     const installationCost = form.installation_cost.trim()
       ? Number(form.installation_cost)
       : 0;
-    const tireDisposalFee = quantity * 4;
+    const tireDisposalFee = Number(form.tire_disposal_fee) || 0;
     const nyStateTireFee = quantity * 2.5;
 
     const taxableSubtotal = quantity * tirePrice + installationCost + tireDisposalFee;
@@ -733,8 +750,8 @@ export default function EditJobPage() {
             </Field>
 
             <Field fullWidth>
-              <label style={fieldLabel}>Waste Tire Fee ($4.00 per tire)</label>
-              <input name="tire_disposal_fee" value={form.tire_disposal_fee} readOnly style={{ ...input, background: "#f3f4f6" }} placeholder="Waste Tire Fee" inputMode="decimal" />
+              <label style={fieldLabel}>Waste Tire Fee (editable total)</label>
+              <input name="tire_disposal_fee" value={form.tire_disposal_fee} onChange={handleChange} style={input} placeholder="Waste Tire Fee" inputMode="decimal" />
             </Field>
             <Field fullWidth>
               <label style={fieldLabel}>NY State Tire Tax ($2.50 per tire)</label>

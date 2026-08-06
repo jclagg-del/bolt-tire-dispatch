@@ -12,11 +12,13 @@ export default function AppHeader() {
     { label: "Schedule", path: "/schedule" },
     { label: "Route", path: "/route" },
     { label: "Jobs", path: "/jobs" },
+    { label: "Quotes", path: "/quotes" },
     { label: "Tire Receiving", path: "/tire-receiving" },
     { label: "Orders", path: "/orders" },
     { label: "Customers", path: "/customers" },
     { label: "Billing", path: "/billing" },
     { label: "Completed", path: "/completed" },
+    { label: "Settings", path: "/settings" },
   ];
 
   const handleLogout = async () => {

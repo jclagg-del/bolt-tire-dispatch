@@ -90,7 +90,9 @@ export async function POST(request: Request) {
     ].filter(Boolean).join(" • ");
     addLine(installationItem, installationDescription, Number(job.installation_cost) || 0);
     addLine(stateTireFeeItem, "NY State tire tax", Number(job.ny_state_tire_fee) || qty * 2.5, false, qty, 2.5);
-    addLine(disposalItem, "Waste tire fee", Number(job.tire_disposal_fee) || qty * 4, true, qty, 4);
+    const disposalFee = Number(job.tire_disposal_fee) || qty * 4;
+    const disposalUnitPrice = qty > 0 ? disposalFee / qty : undefined;
+    addLine(disposalItem, "Waste tire fee", disposalFee, true, qty, disposalUnitPrice);
     if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
 
     const invoicePayload: Record<string, unknown> = {

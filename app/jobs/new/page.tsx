@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import {
+  BusinessSettings,
+  fallbackBusinessSettings,
+  installationDefault,
+} from "@/lib/business-settings";
 
 type VehicleOption = {
   id: string;
@@ -91,6 +96,10 @@ const fallbackVehicles: VehicleOption[] = [
 export default function NewJobPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
+  const [installationOverridden, setInstallationOverridden] = useState(false);
+  const [pricingCategory, setPricingCategory] = useState<"passenger" | "truck">("passenger");
+  const [pricingSettings, setPricingSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [lookupMessage, setLookupMessage] = useState("");
   const [vehicles, setVehicles] = useState<VehicleOption[]>(fallbackVehicles);
   const [customerOptions, setCustomerOptions] = useState<string[]>([]);
@@ -133,6 +142,23 @@ export default function NewJobPage() {
     tax_exempt: false,
     quickbooks_customer_id: "",
   });
+
+  useEffect(() => {
+    const loadPricingSettings = async () => {
+      const { data } = await supabase
+        .from("business_settings")
+        .select("*")
+        .eq("id", true)
+        .maybeSingle();
+      const nextSettings = (data as BusinessSettings | null) || fallbackBusinessSettings;
+      setPricingSettings(nextSettings);
+      setForm((current) => ({
+        ...current,
+        sales_tax_rate: current.sales_tax_rate || String(nextSettings.default_sales_tax_rate || ""),
+      }));
+    };
+    loadPricingSettings();
+  }, []);
 
   useEffect(() => {
     const loadCustomers = async () => {
@@ -179,12 +205,23 @@ export default function NewJobPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
+    if (name === "tire_disposal_fee") {
+      setDisposalFeeOverridden(true);
+    }
+    if (name === "installation_cost") {
+      setInstallationOverridden(true);
+    }
+    const quantity = Number(value) || 0;
     setForm((prev) => ({
       ...prev,
       [name]: value,
-      ...(name === "qty" ? {
-        tire_disposal_fee: ((Number(value) || 0) * 4).toFixed(2),
-        ny_state_tire_fee: ((Number(value) || 0) * 2.5).toFixed(2),
+      ...(name === "qty" && !disposalFeeOverridden ? {
+        tire_disposal_fee: (quantity * (pricingCategory === "truck" ? pricingSettings.truck_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
+        ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2),
+        ...(!installationOverridden ? { installation_cost: installationDefault(pricingSettings, quantity, pricingCategory).toFixed(2) } : {}),
+      } : name === "qty" ? {
+        ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2),
+        ...(!installationOverridden ? { installation_cost: installationDefault(pricingSettings, quantity, pricingCategory).toFixed(2) } : {}),
       } : {}),
     }));
   };
@@ -258,8 +295,8 @@ export default function NewJobPage() {
     setSaving(true);
 
     const quantity = Number(form.qty) || 0;
-    const tireDisposalFee = quantity * 4;
-    const nyStateTireFee = quantity * 2.5;
+    const tireDisposalFee = Number(form.tire_disposal_fee) || 0;
+    const nyStateTireFee = Number(form.ny_state_tire_fee) || 0;
     const subtotal =
       quantity * (Number(form.price_tires) || 0) +
       (Number(form.installation_cost) || 0) +
@@ -619,6 +656,29 @@ export default function NewJobPage() {
           <div style={sectionTitle}>Costs</div>
 
           <div style={twoColumnGrid}>
+            <Field fullWidth>
+              <label style={fieldLabel}>Installation pricing preset</label>
+              <select
+                value={pricingCategory}
+                onChange={(event) => {
+                  const category = event.target.value as "passenger" | "truck";
+                  setPricingCategory(category);
+                  setForm((current) => ({
+                    ...current,
+                    ...(!installationOverridden ? {
+                      installation_cost: installationDefault(pricingSettings, Number(current.qty) || 0, category).toFixed(2),
+                    } : {}),
+                    ...(!disposalFeeOverridden ? {
+                      tire_disposal_fee: ((Number(current.qty) || 0) * (category === "truck" ? pricingSettings.truck_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
+                    } : {}),
+                  }));
+                }}
+                style={input}
+              >
+                <option value="passenger">Passenger vehicle</option>
+                <option value="truck">Light truck</option>
+              </select>
+            </Field>
             <Field>
               <label style={fieldLabel}>Tire Price Each</label>
               <input
@@ -644,13 +704,13 @@ export default function NewJobPage() {
             </Field>
 
             <Field fullWidth>
-              <label style={fieldLabel}>Waste Tire Fee ($4.00 per tire)</label>
+              <label style={fieldLabel}>Waste Tire Fee (editable total)</label>
               <input
                 name="tire_disposal_fee"
                 placeholder="Waste Tire Fee"
                 value={form.tire_disposal_fee}
-                readOnly
-                style={{ ...input, background: "#f3f4f6" }}
+                onChange={handleChange}
+                style={input}
                 inputMode="decimal"
               />
             </Field>

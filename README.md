@@ -42,6 +42,16 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
+To make the technician Route page always call and text from a specific Quo
+business number, optionally add:
+
+```bash
+NEXT_PUBLIC_QUO_PHONE_NUMBER=+18455551212
+```
+
+If it is omitted, Quo uses the number currently selected in the technician's
+Quo mobile app. Technicians need the Quo app installed and signed in.
+
 4. Run the app
 
 ```bash

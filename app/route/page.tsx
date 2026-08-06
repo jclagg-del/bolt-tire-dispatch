@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
 
 type Job = {
   id: string | number;
@@ -102,11 +103,6 @@ function formatMoney(value?: number | string | null) {
   const num = Number(value);
   if (Number.isNaN(num)) return "";
   return `$${num.toFixed(2)}`;
-}
-
-function cleanPhone(phone?: string | null) {
-  if (!phone) return "";
-  return phone.replace(/[^\d+]/g, "");
 }
 
 function mapsUrl(address?: string | null) {
@@ -517,7 +513,8 @@ function RouteCard({
 }) {
   const router = useRouter();
   const phone = job.phone || "";
-  const phoneHref = cleanPhone(phone);
+  const quoCallUrl = getQuoCallUrl(phone);
+  const quoTextUrl = getQuoTextUrl(phone);
   const total = formatMoney(job.job_total);
   const unitOrVehicle = job.unit_number || job.vehicle || "";
 
@@ -565,16 +562,16 @@ function RouteCard({
           <span style={btnDisabled}>Go</span>
         )}
 
-        {phoneHref ? (
-          <a href={`tel:${phoneHref}`} style={callBtn}>
+        {quoCallUrl ? (
+          <a href={quoCallUrl} style={callBtn} aria-label={`Call ${job.customer || "customer"} with Quo`}>
             Call
           </a>
         ) : (
           <span style={btnDisabled}>Call</span>
         )}
 
-        {phoneHref ? (
-          <a href={`sms:${phoneHref}`} style={textBtn}>
+        {quoTextUrl ? (
+          <a href={quoTextUrl} style={textBtn} aria-label={`Text ${job.customer || "customer"} with Quo`}>
             Text
           </a>
         ) : (
@@ -585,6 +582,7 @@ function RouteCard({
           {isCompleting ? "Completing..." : "Complete"}
         </button>
       </div>
+      {quoCallUrl ? <div style={quoHint}>Calls and texts open in Quo</div> : null}
     </div>
   );
 }
@@ -664,6 +662,13 @@ const errorBanner: React.CSSProperties = {
   color: "#991b1b",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const quoHint: React.CSSProperties = {
+  marginTop: 8,
+  color: "#64748b",
+  fontSize: 12,
+  textAlign: "center",
 };
 
 const columnsWrap: React.CSSProperties = {
