@@ -276,7 +276,7 @@ export default function SchedulePage() {
   }, [vehicles]);
 
   const weekDays = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
+    return Array.from({ length: 5 }, (_, i) => {
       const dateKey = addDaysToDateKey(weekStart, i);
       const date = new Date(`${dateKey}T12:00:00`);
 
@@ -372,7 +372,7 @@ export default function SchedulePage() {
           <div style={eyebrow}>Schedule</div>
           <h1 style={title}>Weekly Schedule</h1>
           <p style={subtitle}>
-            Drag jobs on desktop or use Move on iPhone to shift them between days.
+            Monday through Friday. Drag jobs on desktop or use Move on iPhone to shift them between days.
           </p>
         </div>
 
@@ -414,7 +414,7 @@ export default function SchedulePage() {
           </button>
         </div>
 
-        <div style={weekGrid}>
+        <div className="week-grid" style={weekGrid}>
           {weekDays.map((day) => {
             const dayJobs = jobsByDay[day.dateKey] || [];
             const isDragOver = dragOverDateKey === day.dateKey;
@@ -493,6 +493,13 @@ export default function SchedulePage() {
             );
           })}
         </div>
+        <style jsx>{`
+          @media (max-width: 900px) {
+            .week-grid {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
       </div>
     </div>
   );
@@ -772,7 +779,7 @@ const todayButton: React.CSSProperties = {
 
 const weekGrid: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
   gap: 12,
 };
 

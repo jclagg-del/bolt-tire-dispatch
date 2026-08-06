@@ -334,6 +334,9 @@ function JobsPageContent() {
     if (statusFilter !== "all") {
       result = result.filter((job) => {
         const status = job.job_status || (job.complete ? "completed" : "scheduled");
+        if (statusFilter === "open") {
+          return !["completed", "billed", "paid"].includes(status);
+        }
         return status === statusFilter;
       });
     }
@@ -502,6 +505,7 @@ function JobsPageContent() {
             style={filterInput}
           >
             <option value="all">All Statuses</option>
+            <option value="open">Open / Not Completed</option>
             <option value="scheduled">Scheduled</option>
             <option value="en_route">En Route</option>
             <option value="on_site">On Site</option>
