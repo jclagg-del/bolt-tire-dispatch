@@ -115,12 +115,17 @@ export default function NewQuotePage() {
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
           <QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" />
           <QuoteField label="Price per tire" value={option.price_per_tire} type="number" onChange={(value) => updateOption(index, "price_per_tire", value)} />
-          <QuoteField label="Mileage warranty" value={option.warranty_miles} type="number" onChange={(value) => updateOption(index, "warranty_miles", value)} />
-          <QuoteField label="Tire type" value={option.tire_type} onChange={(value) => updateOption(index, "tire_type", value)} placeholder="All-season, all-terrain..." />
-          <QuoteField label="Load / speed rating" value={option.load_speed_rating} onChange={(value) => updateOption(index, "load_speed_rating", value)} />
-          <QuoteField label="Snow rating" value={option.snow_rating} onChange={(value) => updateOption(index, "snow_rating", value)} placeholder="3PMSF, M+S..." />
-          <QuoteField label="Availability" value={option.availability} onChange={(value) => updateOption(index, "availability", value)} placeholder="In stock, 2 days..." />
-          <label className="quote-field"><span>Why choose it</span><textarea value={option.highlights} onChange={(event) => updateOption(index, "highlights", event.target.value)} placeholder="Quiet ride, strong snow traction..." /></label>
+          <details className="quote-advanced">
+            <summary>Optional tire details</summary>
+            <div className="quote-advanced-fields">
+              <QuoteField label="Mileage warranty" value={option.warranty_miles} type="number" onChange={(value) => updateOption(index, "warranty_miles", value)} />
+              <QuoteField label="Tire type" value={option.tire_type} onChange={(value) => updateOption(index, "tire_type", value)} placeholder="All-season, all-terrain..." />
+              <QuoteField label="Load / speed rating" value={option.load_speed_rating} onChange={(value) => updateOption(index, "load_speed_rating", value)} />
+              <QuoteField label="Snow rating" value={option.snow_rating} onChange={(value) => updateOption(index, "snow_rating", value)} placeholder="3PMSF, M+S..." />
+              <QuoteField label="Availability" value={option.availability} onChange={(value) => updateOption(index, "availability", value)} placeholder="In stock, 2 days..." />
+              <label className="quote-field"><span>Why choose it</span><textarea value={option.highlights} onChange={(event) => updateOption(index, "highlights", event.target.value)} placeholder="Quiet ride, strong snow traction..." /></label>
+            </div>
+          </details>
           <div className="quote-option-total">Installed total <strong>${totals[index].toFixed(2)}</strong></div>
         </div>)}
       </section>

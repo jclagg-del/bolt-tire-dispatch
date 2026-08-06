@@ -1,4 +1,5 @@
 import AuthGate from "@/components/AuthGate";
+import "./globals.css";
 
 export default function RootLayout({
   children,
