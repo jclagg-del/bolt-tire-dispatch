@@ -97,6 +97,7 @@ export default function NewJobPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
+  const [stateFeeOverridden, setStateFeeOverridden] = useState(false);
   const [installationOverridden, setInstallationOverridden] = useState(false);
   const [pricingCategory, setPricingCategory] = useState<"passenger" | "truck">("passenger");
   const [pricingSettings, setPricingSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
@@ -208,6 +209,9 @@ export default function NewJobPage() {
     if (name === "tire_disposal_fee") {
       setDisposalFeeOverridden(true);
     }
+    if (name === "ny_state_tire_fee") {
+      setStateFeeOverridden(true);
+    }
     if (name === "installation_cost") {
       setInstallationOverridden(true);
     }
@@ -217,10 +221,10 @@ export default function NewJobPage() {
       [name]: value,
       ...(name === "qty" && !disposalFeeOverridden ? {
         tire_disposal_fee: (quantity * (pricingCategory === "truck" ? pricingSettings.truck_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
-        ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2),
+        ...(!stateFeeOverridden ? { ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2) } : {}),
         ...(!installationOverridden ? { installation_cost: installationDefault(pricingSettings, quantity, pricingCategory).toFixed(2) } : {}),
       } : name === "qty" ? {
-        ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2),
+        ...(!stateFeeOverridden ? { ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2) } : {}),
         ...(!installationOverridden ? { installation_cost: installationDefault(pricingSettings, quantity, pricingCategory).toFixed(2) } : {}),
       } : {}),
     }));
@@ -715,8 +719,8 @@ export default function NewJobPage() {
               />
             </Field>
             <Field fullWidth>
-              <label style={fieldLabel}>NY State Tire Tax ($2.50 per tire)</label>
-              <input name="ny_state_tire_fee" value={form.ny_state_tire_fee} readOnly style={{ ...input, background: "#f3f4f6" }} inputMode="decimal" />
+              <label style={fieldLabel}>NY State Tire Fee (editable total)</label>
+              <input name="ny_state_tire_fee" value={form.ny_state_tire_fee} onChange={handleChange} style={input} inputMode="decimal" />
             </Field>
           </div>
 

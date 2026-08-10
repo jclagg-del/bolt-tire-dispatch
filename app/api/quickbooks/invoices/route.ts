@@ -89,7 +89,11 @@ export async function POST(request: Request) {
       job.vehicle_mileage ? `${job.vehicle_mileage} miles` : null,
     ].filter(Boolean).join(" • ");
     addLine(installationItem, installationDescription, Number(job.installation_cost) || 0);
-    addLine(stateTireFeeItem, "NY State tire tax", Number(job.ny_state_tire_fee) || qty * 2.5, false, qty, 2.5);
+    const stateTireFee = job.ny_state_tire_fee !== null && job.ny_state_tire_fee !== undefined
+      ? Number(job.ny_state_tire_fee) || 0
+      : qty * 2.5;
+    const stateTireFeeUnitPrice = qty > 0 ? stateTireFee / qty : undefined;
+    addLine(stateTireFeeItem, "NY State tire tax", stateTireFee, false, qty, stateTireFeeUnitPrice);
     const disposalFee = Number(job.tire_disposal_fee) || qty * 4;
     const disposalUnitPrice = qty > 0 ? disposalFee / qty : undefined;
     addLine(disposalItem, "Waste tire fee", disposalFee, true, qty, disposalUnitPrice);
