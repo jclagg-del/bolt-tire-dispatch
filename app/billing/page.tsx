@@ -301,6 +301,7 @@ export default function BillingPage() {
                     <th style={th}>Customer</th>
                     <th style={th}>Vehicle</th>
                     <th style={th}>{section.paidSection ? "Date Paid" : "Scheduled"}</th>
+                    <th style={th}>Invoice #</th>
                     <th style={th}>Total</th>
                     <th style={th}>Payment</th>
                     <th style={th}>Action</th>
@@ -322,6 +323,7 @@ export default function BillingPage() {
                           {job.unit_number || job.vehicle || "—"}
                         </td>
                         <td style={td}>{formatScheduled(section.paidSection ? job.paid_date || job.scheduled : job.scheduled)}</td>
+                        <td style={tdStrong}>{job.invoice_number || "—"}</td>
                         <td style={tdStrong}>{formatMoney(job.job_total)}</td>
 
                         <td style={td}>
