@@ -1,0 +1,8 @@
+create table if not exists public.staff_security (user_id uuid primary key references auth.users(id) on delete cascade,email text not null,role text not null default 'technician' check (role in ('admin','office','technician')),password_change_required boolean not null default false,password_changed_at timestamptz,updated_at timestamptz not null default now());
+alter table public.staff_security enable row level security;
+create policy "Staff read own security" on public.staff_security for select to authenticated using ((select auth.uid())=user_id);
+create policy "Staff update own security" on public.staff_security for update to authenticated using ((select auth.uid())=user_id) with check ((select auth.uid())=user_id);
+insert into public.staff_security(user_id,email,role,password_change_required) select id,coalesce(email,''),case when lower(coalesce(email,''))='jclagg@bolttire.com' then 'admin' else 'technician' end,true from auth.users on conflict(user_id) do update set email=excluded.email,role=excluded.role,password_change_required=true;
+create or replace function public.create_staff_security_profile() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into public.staff_security(user_id,email,role,password_change_required) values(new.id,coalesce(new.email,''),'technician',true) on conflict(user_id) do nothing; return new; end; $$;
+drop trigger if exists on_auth_user_created_staff_security on auth.users;
+create trigger on_auth_user_created_staff_security after insert on auth.users for each row execute function public.create_staff_security_profile();

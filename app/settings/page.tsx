@@ -86,6 +86,7 @@ export default function SettingsPage() {
   const [quickBooksConnected, setQuickBooksConnected] = useState<boolean | null>(null);
   const [passkeys, setPasskeys] = useState<Array<{ id: string; friendly_name?: string; created_at: string }>>([]);
   const [passkeySupported, setPasskeySupported] = useState(false);
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -104,7 +105,10 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings();
     setPasskeySupported(typeof window !== "undefined" && "PublicKeyCredential" in window);
+    supabase.auth.getUser().then(async({data})=>{if(!data.user)return;const{data:p}=await supabase.from("staff_security").select("role").eq("user_id",data.user.id).maybeSingle();setCurrentRole(p?.role||null)});
   }, []);
+
+  const forcePasswordReset=async()=>{if(!confirm("Require every non-admin staff member to create a new password?"))return;setSaving(true);const{data}=await supabase.auth.getSession();const response=await fetch("/api/admin/force-password-reset",{method:"POST",headers:{Authorization:`Bearer ${data.session?.access_token||""}`}});const result=await response.json().catch(()=>({}));setSaving(false);setMessage(response.ok?"Password change required for all non-admin staff.":result.error||"Could not require password changes.")};
 
   useEffect(() => {
     if (section !== "security") return;
@@ -328,6 +332,7 @@ export default function SettingsPage() {
                   ))}
                 </div>
                 <div style={card}><h2 style={cardTitle}>Automatic lock</h2><p style={{ ...cardDescription, marginBottom: 0 }}>For customer privacy, the app signs out after 15 minutes without activity. Face ID makes signing back in quick.</p></div>
+                {currentRole==="admin"?<div style={card}><h2 style={cardTitle}>Require new staff passwords</h2><p style={cardDescription}>Signs out non-admin staff and requires a strong new password before customer information can be viewed.</p><button type="button" onClick={forcePasswordReset} disabled={saving} style={dangerButton}>{saving?"Working...":"Require Password Changes"}</button></div>:null}
               </>
             ) : null}
 

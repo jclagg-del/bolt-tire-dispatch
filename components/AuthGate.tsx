@@ -11,6 +11,7 @@ const PUBLIC_ROUTES = [
   "/privacy",
   "/terms",
   "/quickbooks/disconnected",
+  "/change-password",
 ];
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
@@ -50,6 +51,11 @@ export default function AuthGate({
         router.replace("/login");
         setChecking(false);
         return;
+      }
+
+      const { data: security } = await supabase.from("staff_security").select("password_change_required").eq("user_id", session.user.id).maybeSingle();
+      if (security?.password_change_required && pathname !== "/change-password") {
+        router.replace("/change-password"); setChecking(false); return;
       }
 
       setChecking(false);
