@@ -23,7 +23,7 @@ type Vehicle = {
   sort_order: number;
 };
 
-type Section = "pricing" | "team" | "vehicles" | "integrations";
+type Section = "pricing" | "team" | "vehicles" | "security" | "integrations";
 
 const pricingGroups: Array<{
   title: string;
@@ -84,6 +84,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [quickBooksConnected, setQuickBooksConnected] = useState<boolean | null>(null);
+  const [passkeys, setPasskeys] = useState<Array<{ id: string; friendly_name?: string; created_at: string }>>([]);
+  const [passkeySupported, setPasskeySupported] = useState(false);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -101,7 +103,44 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadSettings();
+    setPasskeySupported(typeof window !== "undefined" && "PublicKeyCredential" in window);
   }, []);
+
+  useEffect(() => {
+    if (section !== "security") return;
+    const loadPasskeys = async () => {
+      const { data, error } = await supabase.auth.passkey.list();
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+      setPasskeys(data || []);
+    };
+    loadPasskeys();
+  }, [section]);
+
+  const addPasskey = async () => {
+    setSaving(true);
+    setMessage("");
+    const { error } = await supabase.auth.registerPasskey();
+    if (error) {
+      setSaving(false);
+      setMessage(error.message);
+      return;
+    }
+    const { data } = await supabase.auth.passkey.list();
+    setPasskeys(data || []);
+    setSaving(false);
+    setMessage("Face ID / passkey added to your account.");
+  };
+
+  const removePasskey = async (id: string) => {
+    setSaving(true);
+    const { error } = await supabase.auth.passkey.delete({ passkeyId: id });
+    if (!error) setPasskeys((items) => items.filter((item) => item.id !== id));
+    setSaving(false);
+    setMessage(error ? error.message : "Passkey removed.");
+  };
 
   useEffect(() => {
     if (section !== "integrations") return;
@@ -194,6 +233,7 @@ export default function SettingsPage() {
               ["pricing", "Pricing & Fees"],
               ["team", "Technicians"],
               ["vehicles", "Service Vehicles"],
+              ["security", "Security"],
               ["integrations", "Integrations"],
             ] as Array<[Section, string]>).map(([key, label]) => (
               <button key={key} type="button" onClick={() => { setSection(key); setMessage(""); }} style={{ ...navButton, ...(section === key ? navButtonActive : {}) }}>
@@ -270,6 +310,27 @@ export default function SettingsPage() {
               </div>
             )) : null}
 
+            {!loading && section === "security" ? (
+              <>
+                <div style={card}>
+                  <h2 style={cardTitle}>Face ID and passkeys</h2>
+                  <p style={cardDescription}>Register this iPhone, iPad, Mac, or security key for passwordless sign-in. Bolt Tire never receives or stores your fingerprint or face data.</p>
+                  {!passkeySupported ? <p style={warningBox}>This browser does not support passkeys. Open the app in Safari or another current browser.</p> : null}
+                  <button type="button" onClick={addPasskey} disabled={saving || !passkeySupported} style={primaryButton}>{saving ? "Please wait..." : "Add Face ID / Passkey"}</button>
+                </div>
+                <div style={card}>
+                  <h2 style={cardTitle}>Your registered devices</h2>
+                  {passkeys.length === 0 ? <p style={cardDescription}>No passkeys registered yet. Password sign-in remains available for recovery.</p> : passkeys.map((passkey) => (
+                    <div style={securityRow} key={passkey.id}>
+                      <div><strong>{passkey.friendly_name || "Passkey"}</strong><div style={deviceDate}>Added {new Date(passkey.created_at).toLocaleDateString()}</div></div>
+                      <button type="button" onClick={() => removePasskey(passkey.id)} disabled={saving} style={dangerButton}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={card}><h2 style={cardTitle}>Automatic lock</h2><p style={{ ...cardDescription, marginBottom: 0 }}>For customer privacy, the app signs out after 15 minutes without activity. Face ID makes signing back in quick.</p></div>
+              </>
+            ) : null}
+
             {!loading && section === "integrations" ? (
               <>
                 <div style={card}><div style={integrationRow}><div><h2 style={cardTitle}>QuickBooks Online</h2><p style={cardDescription}>Customer lookup, invoices, balances, and payment status.</p></div><span style={quickBooksConnected ? connectedBadge : disconnectedBadge}>{quickBooksConnected === null ? "Checking..." : quickBooksConnected ? "Connected" : "Not connected"}</span></div></div>
@@ -315,3 +376,7 @@ const colorInput: React.CSSProperties = { width: 60, height: 42, border: "1px so
 const integrationRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" };
 const connectedBadge: React.CSSProperties = { background: "#dcfce7", color: "#166534", padding: "6px 10px", borderRadius: 999, fontWeight: 800, fontSize: 13 };
 const disconnectedBadge: React.CSSProperties = { background: "#fef3c7", color: "#92400e", padding: "6px 10px", borderRadius: 999, fontWeight: 800, fontSize: 13 };
+const warningBox: React.CSSProperties = { background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", padding: 12, borderRadius: 9 };
+const securityRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid #e2e8f0" };
+const deviceDate: React.CSSProperties = { color: "#64748b", fontSize: 13, marginTop: 3 };
+const dangerButton: React.CSSProperties = { border: "1px solid #fecaca", borderRadius: 9, padding: "8px 12px", background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" };

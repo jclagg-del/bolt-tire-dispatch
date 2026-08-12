@@ -7,6 +7,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +30,20 @@ export default function LoginPage() {
     window.location.href = "/";
   };
 
+  const handlePasskeyLogin = async () => {
+    if (passkeyLoading) return;
+    setPasskeyLoading(true);
+    const { error } = await supabase.auth.signInWithPasskey();
+    setPasskeyLoading(false);
+    if (error) {
+      alert(error.message === "Passkey authentication is disabled"
+        ? "Face ID sign-in is not enabled yet. Use your password for now."
+        : error.message);
+      return;
+    }
+    window.location.href = "/";
+  };
+
   return (
     <div style={page}>
       <div style={card}>
@@ -43,6 +58,11 @@ export default function LoginPage() {
         <p style={subtitle}>
           Log in to access the Bolt Tire dispatch system.
         </p>
+
+        <button type="button" onClick={handlePasskeyLogin} style={passkeyButton} disabled={passkeyLoading || loading}>
+          {passkeyLoading ? "Checking Face ID..." : "Sign in with Face ID"}
+        </button>
+        <div style={divider}><span style={dividerLine} /><span>or use password</span><span style={dividerLine} /></div>
 
         <form onSubmit={handleLogin}>
           <input
@@ -143,3 +163,12 @@ const button: React.CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
 };
+
+const passkeyButton: React.CSSProperties = {
+  ...button,
+  marginTop: 0,
+  background: "#2563eb",
+};
+
+const divider: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, margin: "18px 0 4px", color: "#64748b", fontSize: 13 };
+const dividerLine: React.CSSProperties = { height: 1, background: "#e2e8f0", flex: 1 };

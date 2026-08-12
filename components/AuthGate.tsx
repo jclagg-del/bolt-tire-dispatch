@@ -13,6 +13,8 @@ const PUBLIC_ROUTES = [
   "/quickbooks/disconnected",
 ];
 
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
 export default function AuthGate({
   children,
 }: {
@@ -72,6 +74,27 @@ export default function AuthGate({
       subscription.unsubscribe();
     };
   }, [isPublicRoute, pathname, router]);
+
+  useEffect(() => {
+    if (isPublicRoute) return;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    const lockSession = async () => {
+      await supabase.auth.signOut({ scope: "local" });
+      router.replace("/login?locked=1");
+    };
+    const resetTimer = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(lockSession, IDLE_TIMEOUT_MS);
+    };
+    const events: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "touchstart", "scroll"];
+    events.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      clearTimeout(timeout);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [isPublicRoute, router]);
 
   if (checking) {
     return (
