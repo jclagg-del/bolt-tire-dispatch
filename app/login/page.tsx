@@ -37,7 +37,7 @@ export default function LoginPage() {
     setPasskeyLoading(false);
     if (error) {
       alert(error.message === "Passkey authentication is disabled"
-        ? "Face ID sign-in is not enabled yet. Use your password for now."
+        ? "Passkey sign-in is not enabled yet. Use your password for now."
         : error.message);
       return;
     }
@@ -60,7 +60,7 @@ export default function LoginPage() {
         </p>
 
         <button type="button" onClick={handlePasskeyLogin} style={passkeyButton} disabled={passkeyLoading || loading}>
-          {passkeyLoading ? "Checking Face ID..." : "Sign in with Face ID"}
+          {passkeyLoading ? "Checking passkey..." : "Sign in with Passkey"}
         </button>
         <div style={divider}><span style={dividerLine} /><span>or use password</span><span style={dividerLine} /></div>
 
