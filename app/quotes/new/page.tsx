@@ -165,5 +165,5 @@ export default function NewQuotePage() {
 }
 
 function QuoteField({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
-  return <label className="quote-field"><span>{label}</span><input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></label>;
+  return <label className="quote-field"><span>{label}</span><input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "1" : undefined} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></label>;
 }
