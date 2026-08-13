@@ -27,6 +27,8 @@ export default function NewQuotePage() {
   const [options, setOptions] = useState<QuoteOption[]>(emptyQuoteOptions.map((option) => ({ ...option })));
   const [settings, setSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [saving, setSaving] = useState(false);
+  const [uploadingTier, setUploadingTier] = useState<string | null>(null);
+  const [draggingTier, setDraggingTier] = useState<string | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -54,6 +56,21 @@ export default function NewQuotePage() {
 
   const updateOption = (index: number, key: keyof QuoteOption, value: string | boolean) => {
     setOptions((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
+  };
+
+  const uploadPhoto = async (index: number, file?: File) => {
+    if (!file) return;
+    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) return alert("Use a JPEG, PNG, or WebP image.");
+    if (file.size > 8 * 1024 * 1024) return alert("The image must be smaller than 8 MB.");
+    const option = options[index];
+    setUploadingTier(option.tier);
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage.from("quote-images").upload(path, file, { contentType: file.type, upsert: false });
+    if (error) { setUploadingTier(null); return alert(`Could not upload photo: ${error.message}`); }
+    const { data } = supabase.storage.from("quote-images").getPublicUrl(path);
+    updateOption(index, "image_url", data.publicUrl);
+    setUploadingTier(null);
   };
 
   const totals = useMemo(() => options.map((option) => quoteOptionTotal(option, Number(form.quantity) || 0, {
@@ -110,10 +127,14 @@ export default function NewQuotePage() {
       <section className="quote-option-grid">
         {options.map((option, index) => <div className={`quote-option-card ${option.recommended ? "recommended" : ""}`} key={option.tier}>
           <div className="quote-tier-row"><span className={`quote-tier ${option.tier}`}>{option.tier}</span><label><input type="radio" name="recommended" checked={option.recommended} onChange={() => setOptions((items) => items.map((item, itemIndex) => ({ ...item, recommended: itemIndex === index })))} /> Recommended</label></div>
-          {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">Tire image preview</div>}
+          <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadPhoto(index, event.target.files?.[0]); event.target.value = ""; }} />
+            {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Drag tire photo here or tap to choose"}</div>}
+            {option.image_url ? <span className="quote-photo-change">Drop or tap to replace photo</span> : null}
+          </label>
           <QuoteField label="Brand" value={option.brand} onChange={(value) => updateOption(index, "brand", value)} />
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
-          <QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" />
+          <details className="quote-image-url"><summary>Or use an image URL</summary><QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" /></details>
           <QuoteField label="Price per tire" value={option.price_per_tire} type="number" onChange={(value) => updateOption(index, "price_per_tire", value)} />
           <details className="quote-advanced">
             <summary>Optional tire details</summary>
