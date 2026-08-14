@@ -85,6 +85,8 @@ export default function QuoteDetailPage() {
     const taxableSubtotal = tireSubtotal + Number(quote.installation_cost) + Number(quote.service_call_fee) + Number(quote.disposal_fee);
     const salesTax = quote.tax_exempt ? 0 : taxableSubtotal * (Number(quote.sales_tax_rate) / 100);
     const total = taxableSubtotal + Number(quote.ny_state_tire_fee) + salesTax;
+    const paidThroughStripe = quote.payment_status === "paid";
+    const paymentDate = paidThroughStripe ? new Date().toISOString() : null;
     const combinedNotes = [quote.notes, `Converted from quote #${quote.quote_number}`, quote.service_call_fee > 0 ? `Service call: $${Number(quote.service_call_fee).toFixed(2)}` : null].filter(Boolean).join("\n");
     const { data: job, error } = await supabase.from("jobs").insert({
       customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
@@ -93,7 +95,10 @@ export default function QuoteDetailPage() {
       tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee),
       address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + Number(quote.ny_state_tire_fee),
       sales_tax_rate: quote.tax_exempt ? 0 : Number(quote.sales_tax_rate), sales_tax_amount: salesTax,
-      tax_exempt: quote.tax_exempt, job_total: total, payment_status: "unpaid", job_status: "unscheduled",
+      tax_exempt: quote.tax_exempt, job_total: total,
+      payment_status: paidThroughStripe ? "paid" : "unpaid",
+      job_status: paidThroughStripe ? "paid" : "unscheduled",
+      paid_date: paymentDate,
       complete: false, vehicle_id: "stepvan",
     }).select("id").single();
     if (error || !job) { setSaving(false); return alert(`Could not create job: ${error?.message || "Unknown error"}`); }
