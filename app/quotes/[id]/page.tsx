@@ -12,6 +12,7 @@ type SavedQuote = {
   address: string | null; notes: string | null; service_category: string; installation_cost: number;
   service_call_fee: number; disposal_fee: number; ny_state_tire_fee: number; sales_tax_rate: number;
   tax_exempt: boolean; selected_option_id: string | null; expires_at: string | null; converted_job_id: string | null;
+  public_token: string; payment_status: "unpaid" | "pending" | "paid" | "refunded"; amount_paid: number | null;
   quote_options: Array<Omit<QuoteOption, "price_per_tire" | "warranty_miles"> & { id: string; price_per_tire: number; warranty_miles: number | null }>;
 };
 
@@ -60,6 +61,21 @@ export default function QuoteDetailPage() {
     await loadQuote();
   };
 
+  const copyCustomerLink = async () => {
+    if (!quote?.public_token) return setMessage("Save the quote before sharing it.");
+    const link = `${window.location.origin}/q/${quote.public_token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      if (quote.status === "draft") {
+        await supabase.from("quotes").update({ status: "sent", updated_at: new Date().toISOString() }).eq("id", quote.id);
+        setQuote({ ...quote, status: "sent" });
+      }
+      setMessage("Customer quote link copied. Paste it into a text or email.");
+    } catch {
+      window.prompt("Copy this customer quote link:", link);
+    }
+  };
+
   const convertToJob = async () => {
     if (!quote || quote.converted_job_id) return;
     const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id);
@@ -93,8 +109,10 @@ export default function QuoteDetailPage() {
   return <div className="quote-shell"><AppHeader /><main className="quote-page">
     <div className="quote-page-header"><div><div className="quote-eyebrow">Quote #{quote.quote_number}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, quote.tire_size, `${quote.quantity} tires`].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
       <select value={quote.status} onChange={(event) => updateStatus(event.target.value as QuoteStatus)} disabled={saving || quote.status === "converted"}><option value="draft">Draft</option><option value="sent">Sent</option><option value="viewed">Viewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="expired">Expired</option><option value="converted">Converted</option></select>
+      <button onClick={copyCustomerLink} disabled={saving}>Copy Customer Link</button>
       <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : "Convert to Job"}</button>
     </div></div>
+    {quote.payment_status === "paid" ? <div className="quote-paid-banner"><strong>Paid${quote.amount_paid != null ? ` — $${Number(quote.amount_paid).toFixed(2)}` : ""}</strong><span>Stripe payment received. This quote is ready to schedule or convert to a job.</span></div> : quote.payment_status === "pending" ? <div className="quote-message">Customer checkout has started; payment has not been confirmed yet.</div> : null}
     {message ? <div className="quote-message">{message}</div> : null}
 
     <section className="quote-customer-summary"><div><strong>{quote.contact_name || "Customer contact"}</strong><span>{quote.phone || "No phone"}</span><span>{quote.email || "No email"}</span></div><div><strong>Service</strong><span>{quote.service_category}</span><span>{quote.address || "No service address"}</span></div><div><strong>Quote expires</strong><span>{quote.expires_at ? new Date(`${quote.expires_at}T12:00:00`).toLocaleDateString() : "No expiration"}</span></div></section>

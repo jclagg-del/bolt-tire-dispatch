@@ -69,6 +69,15 @@ body{
 .quote-photo-change { text-align: center; color: #64748b; font-size: 12px; font-weight: 700; padding-bottom: 3px; }
 .quote-image-url summary { cursor: pointer; color: #64748b; font-size: 13px; font-weight: 700; }
 .quote-image-url .quote-field { margin-top: 9px; }
+.public-quote-page { min-height: 100vh; max-width: 1180px; margin: 0 auto; padding: 24px; background: #f8fafc; }
+.public-quote-header { display: flex; align-items: center; gap: 22px; margin-bottom: 24px; }
+.public-quote-header img { width: 210px; max-width: 38vw; }
+.public-quote-header span { color: #64748b; font-weight: 800; text-transform: uppercase; font-size: 12px; }
+.public-quote-header h1 { margin: 4px 0; color: #0f172a; }
+.public-quote-header p { margin: 0; color: #475569; }
+.quote-paid-banner { display: grid; gap: 5px; padding: 18px; border: 1px solid #86efac; background: #dcfce7; color: #166534; border-radius: 14px; margin-bottom: 18px; }
+.public-quote-footer { text-align: center; color: #64748b; font-size: 13px; padding: 28px 0 10px; }
+@media (max-width: 640px) { .public-quote-page { padding: 14px; } .public-quote-header { align-items: flex-start; flex-direction: column; gap: 12px; } .public-quote-header img { max-width: 220px; } }
 .quote-option-total, .quote-installed-total { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border-top: 1px solid #e2e8f0; padding-top: 11px; color: #475569; font-weight: 700; }
 .quote-advanced { border-top: 1px solid #e2e8f0; padding-top: 10px; }
 .quote-advanced summary { color: #2563eb; font-weight: 800; cursor: pointer; }
