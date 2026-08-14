@@ -27,7 +27,7 @@ export default function QuoteDetailPage() {
 
   const loadQuote = async () => {
     if (!id) return;
-    const { data, error } = await supabase.from("quotes").select("*,quote_options(*)").eq("id", id).single();
+    const { data, error } = await supabase.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", id).single();
     setLoading(false);
     if (error) { setMessage(error.message); return; }
     const next = data as SavedQuote;
