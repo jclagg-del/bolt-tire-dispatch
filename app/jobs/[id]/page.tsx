@@ -466,6 +466,17 @@ export default function EditJobPage() {
       return;
     }
 
+    const { data: sessionData } = await supabase.auth.getSession();
+    const notification = await fetch("/api/notifications/job-completed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
+      body: JSON.stringify({ jobId: id }),
+    });
+    if (!notification.ok && form.customer === "Kingdom Support Services") {
+      const result = await notification.json().catch(() => ({}));
+      alert(`Job completed, but Kingdom's email could not be sent: ${result.error || "Unknown error"}`);
+    }
+
     setShowCompleteModal(false);
     router.push("/completed");
     router.refresh();

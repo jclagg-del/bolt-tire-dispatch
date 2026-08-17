@@ -180,6 +180,9 @@ export default function KingdomSchedulePage() {
           <Link href="/order/kingdom" style={backButton}>
             Submit a New Request
           </Link>
+          <Link href="/kingdom-orders" style={{ ...backButton, marginLeft: 10, background: "#e2e8f0", color: "#0f172a" }}>
+            Search All Orders
+          </Link>
         </section>
 
         {loading && (

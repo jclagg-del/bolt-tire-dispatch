@@ -447,6 +447,9 @@ export default function KingdomOrderPage() {
               <Link href="/kingdom-schedule" style={scheduleLinkButton}>
                 View Scheduled Work
               </Link>
+              <Link href="/kingdom-orders" style={{ ...scheduleLinkButton, marginLeft: 10 }}>
+                Search All Orders
+              </Link>
             </section>
 
             <form onSubmit={handleSubmit} style={formCard}>

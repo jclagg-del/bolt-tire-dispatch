@@ -8,6 +8,7 @@ const PUBLIC_ROUTES = [
   "/login",
   "/order/kingdom",
   "/kingdom-schedule",
+  "/kingdom-orders",
   "/privacy",
   "/terms",
   "/quickbooks/disconnected",
