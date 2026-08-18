@@ -45,6 +45,7 @@ type AtdProduct = {
   images?: Record<string, { image?: Array<{ url?: string }>; images?: Array<{ url?: string }> }>;
   productspec?: Record<string, string>;
   rebates?: Array<{ code?: string; description?: string; url?: string }>;
+  fitmentPosition?: "front" | "rear" | "both";
 };
 
 type InventoryProduct = { local?: number; localplus?: number; nationwide?: number; onhand?: number; atdproductnumber: string };
@@ -106,6 +107,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       size: product.productspec?.size || product.description?.split(" ")[0] || "",
       category: product.productspec?.seasonaldesignation || product.productgroup || "Tire",
       serviceCategory: truck ? "truck" : "passenger",
+      fitmentPosition: product.fitmentPosition || "both",
       loadSpeed: [product.productspec?.loadindex, product.productspec?.speedrating].filter(Boolean).join(" "),
       warranty: product.productspec?.mileagewarranty || "",
       snowRated: (product.productspec?.winterdesignation || "").toLowerCase().includes("snowflake"),
@@ -154,15 +156,24 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
     criteria: { productgroup: ["passenger tires", "light truck tires"] },
     options: { price: { cost: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {}, includerebates: 1, includemarketingprograms: 1 },
   });
-  const products = (response.fitments || []).flatMap((fitment) => (fitment.fitmentresults || []).flatMap((result) => Object.values(result.position || {}).flatMap((position) => position.products || []))).slice(0, 30);
+  const products = (response.fitments || []).flatMap((fitment) =>
+    (fitment.fitmentresults || []).flatMap((result) =>
+      Object.entries(result.position || {}).flatMap(([position, group]) =>
+        (group.products || []).map((product) => ({ ...product, fitmentPosition: position as "front" | "rear" | "both" }))
+      )
+    )
+  ).slice(0, 60);
   const settings = await pricingSettings();
   const fitmentProducts = presentProducts(products, await inventoryFor(products), includeCost, settings);
   const trimOption = String(vehicle.trimoption || "");
-  const factoryFits = Array.from(trimOption.matchAll(/((?:LT|P)?\d{3}\/\d{2}(?:ZR|R)\d{2})(?:\/[A-Z])?\s+(\d{2,3})?/gi)).map((match) => ({ size: match[1], load: Number(match[2] || 0) }));
+  const factoryFits = Array.from(trimOption.matchAll(/((?:LT|P)?\d{3}\/\d{2}(?:ZR|R)\d{2})(?:\/[A-Z])?\s+(\d{2,3})?/gi)).map((match, index, matches) => ({ size: match[1], load: Number(match[2] || 0), position: matches.length > 1 ? (index === 0 ? "front" : "rear") : "both" } as const));
   if (!factoryFits.length) return fitmentProducts;
-  const supplementalGroups = await Promise.all(factoryFits.map(async ({ size, load }) => {
+  const supplementalGroups = await Promise.all(factoryFits.map(async ({ size, load, position }) => {
     const sizeProducts = await searchAtdBySize(size, includeCost);
-    return load ? sizeProducts.filter((item) => Number(item.loadSpeed.match(/\d{2,3}/)?.[0] || 0) >= load) : sizeProducts;
+    const safeProducts = load ? sizeProducts.filter((item) => Number(item.loadSpeed.match(/\d{2,3}/)?.[0] || 0) >= load) : sizeProducts;
+    return safeProducts.map((item) => ({ ...item, fitmentPosition: position }));
   }));
-  return Array.from(new Map([...fitmentProducts, ...supplementalGroups.flat()].map((item) => [item.id, item])).values()).slice(0, 30);
+  const combined = Array.from(new Map([...fitmentProducts, ...supplementalGroups.flat()].map((item) => [`${item.fitmentPosition}:${item.id}`, item])).values());
+  if (factoryFits.length > 1) return [...combined.filter((item) => item.fitmentPosition === "front").slice(0, 15), ...combined.filter((item) => item.fitmentPosition === "rear").slice(0, 15)];
+  return combined.slice(0, 30);
 }

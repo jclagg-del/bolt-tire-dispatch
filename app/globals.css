@@ -113,6 +113,7 @@ body{
 
 .tire-beta-page { min-height: 100vh; max-width: 1420px; margin: 0 auto; padding: 28px 22px 60px; color: #0f172a; }
 .tire-beta-hero { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; margin-bottom: 20px; }
+.tire-beta-page.public .tire-beta-hero{position:relative;overflow:hidden;border-radius:22px;padding:28px;background:linear-gradient(125deg,#0f172a 0%,#172554 58%,#1d4ed8 145%);color:#fff;box-shadow:0 18px 42px rgba(15,23,42,.18)}.tire-beta-page.public .tire-beta-hero:after{content:"";position:absolute;right:-90px;top:-130px;width:320px;height:320px;border-radius:50%;border:55px solid rgba(255,255,255,.06)}.tire-beta-page.public .tire-beta-hero>div,.tire-beta-page.public .tire-beta-badge{position:relative;z-index:1}.tire-beta-page.public .tire-beta-hero p{color:#cbd5e1;font-size:16px}.tire-beta-page.public .tire-beta-kicker{color:#93c5fd}.tire-beta-benefits{display:flex;flex-wrap:wrap;gap:9px;margin-top:17px}.tire-beta-benefits span{padding:7px 10px;border:1px solid rgba(255,255,255,.17);border-radius:999px;background:rgba(255,255,255,.08);font-size:12px;font-weight:800}
 .tire-beta-kicker { color: #2563eb; font-weight: 900; font-size: 12px; letter-spacing: .8px; text-transform: uppercase; }
 .tire-beta-hero h1 { margin: 5px 0 7px; font-size: clamp(30px, 4vw, 46px); letter-spacing: -1.5px; }
 .tire-beta-hero p { margin: 0; color: #64748b; max-width: 720px; }
@@ -147,6 +148,7 @@ body{
 .tire-beta-image img { width: 100%; height: 145px; object-fit: contain; mix-blend-mode: multiply; }
 .tire-beta-image small { font-size: 11px; }
 .tire-beta-brand { color: #2563eb; text-transform: uppercase; font-size: 12px; font-weight: 900; letter-spacing: .5px; }
+.tire-beta-brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px}.tire-beta-position{border-radius:999px;padding:5px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tire-beta-position.front{background:#dbeafe;color:#1d4ed8}.tire-beta-position.rear{background:#ede9fe;color:#6d28d9}.tire-beta-staggered-note{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:13px;padding:12px 15px;color:#9a3412}.tire-beta-staggered-note span{font-size:12px}
 .tire-beta-product h2 { margin: 3px 0 5px; font-size: 22px; }
 .tire-beta-product-main p { color: #166534; font-weight: 800; margin: 11px 0 0; }
 .tire-beta-tags, .tire-beta-stock { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
