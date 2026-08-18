@@ -7,6 +7,7 @@ import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type KingdomJob = {
   id: string | number;
+  order_id?: number | null;
   scheduled: string | null;
   vehicle: string | null;
   unit_number: string | null;
@@ -151,7 +152,27 @@ export default function KingdomSchedulePage() {
         return;
       }
 
-      setJobs((data || []) as KingdomJob[]);
+      const loadedJobs = (data || []) as KingdomJob[];
+      const orderResponse = await fetch("/api/public/kingdom/orders", {
+        cache: "no-store",
+      });
+
+      if (orderResponse.ok) {
+        const orders = await orderResponse.json();
+        const orderByJob = new Map<number, number>(
+          (Array.isArray(orders) ? orders : [])
+            .filter((order: { approved_job_id: number | null }) => order.approved_job_id !== null)
+            .map((order: { id: number; approved_job_id: number }) => [Number(order.approved_job_id), order.id])
+        );
+
+        setJobs(loadedJobs.map((job) => ({
+          ...job,
+          order_id: orderByJob.get(Number(job.id)) || null,
+        })));
+        return;
+      }
+
+      setJobs(loadedJobs);
     };
 
     loadJobs();
@@ -228,7 +249,16 @@ export default function KingdomSchedulePage() {
             {weekDays.map((day) => <section key={day.dateKey} style={dayColumn}>
               <div style={dayHeader}><strong>{day.label}</strong><span>{jobsByDay[day.dateKey].length} job{jobsByDay[day.dateKey].length === 1 ? "" : "s"}</span></div>
               <div style={dayBody}>
-                {jobsByDay[day.dateKey].length === 0 ? <div style={emptyDay}>No work scheduled</div> : jobsByDay[day.dateKey].map((job) => <article key={job.id} style={jobCard}>
+                {jobsByDay[day.dateKey].length === 0 ? <div style={emptyDay}>No work scheduled</div> : jobsByDay[day.dateKey].map((job) => job.order_id ? <Link key={job.id} href={`/kingdom-orders/${job.order_id}`} style={jobCardLink}>
+                  <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
+                  <div style={compactDetails}>
+                    <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
+                    <Detail label="Service" value={job.service_type || "Tire service"} />
+                    <Detail label="Tires" value={[job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "", job.tires, job.size].filter(Boolean).join(" • ") || "Not provided"} />
+                    <Detail label="Reference" value={[job.po_number && `Job/PO ${job.po_number}`, job.mo_number && `MO ${job.mo_number}`].filter(Boolean).join(" • ") || "Not provided"} />
+                  </div>
+                  <div style={openOrder}>View / Edit Order →</div>
+                </Link> : <article key={job.id} style={jobCard}>
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
                     <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
@@ -481,6 +511,22 @@ const jobCard: React.CSSProperties = {
   border: "1px solid #e5e7eb",
   background: "#ffffff",
   boxShadow: "0 2px 8px rgba(15, 23, 42, 0.05)",
+};
+
+const jobCardLink: React.CSSProperties = {
+  ...jobCard,
+  display: "block",
+  color: "inherit",
+  textDecoration: "none",
+  cursor: "pointer",
+};
+
+const openOrder: React.CSSProperties = {
+  marginTop: 10,
+  color: "#2563eb",
+  fontSize: 12,
+  fontWeight: 800,
+  textAlign: "right",
 };
 
 const jobHeader: React.CSSProperties = {
