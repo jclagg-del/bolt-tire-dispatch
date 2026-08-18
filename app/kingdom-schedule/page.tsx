@@ -22,37 +22,45 @@ type KingdomJob = {
 
 const NY_TIMEZONE = "America/New_York";
 
-function formatScheduled(value?: string | null) {
-  if (!value) {
-    return {
-      date: "Date not assigned",
-      time: "",
-    };
-  }
+function parseJobDate(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value.trim().replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
-  const date = new Date(value.replace(" ", "T"));
+function getNYDateKey(value: string | Date) {
+  const date = value instanceof Date ? value : parseJobDate(value) || new Date(value);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: NY_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
 
-  if (Number.isNaN(date.getTime())) {
-    return {
-      date: "Date not assigned",
-      time: "",
-    };
-  }
+function addDays(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
 
-  return {
-    date: new Intl.DateTimeFormat("en-US", {
-      timeZone: NY_TIMEZONE,
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    }).format(date),
-    time: new Intl.DateTimeFormat("en-US", {
-      timeZone: NY_TIMEZONE,
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date),
-  };
+function startOfWeek(value: Date) {
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: NY_TIMEZONE, weekday: "short" }).format(value);
+  const index = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[weekday] ?? 1;
+  return addDays(getNYDateKey(value), index === 0 ? -6 : 1 - index);
+}
+
+function formatDay(dateKey: string) {
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${dateKey}T12:00:00Z`));
+}
+
+function formatTime(value?: string | null) {
+  const date = parseJobDate(value);
+  if (!date) return "Time not assigned";
+  return new Intl.DateTimeFormat("en-US", { timeZone: NY_TIMEZONE, hour: "numeric", minute: "2-digit" }).format(date);
 }
 
 function formatStatus(job: KingdomJob) {
@@ -103,12 +111,7 @@ export default function KingdomSchedulePage() {
   const [jobs, setJobs] = useState<KingdomJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-
-  const todayStart = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now.toISOString();
-  }, []);
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
 
   useEffect(() => {
     const loadJobs = async () => {
@@ -136,7 +139,6 @@ export default function KingdomSchedulePage() {
         .eq("submitted_by_customer", true)
         .eq("customer_order_status", "approved")
         .eq("archived", false)
-        .gte("scheduled", todayStart)
         .order("scheduled", { ascending: true });
 
       setLoading(false);
@@ -152,7 +154,24 @@ export default function KingdomSchedulePage() {
     };
 
     loadJobs();
-  }, [todayStart]);
+  }, []);
+
+  const weekDays = useMemo(() => Array.from({ length: 5 }, (_, index) => {
+    const dateKey = addDays(weekStart, index);
+    return { dateKey, label: formatDay(dateKey) };
+  }), [weekStart]);
+
+  const jobsByDay = useMemo(() => {
+    const grouped: Record<string, KingdomJob[]> = Object.fromEntries(weekDays.map((day) => [day.dateKey, []]));
+    jobs.forEach((job) => {
+      if (!job.scheduled) return;
+      const dateKey = getNYDateKey(job.scheduled);
+      if (grouped[dateKey]) grouped[dateKey].push(job);
+    });
+    return grouped;
+  }, [jobs, weekDays]);
+
+  const visibleJobCount = Object.values(jobsByDay).reduce((total, items) => total + items.length, 0);
 
   return (
     <main style={pageShell}>
@@ -170,11 +189,10 @@ export default function KingdomSchedulePage() {
       <div style={pageContent}>
         <section style={heroCard}>
           <div style={eyebrow}>Kingdom Support Services</div>
-          <h1 style={title}>Scheduled Work</h1>
+          <h1 style={title}>Weekly Schedule</h1>
 
           <p style={subtitle}>
-            Upcoming approved tire-service appointments submitted through the
-            Kingdom Support Services portal.
+            View approved tire-service appointments by week, Monday through Friday.
           </p>
 
           <Link href="/order/kingdom" style={backButton}>
@@ -195,78 +213,34 @@ export default function KingdomSchedulePage() {
           <section style={errorCard}>{errorMessage}</section>
         )}
 
-        {!loading && !errorMessage && jobs.length === 0 && (
-          <section style={messageCard}>
-            <h2 style={emptyTitle}>No scheduled work</h2>
-            <p style={emptyText}>
-              There are currently no approved upcoming appointments.
-            </p>
-          </section>
-        )}
-
-        {!loading && !errorMessage && jobs.length > 0 && (
-          <div style={jobList}>
-            {jobs.map((job) => {
-              const scheduled = formatScheduled(job.scheduled);
-
-              return (
-                <article key={job.id} style={jobCard}>
-                  <div style={jobHeader}>
-                    <div>
-                      <div style={jobDate}>{scheduled.date}</div>
-                      <div style={jobTime}>{scheduled.time}</div>
-                    </div>
-
-                    <span style={statusStyle(job)}>
-                      {formatStatus(job)}
-                    </span>
-                  </div>
-
-                  <div style={detailsGrid}>
-                    <Detail
-                      label="Vehicle"
-                      value={
-                        [job.vehicle, job.unit_number && `Unit ${job.unit_number}`]
-                          .filter(Boolean)
-                          .join(" • ") || "Not provided"
-                      }
-                    />
-
-                    <Detail
-                      label="Service"
-                      value={job.service_type || "Tire service"}
-                    />
-
-                    <Detail
-                      label="Tires"
-                      value={
-                        [
-                          job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "",
-                          job.tires,
-                          job.size,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ") || "Not provided"
-                      }
-                    />
-
-                    <Detail
-                      label="Reference"
-                      value={
-                        [
-                          job.po_number && `Job/PO ${job.po_number}`,
-                          job.mo_number && `MO ${job.mo_number}`,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ") || "Not provided"
-                      }
-                    />
-                  </div>
-                </article>
-              );
-            })}
+        {!loading && !errorMessage && <>
+          <div style={weekControls}>
+            <button type="button" style={weekButton} onClick={() => setWeekStart((value) => addDays(value, -7))}>← Previous Week</button>
+            <button type="button" style={thisWeekButton} onClick={() => setWeekStart(startOfWeek(new Date()))}>This Week</button>
+            <label style={weekPickerLabel}>Choose week<input type="date" value={weekStart} onChange={(event) => event.target.value && setWeekStart(startOfWeek(new Date(`${event.target.value}T12:00:00`)))} style={weekPicker} /></label>
+            <button type="button" style={weekButton} onClick={() => setWeekStart((value) => addDays(value, 7))}>Next Week →</button>
           </div>
-        )}
+
+          <div style={weekSummary}>{visibleJobCount} scheduled job{visibleJobCount === 1 ? "" : "s"} this week</div>
+
+          <div className="kingdom-week-grid" style={weekGrid}>
+            {weekDays.map((day) => <section key={day.dateKey} style={dayColumn}>
+              <div style={dayHeader}><strong>{day.label}</strong><span>{jobsByDay[day.dateKey].length} job{jobsByDay[day.dateKey].length === 1 ? "" : "s"}</span></div>
+              <div style={dayBody}>
+                {jobsByDay[day.dateKey].length === 0 ? <div style={emptyDay}>No work scheduled</div> : jobsByDay[day.dateKey].map((job) => <article key={job.id} style={jobCard}>
+                  <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
+                  <div style={compactDetails}>
+                    <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
+                    <Detail label="Service" value={job.service_type || "Tire service"} />
+                    <Detail label="Tires" value={[job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "", job.tires, job.size].filter(Boolean).join(" • ") || "Not provided"} />
+                    <Detail label="Reference" value={[job.po_number && `Job/PO ${job.po_number}`, job.mo_number && `MO ${job.mo_number}`].filter(Boolean).join(" • ") || "Not provided"} />
+                  </div>
+                </article>)}
+              </div>
+            </section>)}
+          </div>
+          <style jsx>{`@media (max-width: 900px) { .kingdom-week-grid { grid-template-columns: 1fr !important; } }`}</style>
+        </>}
 
         <p style={privacyNote}>
           This page shows scheduling and work-order details only. Customer
@@ -306,7 +280,7 @@ const header: React.CSSProperties = {
 
 const headerInner: React.CSSProperties = {
   width: "100%",
-  maxWidth: 820,
+  maxWidth: 1500,
   margin: "0 auto",
   padding: "12px 18px",
   boxSizing: "border-box",
@@ -340,7 +314,7 @@ const brandSubtitle: React.CSSProperties = {
 
 const pageContent: React.CSSProperties = {
   width: "100%",
-  maxWidth: 820,
+  maxWidth: 1500,
   margin: "0 auto",
   padding: "22px 16px 48px",
   boxSizing: "border-box",
@@ -393,14 +367,115 @@ const backButton: React.CSSProperties = {
   fontWeight: 800,
 };
 
+const weekControls: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 9,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
+const weekButton: React.CSSProperties = {
+  minHeight: 42,
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const thisWeekButton: React.CSSProperties = {
+  ...weekButton,
+  background: "#0f172a",
+  borderColor: "#0f172a",
+  color: "#ffffff",
+};
+
+const weekPickerLabel: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  fontSize: 11,
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+};
+
+const weekPicker: React.CSSProperties = {
+  minHeight: 42,
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+const weekSummary: React.CSSProperties = {
+  marginBottom: 12,
+  color: "#475569",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
+const weekGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: 10,
+  alignItems: "start",
+};
+
+const dayColumn: React.CSSProperties = {
+  minWidth: 0,
+  border: "1px solid #dbe3ef",
+  borderRadius: 14,
+  background: "#eef2f7",
+  overflow: "hidden",
+};
+
+const dayHeader: React.CSSProperties = {
+  minHeight: 68,
+  padding: "13px 12px",
+  background: "#0f172a",
+  color: "#ffffff",
+  display: "flex",
+  flexDirection: "column",
+  gap: 5,
+  fontSize: 14,
+};
+
+const dayBody: React.CSSProperties = {
+  minHeight: 180,
+  padding: 9,
+  display: "grid",
+  alignContent: "start",
+  gap: 9,
+};
+
+const emptyDay: React.CSSProperties = {
+  padding: "22px 8px",
+  textAlign: "center",
+  color: "#94a3b8",
+  fontSize: 13,
+};
+
+const compactDetails: React.CSSProperties = {
+  display: "grid",
+  gap: 7,
+  marginTop: 10,
+};
+
 const jobList: React.CSSProperties = {
   display: "grid",
   gap: 14,
 };
 
 const jobCard: React.CSSProperties = {
-  padding: 18,
-  borderRadius: 16,
+  padding: 12,
+  borderRadius: 12,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
   boxShadow: "0 2px 8px rgba(15, 23, 42, 0.05)",
@@ -411,7 +486,7 @@ const jobHeader: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
-  paddingBottom: 14,
+  paddingBottom: 9,
   borderBottom: "1px solid #e5e7eb",
 };
 
@@ -422,8 +497,7 @@ const jobDate: React.CSSProperties = {
 };
 
 const jobTime: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 15,
+  fontSize: 14,
   fontWeight: 700,
   color: "#2563eb",
 };
@@ -445,7 +519,7 @@ const detailsGrid: React.CSSProperties = {
 };
 
 const detailBox: React.CSSProperties = {
-  padding: 12,
+  padding: 9,
   borderRadius: 10,
   background: "#f8fafc",
   border: "1px solid #e5e7eb",
