@@ -38,6 +38,30 @@ export default function NewQuotePage() {
       applyPricing(next, "passenger", 4);
     };
     loadSettings();
+
+    const stored = sessionStorage.getItem("bolt-tire-quote-selection");
+    if (stored) {
+      try {
+        const selection = JSON.parse(stored) as { tireSize?: string; products?: Array<{ brand:string; model:string; imageUrl:string|null; quotePrice:number; warranty:string; category:string; loadSpeed:string; snowRated:boolean; availability:{local:number;localPlus:number;nationwide:number} }> };
+        const chosen = (selection.products || []).slice(0, 3);
+        if (chosen.length) {
+          const tiers: QuoteOption["tier"][] = ["good", "better", "best"];
+          setForm((current) => ({ ...current, tire_size: selection.tireSize || current.tire_size }));
+          setOptions(emptyQuoteOptions.map((option, index) => {
+            const tire = chosen[index];
+            if (!tire) return { ...option };
+            const stock = tire.availability.local || tire.availability.localPlus;
+            return {
+              ...option, tier: tiers[index], brand: tire.brand, model: tire.model, image_url: tire.imageUrl || "",
+              price_per_tire: String(tire.quotePrice), warranty_miles: (tire.warranty.match(/[\d,]+/)?.[0] || "").replace(/,/g, ""),
+              tire_type: tire.category, load_speed_rating: tire.loadSpeed, snow_rating: tire.snowRated ? "3PMSF" : "",
+              availability: stock ? `In stock (${stock})` : "Special order", recommended: index === Math.min(1, chosen.length - 1),
+            };
+          }));
+          sessionStorage.removeItem("bolt-tire-quote-selection");
+        }
+      } catch { sessionStorage.removeItem("bolt-tire-quote-selection"); }
+    }
   }, []);
 
   const applyPricing = (pricing: BusinessSettings, category: QuoteForm["service_category"], quantity: number) => {

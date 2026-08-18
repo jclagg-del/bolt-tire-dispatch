@@ -63,7 +63,8 @@ function customerPrice(cost: number, productGroup: string, settings: BusinessSet
   const tireProfit = Math.max(cost * (markupPercent / 100), minimumProfit);
   const installationPerTire = (truck ? settings.truck_four_install : settings.passenger_four_install) / 4;
   const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
-  return Math.ceil(cost + tireProfit + installationPerTire + disposal + settings.ny_state_tire_fee);
+  const quotePrice = Math.ceil(cost + tireProfit);
+  return { quotePrice, installedPrice: quotePrice + installationPerTire + disposal + settings.ny_state_tire_fee };
 }
 
 async function pricingSettings() {
@@ -90,6 +91,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
   return products.filter((product) => !product.replaced).map((product) => {
     const stock = inventory.get(product.atdproductnumber);
     const cost = Number(product.price?.cost || 0);
+    const customerPricing = customerPrice(cost, product.productgroup || "", settings);
     return {
       id: product.atdproductnumber,
       atdProductNumber: product.atdproductnumber,
@@ -106,7 +108,8 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       loadRange: product.productspec?.loadrange || "",
       imageUrl: firstImage(product),
       discontinued: Boolean(product.discontinued),
-      installedPrice: customerPrice(cost, product.productgroup || "", settings),
+      quotePrice: customerPricing.quotePrice,
+      installedPrice: customerPricing.installedPrice,
       ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0) } : {}),
       availability: { local: stock?.local || 0, localPlus: stock?.localplus || 0, nationwide: stock?.nationwide || 0 },
     };
