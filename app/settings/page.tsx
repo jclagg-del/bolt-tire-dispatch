@@ -331,7 +331,7 @@ export default function SettingsPage() {
                     </div>
                   ))}
                 </div>
-                <div style={card}><h2 style={cardTitle}>Automatic lock</h2><p style={{ ...cardDescription, marginBottom: 0 }}>For customer privacy, the app signs out after 15 minutes without activity. Face ID makes signing back in quick.</p></div>
+                <div style={card}><h2 style={cardTitle}>Automatic lock</h2><p style={{ ...cardDescription, marginBottom: 0 }}>For customer privacy, the app signs out after 8 hours without activity. Passkeys make signing back in quick.</p></div>
                 {currentRole==="admin"?<div style={card}><h2 style={cardTitle}>Require new staff passwords</h2><p style={cardDescription}>Signs out non-admin staff and requires a strong new password before customer information can be viewed.</p><button type="button" onClick={forcePasswordReset} disabled={saving} style={dangerButton}>{saving?"Working...":"Require Password Changes"}</button></div>:null}
               </>
             ) : null}
@@ -339,7 +339,7 @@ export default function SettingsPage() {
             {!loading && section === "integrations" ? (
               <>
                 <div style={card}><div style={integrationRow}><div><h2 style={cardTitle}>QuickBooks Online</h2><p style={cardDescription}>Customer lookup, invoices, balances, and payment status.</p></div><span style={quickBooksConnected ? connectedBadge : disconnectedBadge}>{quickBooksConnected === null ? "Checking..." : quickBooksConnected ? "Connected" : "Not connected"}</span></div></div>
-                <div style={card}><div style={integrationRow}><div><h2 style={cardTitle}>Quo</h2><p style={cardDescription}>Technician calls and texts use the Quo lines assigned under Technicians.</p></div><span style={technicians.some((tech) => tech.quo_phone_number) ? connectedBadge : disconnectedBadge}>{technicians.some((tech) => tech.quo_phone_number) ? "Lines assigned" : "Needs lines"}</span></div></div>
+                <div style={card}><div style={integrationRow}><div><h2 style={cardTitle}>Quo</h2><p style={cardDescription}>Technician calls and texts use the dedicated Quo line. Completed customer jobs automatically receive one Google and Yelp review request when API messaging is connected.</p></div><span style={technicians.some((tech) => tech.quo_phone_number) ? connectedBadge : disconnectedBadge}>{technicians.some((tech) => tech.quo_phone_number) ? "Lines assigned" : "Needs lines"}</span></div></div>
                 <div style={card}><h2 style={cardTitle}>Coming with Quotes</h2><p style={cardDescription}>Customer approval links, tire comparison images, PDF quotes, email delivery, and Quo messaging will be managed here.</p></div>
               </>
             ) : null}

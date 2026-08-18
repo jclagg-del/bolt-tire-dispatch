@@ -338,9 +338,9 @@ export default function RoutePage() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
       body: JSON.stringify({ jobId: selectedJob.id }),
     });
-    if (!notification.ok && selectedJob.customer === "Kingdom Support Services") {
+    if (!notification.ok) {
       const result = await notification.json().catch(() => ({}));
-      alert(`Job completed, but Kingdom's email could not be sent: ${result.error || "Unknown error"}`);
+      alert(`Job completed, but the follow-up notification could not be sent: ${result.error || "Unknown error"}`);
     }
 
     closeCompleteModal();

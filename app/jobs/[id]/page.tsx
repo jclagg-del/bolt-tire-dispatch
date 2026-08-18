@@ -472,9 +472,9 @@ export default function EditJobPage() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
       body: JSON.stringify({ jobId: id }),
     });
-    if (!notification.ok && form.customer === "Kingdom Support Services") {
+    if (!notification.ok) {
       const result = await notification.json().catch(() => ({}));
-      alert(`Job completed, but Kingdom's email could not be sent: ${result.error || "Unknown error"}`);
+      alert(`Job completed, but the follow-up notification could not be sent: ${result.error || "Unknown error"}`);
     }
 
     setShowCompleteModal(false);
