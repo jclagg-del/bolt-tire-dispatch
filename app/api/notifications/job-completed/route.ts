@@ -38,7 +38,7 @@ async function sendReviewRequest(admin: ReturnType<typeof createAdminClient>, jo
   const yelp = process.env.YELP_REVIEW_URL || "https://m.yelp.com/biz/bolt-tire-pine-bush-2";
   const firstName = String(job.contact_name || "").trim().split(/\s+/)[0];
   const greeting = firstName ? `Hi ${firstName}!` : "Hi!";
-  const content = `${greeting} Thanks for choosing Bolt Tire. We hope you are happy with your service. If you have a moment, we would appreciate a review. Google: ${google} Yelp: ${yelp} If you need anything, reply here. Reply STOP to opt out.`;
+  const content = `${greeting} Thanks for choosing Bolt Tire. We hope you are happy with your service. A couple of reminders: we recommend having your lug nuts re-torqued to factory specifications after 50 miles, and rotating your tires after 500 miles. If you have a moment, we would appreciate a review. Google: ${google} Yelp: ${yelp} If you need anything, reply here. Reply STOP to opt out.`;
 
   const response = await fetch("https://api.openphone.com/v1/messages", {
     method: "POST",
