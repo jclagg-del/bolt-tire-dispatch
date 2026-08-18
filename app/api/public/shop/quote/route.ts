@@ -17,7 +17,8 @@ export async function POST(request: Request) {
 
     const requested = Array.isArray(body.selections) && body.selections.length > 1 ? body.selections.slice(0, 2) : [{ productId, size: query, position: "both" }];
     const verified = await Promise.all(requested.map(async (selection: {productId:string;size:string;position:string}) => {
-      const products = await searchAtdBySize(String(selection.size || query), false);
+      // Server-side verification may include cost; it is stored for staff ordering and never returned to the shopper.
+      const products = await searchAtdBySize(String(selection.size || query), true);
       const product = products.find((item) => item.id === String(selection.productId));
       return product ? { ...product, requestedPosition: selection.position } : null;
     }));
@@ -50,7 +51,10 @@ export async function POST(request: Request) {
       warranty_miles: (()=>{const value=Number((product.warranty.match(/[\d,]+/)?.[0]||"0").replace(/,/g,""));return value*(/k/i.test(product.warranty)?1000:1)||null})(),
       tire_type: product.category, load_speed_rating: product.loadSpeed || null,
       snow_rating: product.snowRated ? "3PMSF" : null, availability: stock ? `In stock (${stock})` : "Special order",
-      recommended: true, sort_order: 0,
+      supplier: "ATD", supplier_product_id: product.atdProductNumber,
+      manufacturer_product_id: product.manufacturerProductNumber || null,
+      wholesale_cost: product.cost || null, supplier_availability: product.availability,
+      recommended: false, sort_order: 0,
     }).select("id").single();
     if (optionError || !option) { await admin.from("quotes").delete().eq("id", quote.id); throw new Error(optionError?.message || "Could not add tire"); }
     await admin.from("quotes").update({ selected_option_id: option.id }).eq("id", quote.id);

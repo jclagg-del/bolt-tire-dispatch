@@ -15,6 +15,11 @@ export type QuoteOption = {
   snow_rating: string;
   highlights: string;
   availability: string;
+  supplier?: string;
+  supplier_product_id?: string;
+  manufacturer_product_id?: string;
+  wholesale_cost?: number | string | null;
+  supplier_availability?: { local?: number; localPlus?: number; nationwide?: number } | null;
   recommended: boolean;
   sort_order: number;
 };

@@ -77,6 +77,22 @@ export default function QuoteDetailPage() {
     }
   };
 
+  const copyOrderingDetails = async () => {
+    if (!quote) return;
+    const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id);
+    if (!selected?.supplier_product_id) return setMessage("This quote does not have supplier ordering details yet.");
+    const details = [
+      `Supplier: ${selected.supplier || "Confirm supplier"}`,
+      `Supplier product #: ${selected.supplier_product_id}`,
+      selected.manufacturer_product_id ? `Manufacturer part #: ${selected.manufacturer_product_id}` : null,
+      `Tire: ${selected.brand} ${selected.model}`,
+      `Size: ${quote.tire_size || "Confirm size"}`,
+      `Quantity: ${quote.quantity}`,
+    ].filter(Boolean).join("\n");
+    try { await navigator.clipboard.writeText(details); setMessage("Supplier ordering details copied."); }
+    catch { window.prompt("Copy supplier ordering details:", details); }
+  };
+
   const emailCustomerQuote = async () => {
     if (!quote) return;
     if (!quote.email) return setMessage("Add a customer email address before sending.");
@@ -117,6 +133,7 @@ export default function QuoteDetailPage() {
       customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
       vehicle: quote.vehicle, tires: `${selected.brand} ${selected.model}`, size: quote.tire_size,
       qty: quote.quantity, price_tires: Number(selected.price_per_tire), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
+      tire_supplier: selected.supplier || null, tire_product_number: selected.supplier_product_id || selected.manufacturer_product_id || null,
       tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee),
       address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + Number(quote.ny_state_tire_fee),
       sales_tax_rate: quote.tax_exempt ? 0 : (taxableSubtotal > 0 ? (salesTax / taxableSubtotal) * 100 : 0), sales_tax_amount: salesTax,
@@ -145,6 +162,8 @@ export default function QuoteDetailPage() {
     </div></div>
     {quote.payment_status === "paid" ? <div className="quote-paid-banner"><strong>Paid${quote.amount_paid != null ? ` — $${Number(quote.amount_paid).toFixed(2)}` : ""}</strong><span>Stripe payment received. This quote is ready to schedule or convert to a job.</span></div> : quote.payment_status === "pending" ? <div className="quote-message">Customer checkout has started; payment has not been confirmed yet.</div> : null}
     {message ? <div className="quote-message">{message}</div> : null}
+
+    {(() => { const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id); return selected?.supplier_product_id ? <section className="quote-ordering-card"><div><span>SUPPLIER ORDERING</span><h2>{selected.supplier || "Supplier"} · {selected.supplier_product_id}</h2><p>{selected.brand} {selected.model} · {quote.quantity} tires</p></div><dl><div><dt>Manufacturer part #</dt><dd>{selected.manufacturer_product_id || "—"}</dd></div><div><dt>Last verified cost</dt><dd>{selected.wholesale_cost != null ? `$${Number(selected.wholesale_cost).toFixed(2)} each` : "Confirm with supplier"}</dd></div><div><dt>Availability when selected</dt><dd>{selected.supplier_availability ? `Local ${selected.supplier_availability.local || 0} · Nearby ${selected.supplier_availability.localPlus || 0} · Network ${selected.supplier_availability.nationwide || 0}` : selected.availability || "Confirm availability"}</dd></div></dl><button type="button" onClick={copyOrderingDetails}>Copy Order Details</button></section> : null; })()}
 
     <section className="quote-customer-summary"><div><strong>{quote.contact_name || "Customer contact"}</strong><span>{quote.phone || "No phone"}</span><span>{quote.email || "No email"}</span></div><div><strong>Service</strong><span>{quote.service_category}</span><span>{quote.address || "No service address"}</span></div><div><strong>Quote expires</strong><span>{quote.expires_at ? new Date(`${quote.expires_at}T12:00:00`).toLocaleDateString() : "No expiration"}</span></div></section>
 
