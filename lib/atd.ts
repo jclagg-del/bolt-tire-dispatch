@@ -157,15 +157,12 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
   const products = (response.fitments || []).flatMap((fitment) => (fitment.fitmentresults || []).flatMap((result) => Object.values(result.position || {}).flatMap((position) => position.products || []))).slice(0, 30);
   const settings = await pricingSettings();
   const fitmentProducts = presentProducts(products, await inventoryFor(products), includeCost, settings);
-  if (fitmentProducts.length < 20) {
-    const trimOption = String(vehicle.trimoption || "");
-    const factorySize = trimOption.match(/(?:LT|P)?\d{3}\/\d{2}(?:ZR|R)\d{2}/i)?.[0] || "";
-    if (factorySize) {
-      const requiredLoad = Number(trimOption.match(/\s(\d{2,3})(?:\/\d{2,3})?[A-Z](?:\)|$)/i)?.[1] || 0);
-      const sizeProducts = await searchAtdBySize(factorySize, includeCost);
-      const loadSafeProducts = requiredLoad ? sizeProducts.filter((item) => Number(item.loadSpeed.match(/\d{2,3}/)?.[0] || 0) >= requiredLoad) : sizeProducts;
-      return Array.from(new Map([...fitmentProducts, ...loadSafeProducts].map((item) => [item.id, item])).values()).slice(0, 30);
-    }
-  }
-  return fitmentProducts;
+  const trimOption = String(vehicle.trimoption || "");
+  const factoryFits = Array.from(trimOption.matchAll(/((?:LT|P)?\d{3}\/\d{2}(?:ZR|R)\d{2})(?:\/[A-Z])?\s+(\d{2,3})?/gi)).map((match) => ({ size: match[1], load: Number(match[2] || 0) }));
+  if (!factoryFits.length) return fitmentProducts;
+  const supplementalGroups = await Promise.all(factoryFits.map(async ({ size, load }) => {
+    const sizeProducts = await searchAtdBySize(size, includeCost);
+    return load ? sizeProducts.filter((item) => Number(item.loadSpeed.match(/\d{2,3}/)?.[0] || 0) >= load) : sizeProducts;
+  }));
+  return Array.from(new Map([...fitmentProducts, ...supplementalGroups.flat()].map((item) => [item.id, item])).values()).slice(0, 30);
 }
