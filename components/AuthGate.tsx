@@ -14,6 +14,7 @@ const PUBLIC_ROUTES = [
   "/quickbooks/disconnected",
   "/change-password",
   "/q",
+  "/shop",
 ];
 
 const IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
