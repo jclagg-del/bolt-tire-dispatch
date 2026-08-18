@@ -122,6 +122,11 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       discontinued: Boolean(product.discontinued),
       runFlat: product.productspec?.runflat === "Y" || product.productspec?.runflat === "1",
       hasRebate: Boolean(product.rebates?.length),
+      rebates: (product.rebates || []).map((rebate) => ({
+        code: rebate.code || "",
+        description: rebate.description || "Manufacturer rebate available",
+        url: /^https?:\/\//i.test(rebate.url || "") ? rebate.url : "",
+      })),
       quotePrice: customerPricing.quotePrice,
       installedPrice: customerPricing.installedPrice,
       estimatedTotals,

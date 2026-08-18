@@ -51,6 +51,7 @@ export async function POST(request: Request) {
       warranty_miles: (()=>{const value=Number((product.warranty.match(/[\d,]+/)?.[0]||"0").replace(/,/g,""));return value*(/k/i.test(product.warranty)?1000:1)||null})(),
       tire_type: product.category, load_speed_rating: product.loadSpeed || null,
       snow_rating: product.snowRated ? "3PMSF" : null, availability: stock ? `In stock (${stock})` : "Special order",
+      highlights: product.rebates?.length ? product.rebates.map((rebate: { description: string }) => rebate.description).join(" · ") : null,
       supplier: "ATD", supplier_product_id: product.atdProductNumber,
       manufacturer_product_id: product.manufacturerProductNumber || null,
       wholesale_cost: product.cost || null, supplier_availability: product.availability,
