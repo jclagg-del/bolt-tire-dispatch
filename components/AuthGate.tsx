@@ -16,7 +16,7 @@ const PUBLIC_ROUTES = [
   "/q",
 ];
 
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
 
 export default function AuthGate({
   children,
