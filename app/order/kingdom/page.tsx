@@ -19,6 +19,7 @@ type OrderForm = {
   license_plate: string;
   requested_date: string;
   requested_time: string;
+  request_earlier_service: boolean;
   job_number: string;
   mo_number: string;
   tire_position: string;
@@ -43,6 +44,7 @@ type AppointmentTime = {
 
 const NY_TIMEZONE = "America/New_York";
 const APPOINTMENT_LENGTH_MINUTES = 90;
+const TRAVEL_BUFFER_MINUTES = 30;
 const ELIGIBLE_VEHICLES = ["stepvan", "sprinter"];
 
 const APPOINTMENT_TIMES: AppointmentTime[] = [
@@ -51,7 +53,6 @@ const APPOINTMENT_TIMES: AppointmentTime[] = [
   { value: "11:00", label: "11:00 AM" },
   { value: "12:30", label: "12:30 PM" },
   { value: "14:00", label: "2:00 PM" },
-  { value: "15:30", label: "3:30 PM" },
 ];
 
 const initialForm: OrderForm = {
@@ -68,6 +69,7 @@ const initialForm: OrderForm = {
   license_plate: "",
   requested_date: "",
   requested_time: "",
+  request_earlier_service: false,
   job_number: "",
   mo_number: "",
   tire_position: "",
@@ -101,6 +103,12 @@ function addDaysToDateKey(dateKey: string, days: number) {
     String(date.getUTCMonth() + 1).padStart(2, "0"),
     String(date.getUTCDate()).padStart(2, "0"),
   ].join("-");
+}
+
+function isWeekday(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return weekday >= 1 && weekday <= 5;
 }
 
 function parseJobDate(value?: string | null) {
@@ -177,6 +185,13 @@ export default function KingdomOrderPage() {
         return;
       }
 
+      if (!isWeekday(form.requested_date)) {
+        setAvailableTimes([]);
+        setAvailabilityError("");
+        setForm((current) => ({ ...current, requested_time: "" }));
+        return;
+      }
+
       setAvailabilityLoading(true);
       setAvailabilityError("");
 
@@ -223,7 +238,7 @@ export default function KingdomOrderPage() {
           const jobStart = jobTime.minutes;
           const jobEnd = jobStart + APPOINTMENT_LENGTH_MINUTES;
 
-          if (rangesOverlap(slotStart, slotEnd, jobStart, jobEnd)) {
+          if (rangesOverlap(slotStart, slotEnd, jobStart - TRAVEL_BUFFER_MINUTES, jobEnd + TRAVEL_BUFFER_MINUTES)) {
             busyVehicles.add(job.vehicle_id);
           }
         });
@@ -277,6 +292,7 @@ export default function KingdomOrderPage() {
     if (!form.vehicle_make.trim()) return "Please enter the vehicle make.";
     if (!form.vehicle_model.trim()) return "Please enter the vehicle model.";
     if (!form.requested_date) return "Please select a requested service date.";
+    if (!isWeekday(form.requested_date)) return "Online appointments are available Monday through Friday.";
     if (!form.requested_time) return "Please select an available service time.";
 
     if (!availableTimes.some((time) => time.value === form.requested_time)) {
@@ -327,7 +343,7 @@ export default function KingdomOrderPage() {
       const jobStart = jobTime.minutes;
       const jobEnd = jobStart + APPOINTMENT_LENGTH_MINUTES;
 
-      if (rangesOverlap(selectedStart, selectedEnd, jobStart, jobEnd)) {
+      if (rangesOverlap(selectedStart, selectedEnd, jobStart - TRAVEL_BUFFER_MINUTES, jobEnd + TRAVEL_BUFFER_MINUTES)) {
         busyVehicles.add(job.vehicle_id);
       }
     });
@@ -386,7 +402,7 @@ export default function KingdomOrderPage() {
       qty: Number(form.qty),
       tire_size: form.tire_size.trim(),
       tire_product_number: form.tire_product_number.trim() || null,
-      notes: form.notes.trim() || null,
+      notes: [form.request_earlier_service ? "EARLIER SERVICE REQUESTED — contact customer if an earlier opening becomes available." : "", form.notes.trim()].filter(Boolean).join("\n\n") || null,
       order_status: "new",
       tires_ordered: false,
     });
@@ -648,6 +664,19 @@ export default function KingdomOrderPage() {
                     </option>
                   ))}
                 </select>
+
+                <label style={earlierServiceOption}>
+                  <input
+                    type="checkbox"
+                    name="request_earlier_service"
+                    checked={form.request_earlier_service}
+                    onChange={handleChange}
+                  />
+                  <span>
+                    <strong>Request earlier service</strong>
+                    <small>If an earlier opening becomes available, Bolt Tire may contact you to move this appointment.</small>
+                  </span>
+                </label>
 
                 {availabilityLoading && (
                   <div style={availabilityMessage}>
@@ -1051,6 +1080,19 @@ const threeColumnGrid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 12,
+};
+
+const earlierServiceOption: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  marginTop: 14,
+  padding: 13,
+  border: "1px solid #bfdbfe",
+  borderRadius: 10,
+  background: "#eff6ff",
+  color: "#1e3a8a",
+  cursor: "pointer",
 };
 
 const availabilityMessage: React.CSSProperties = {
