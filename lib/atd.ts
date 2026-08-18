@@ -150,11 +150,12 @@ export async function searchAtdBySize(query: string, includeCost: boolean):Promi
     });
     const products = (response.products || []).slice(0, 30);
     const presented=presentProducts(products,await inventoryFor(products),includeCost,await pricingSettings());
-    await createAdminClient().from("atd_search_cache").upsert({cache_key:cacheKey,products:presented,cached_at:new Date().toISOString()}).then(()=>{});
+    if(presented.length)await createAdminClient().from("atd_search_cache").upsert({cache_key:cacheKey,products:presented,cached_at:new Date().toISOString()}).then(()=>{});
+    if(!presented.length){const{data}=await createAdminClient().from("atd_search_cache").select("products,cached_at").eq("cache_key",cacheKey).maybeSingle();if(Array.isArray(data?.products)&&data.products.length&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[]}
     return presented;
   }catch(error){
     const{data}=await createAdminClient().from("atd_search_cache").select("products,cached_at").eq("cache_key",cacheKey).maybeSingle();
-    if(data?.products&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[];
+    if(Array.isArray(data?.products)&&data.products.length&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[];
     throw error;
   }
 }
