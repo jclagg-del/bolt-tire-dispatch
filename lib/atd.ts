@@ -105,6 +105,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       description: product.description || "",
       size: product.productspec?.size || product.description?.split(" ")[0] || "",
       category: product.productspec?.seasonaldesignation || product.productgroup || "Tire",
+      serviceCategory: truck ? "truck" : "passenger",
       loadSpeed: [product.productspec?.loadindex, product.productspec?.speedrating].filter(Boolean).join(" "),
       warranty: product.productspec?.mileagewarranty || "",
       snowRated: (product.productspec?.winterdesignation || "").toLowerCase().includes("snowflake"),
