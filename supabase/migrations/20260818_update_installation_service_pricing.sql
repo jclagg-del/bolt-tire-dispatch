@@ -24,4 +24,4 @@ where id = true;
 
 alter table public.quotes drop constraint if exists quotes_service_category_check;
 alter table public.quotes add constraint quotes_service_category_check
-  check (service_category in ('passenger','trailer_atv','truck','commercial'));
+  check (service_category in ('passenger','trailer_atv','truck','commercial','medium_dismount'));

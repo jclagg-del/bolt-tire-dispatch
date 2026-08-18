@@ -67,7 +67,7 @@ export const fallbackBusinessSettings: BusinessSettings = {
 export function installationDefault(
   settings: BusinessSettings,
   quantity: number,
-  category: "passenger" | "truck" | "commercial" | "trailer_atv" = "passenger"
+  category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" = "passenger"
 ) {
   if (category === "trailer_atv") {
     if (quantity < 3) return Math.max(settings.minimum_site_price, settings.passenger_two_install);
@@ -76,6 +76,10 @@ export function installationDefault(
   if (category === "commercial") {
     if (quantity >= 3) return Math.max(settings.minimum_site_price, settings.heavy_truck_four_install);
     return Math.max(settings.minimum_site_price, settings.heavy_truck_two_install);
+  }
+  if (category === "medium_dismount") {
+    if (quantity >= 3) return Math.max(settings.minimum_site_price, settings.medium_dismount_four_install);
+    return Math.max(settings.minimum_site_price, settings.medium_dismount_two_install);
   }
   if (category === "truck") {
     if (quantity >= 5) return Math.max(settings.minimum_site_price, settings.truck_six_install);
