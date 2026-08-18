@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type KingdomJob = {
   id: string | number;
@@ -174,7 +175,7 @@ export default function KingdomSchedulePage() {
   const visibleJobCount = Object.values(jobsByDay).reduce((total, items) => total + items.length, 0);
 
   return (
-    <main style={pageShell}>
+    <KingdomPortalGate><main style={pageShell}>
       <header style={header}>
         <div style={headerInner}>
           <img src="/bolt-logo.png" alt="Bolt Tire" style={logo} />
@@ -248,7 +249,7 @@ export default function KingdomSchedulePage() {
           are not displayed.
         </p>
       </div>
-    </main>
+    </main></KingdomPortalGate>
   );
 }
 

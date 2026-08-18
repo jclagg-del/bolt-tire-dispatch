@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type OrderForm = {
   goodyear_order: boolean;
@@ -411,7 +412,7 @@ export default function KingdomOrderPage() {
   };
 
   return (
-    <main style={pageShell}>
+    <KingdomPortalGate><main style={pageShell}>
       <header style={header}>
         <div style={headerInner}>
           <img src="/bolt-logo.png" alt="Bolt Tire" style={logo} />
@@ -785,7 +786,7 @@ export default function KingdomOrderPage() {
           </>
         )}
       </div>
-    </main>
+    </main></KingdomPortalGate>
   );
 }
 

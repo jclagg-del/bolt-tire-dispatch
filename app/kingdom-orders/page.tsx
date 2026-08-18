@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type Order = {
   id: number; submitted_at: string; requested_date: string; requested_time: string;
@@ -9,12 +10,12 @@ type Order = {
   service_method: "installed" | "delivery_pickup" | null;
   job_number: string | null; mo_number: string | null; vehicle_year: string; vehicle_make: string;
   vehicle_model: string; vehicle_color: string | null; tire_position: string; qty: number;
-  tire_size: string; tire_product_number: string | null; order_status: string; tires_ordered: boolean;
+  license_plate: string | null; notes: string | null; tire_size: string; tire_product_number: string | null; order_status: string; tires_ordered: boolean;
   approved_job_id: number | null; job: null | { scheduled: string | null; job_status: string | null; complete: boolean; completed_at: string | null };
 };
 
 const formatDate = (value?: string | null) => value ? new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" }).format(new Date(value.includes("T") ? value : `${value}T12:00:00`)) : "Not scheduled";
-const status = (o: Order) => o.job?.complete ? "Completed" : o.job?.job_status === "en_route" ? "En Route" : o.job?.job_status === "on_site" ? "On Site" : o.order_status === "new" ? "Pending Review" : o.order_status === "rejected" ? "Not Approved" : "Scheduled";
+const status = (o: Order) => o.job?.complete ? "Completed" : o.order_status === "cancellation_requested" ? "Cancellation Requested" : o.job?.job_status === "en_route" ? "En Route" : o.job?.job_status === "on_site" ? "On Site" : o.order_status === "new" ? "Pending Review" : o.order_status === "rejected" ? "Not Approved" : "Scheduled";
 
 export default function KingdomOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -33,12 +34,12 @@ export default function KingdomOrdersPage() {
     return haystack.includes(query.trim().toLowerCase());
   }), [orders, query, filter]);
 
-  return <main style={shell}><header style={header}><div style={headerInner}><img src="/bolt-logo.png" alt="Bolt Tire" style={logo}/><div><strong>Bolt Tire</strong><div style={muted}>Kingdom Support Services Portal</div></div></div></header><div style={content}>
+  return <KingdomPortalGate><main style={shell}><header style={header}><div style={headerInner}><img src="/bolt-logo.png" alt="Bolt Tire" style={logo}/><div><strong>Bolt Tire</strong><div style={muted}>Kingdom Support Services Portal</div></div></div></header><div style={content}>
     <section style={hero}><div style={eyebrow}>Kingdom Support Services</div><h1 style={title}>Order Tracking</h1><p style={subtitle}>Search current requests and past tire-service orders by Job/PO number, MO number, vehicle, tire size, or status.</p><div style={actions}><Link href="/order/kingdom" style={primary}>Submit New Request</Link><Link href="/kingdom-schedule" style={secondary}>Upcoming Schedule</Link></div></section>
     <section style={toolbar}><input aria-label="Search orders" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Job/PO, MO, vehicle, tire size..." style={search}/><select aria-label="Filter order status" value={filter} onChange={e=>setFilter(e.target.value)} style={select}><option value="all">All orders</option><option value="open">Current / open</option><option value="completed">Completed</option><option value="rejected">Not approved</option></select></section>
-    {loading?<div style={message}>Loading orders...</div>:error?<div style={errorCard}>{error}</div>:visible.length===0?<div style={message}>No matching orders found.</div>:<div style={list}>{visible.map(order=><article key={order.id} style={card}><div style={cardHead}><div><div style={reference}>{order.job_number?`Job/PO ${order.job_number}`:`Request #${order.id}`}</div><div style={muted}>{order.mo_number?`MO ${order.mo_number}`:"No MO number"}</div></div><span style={{...badge,...(status(order)==="Completed"?doneBadge:status(order)==="Not Approved"?rejectedBadge:openBadge)}}>{status(order)}</span></div><div style={grid}><Detail label="Goodyear Order" value={order.goodyear_order?"Yes":"No"}/><Detail label="Order Type" value={order.service_method==="delivery_pickup"?"Delivery / Pickup":"Installed"}/><Detail label="Vehicle" value={[order.vehicle_year,order.vehicle_make,order.vehicle_model,order.vehicle_color].filter(Boolean).join(" ")}/><Detail label="Tires" value={`${order.qty} × ${order.tire_size}${order.tire_product_number?` • ${order.tire_product_number}`:""}`}/><Detail label="Position" value={order.tire_position||"Not provided"}/><Detail label={order.job?.complete?"Completed":"Requested"} value={formatDate(order.job?.completed_at||order.job?.scheduled||order.requested_date)}/></div></article>)}</div>}
+    {loading?<div style={message}>Loading orders...</div>:error?<div style={errorCard}>{error}</div>:visible.length===0?<div style={message}>No matching orders found.</div>:<div style={list}>{visible.map(order=><article key={order.id} style={card}><div style={cardHead}><div><div style={reference}>{order.job_number?`Job/PO ${order.job_number}`:`Request #${order.id}`}</div><div style={muted}>{order.mo_number?`MO ${order.mo_number}`:"No MO number"}</div></div><span style={{...badge,...(status(order)==="Completed"?doneBadge:status(order)==="Not Approved"?rejectedBadge:openBadge)}}>{status(order)}</span></div><div style={grid}><Detail label="Goodyear Order" value={order.goodyear_order?"Yes":"No"}/><Detail label="Order Type" value={order.service_method==="delivery_pickup"?"Delivery / Pickup":"Installed"}/><Detail label="Vehicle" value={[order.vehicle_year,order.vehicle_make,order.vehicle_model,order.vehicle_color].filter(Boolean).join(" ")}/><Detail label="Tires" value={`${order.qty} × ${order.tire_size}${order.tire_product_number?` • ${order.tire_product_number}`:""}`}/><Detail label="Position" value={order.tire_position||"Not provided"}/><Detail label={order.job?.complete?"Completed":"Requested"} value={formatDate(order.job?.completed_at||order.job?.scheduled||order.requested_date)}/></div>{!order.job?.complete?<Link href={`/kingdom-orders/${order.id}`} style={manageButton}>Edit Order / Request Cancellation</Link>:null}</article>)}</div>}
     <p style={privacy}>Contact information, service addresses, pricing, and internal notes are not shown here.</p>
-  </div></main>;
+  </div></main></KingdomPortalGate>;
 }
 
 function Detail({label,value}:{label:string;value:string}){return <div style={detail}><div style={detailLabel}>{label}</div><div style={detailValue}>{value||"Not provided"}</div></div>}
@@ -61,3 +62,4 @@ const doneBadge:React.CSSProperties={background:"#ecfdf5",color:"#166534",border
 const grid:React.CSSProperties={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginTop:13};const detail:React.CSSProperties={padding:11,borderRadius:9,background:"#f8fafc"};
 const detailLabel:React.CSSProperties={fontSize:11,fontWeight:800,textTransform:"uppercase",color:"#64748b"};const detailValue:React.CSSProperties={fontSize:14,fontWeight:650,marginTop:4};
 const message:React.CSSProperties={padding:30,textAlign:"center",background:"white",borderRadius:14,border:"1px solid #e2e8f0"};const errorCard:React.CSSProperties={...message,color:"#991b1b",background:"#fef2f2"};const privacy:React.CSSProperties={textAlign:"center",fontSize:12,color:"#64748b",marginTop:18};
+const manageButton:React.CSSProperties={display:"inline-flex",marginTop:13,padding:"10px 13px",borderRadius:9,background:"#eff6ff",border:"1px solid #bfdbfe",color:"#1d4ed8",fontWeight:800,fontSize:13,textDecoration:"none"};

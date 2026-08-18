@@ -414,6 +414,10 @@ export default function OrdersPage() {
     (order) => order.order_status === "rejected"
   );
 
+  const cancellationOrders = orders.filter(
+    (order) => order.order_status === "cancellation_requested" && !order.job_complete
+  );
+
   return (
     <div style={shell}>
       <AppHeader />
@@ -449,6 +453,20 @@ export default function OrdersPage() {
           <div style={emptyCard}>Loading orders...</div>
         ) : (
           <>
+            {cancellationOrders.length > 0 && (
+              <OrderSection
+                title={`Cancellation Requests (${cancellationOrders.length})`}
+                orders={cancellationOrders}
+                emptyText="No cancellation requests."
+                workingId={workingId}
+                onToggleTires={toggleTiresOrdered}
+                onApprove={approveOrder}
+                onReject={rejectOrder}
+                onDelete={deleteOrder}
+                router={router}
+              />
+            )}
+
             <OrderSection
               title={`New Orders (${newOrders.length})`}
               orders={newOrders}
@@ -545,6 +563,7 @@ function OrderSection({
             const rejected =
               order.order_status === "rejected";
             const completed = order.job_complete;
+            const cancellationRequested = order.order_status === "cancellation_requested";
 
             return (
               <article key={order.id} style={orderCard}>
@@ -552,7 +571,9 @@ function OrderSection({
                   <div>
                     <span
                       style={
-                        completed
+                        cancellationRequested
+                          ? rejectedBadge
+                          : completed
                           ? completedBadge
                           : approved
                           ? approvedBadge
@@ -561,7 +582,9 @@ function OrderSection({
                             : newBadge
                       }
                     >
-                      {completed
+                      {cancellationRequested
+                        ? "Cancellation Requested"
+                        : completed
                         ? "Completed"
                         : approved
                         ? "Approved"
@@ -697,7 +720,7 @@ function OrderSection({
                 </label>
 
                 <div style={actions}>
-                  {(approved || completed) && order.approved_job_id ? (
+                  {(approved || completed || cancellationRequested) && order.approved_job_id ? (
                     <button
                       type="button"
                       onClick={() =>

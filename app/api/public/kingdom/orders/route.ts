@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasKingdomAccess } from "@/lib/kingdom-auth";
 
 export async function GET() {
+  if (!await hasKingdomAccess()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const admin = createAdminClient();
   const { data: orders, error } = await admin.from("customer_orders").select(`
     id, submitted_at, requested_date, requested_time, job_number, mo_number, goodyear_order, service_method,
-    vehicle_year, vehicle_make, vehicle_model, vehicle_color, tire_position,
-    qty, tire_size, tire_product_number, order_status, tires_ordered, approved_job_id
+    vehicle_year, vehicle_make, vehicle_model, vehicle_color, license_plate, tire_position,
+    qty, tire_size, tire_product_number, notes, order_status, tires_ordered, approved_job_id
   `).eq("customer", "Kingdom Support Services").order("submitted_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
