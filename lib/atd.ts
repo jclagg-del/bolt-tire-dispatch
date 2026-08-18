@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fallbackBusinessSettings, type BusinessSettings } from "@/lib/business-settings";
+import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
 const locationNumber = process.env.ATD_LOCATION_NUMBER || "3375509";
@@ -93,6 +93,9 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
     const stock = inventory.get(product.atdproductnumber);
     const cost = Number(product.price?.cost || 0);
     const customerPricing = customerPrice(cost, product.productgroup || "", settings);
+    const truck = (product.productgroup || "").toLowerCase().includes("truck");
+    const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
+    const estimatedTotals = Object.fromEntries([1,2,3,4,5,6].map((quantity) => [quantity, customerPricing.quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     return {
       id: product.atdproductnumber,
       atdProductNumber: product.atdproductnumber,
@@ -112,6 +115,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       hasRebate: Boolean(product.rebates?.length),
       quotePrice: customerPricing.quotePrice,
       installedPrice: customerPricing.installedPrice,
+      estimatedTotals,
       ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0) } : {}),
       availability: { local: stock?.local || 0, localPlus: stock?.localplus || 0, nationwide: stock?.nationwide || 0 },
     };
