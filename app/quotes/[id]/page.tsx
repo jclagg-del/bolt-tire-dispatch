@@ -76,6 +76,27 @@ export default function QuoteDetailPage() {
     }
   };
 
+  const emailCustomerQuote = async () => {
+    if (!quote) return;
+    if (!quote.email) return setMessage("Add a customer email address before sending.");
+    setSaving(true);
+    setMessage("");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const response = await fetch("/api/notifications/quote-sent", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+      },
+      body: JSON.stringify({ quoteId: quote.id }),
+    });
+    const result = await response.json();
+    setSaving(false);
+    if (!response.ok) return setMessage(result.error || "Quote email could not be sent.");
+    setQuote({ ...quote, status: quote.status === "draft" ? "sent" : quote.status });
+    setMessage(`Quote emailed to ${quote.email}.`);
+  };
+
   const convertToJob = async () => {
     if (!quote || quote.converted_job_id) return;
     const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id);
@@ -114,6 +135,7 @@ export default function QuoteDetailPage() {
   return <div className="quote-shell"><AppHeader /><main className="quote-page">
     <div className="quote-page-header"><div><div className="quote-eyebrow">Quote #{quote.quote_number}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, quote.tire_size, `${quote.quantity} tires`].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
       <select value={quote.status} onChange={(event) => updateStatus(event.target.value as QuoteStatus)} disabled={saving || quote.status === "converted"}><option value="draft">Draft</option><option value="sent">Sent</option><option value="viewed">Viewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="expired">Expired</option><option value="converted">Converted</option></select>
+      <button className="quote-primary" onClick={emailCustomerQuote} disabled={saving || !quote.email}>{saving ? "Sending..." : "Email Quote"}</button>
       <button onClick={copyCustomerLink} disabled={saving}>Copy Customer Link</button>
       <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : "Convert to Job"}</button>
     </div></div>
