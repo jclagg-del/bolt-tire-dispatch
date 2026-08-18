@@ -51,7 +51,9 @@ export default function QuotesPage() {
     load();
   }, []);
 
-  const visibleQuotes = filter === "all" ? quotes : quotes.filter((quote) => quote.status === filter);
+  const visibleQuotes = filter === "all"
+    ? quotes.filter((quote) => quote.status !== "converted")
+    : quotes.filter((quote) => quote.status === filter);
 
   return (
     <div className="quote-shell">

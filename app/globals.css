@@ -70,6 +70,7 @@ body{
 .quote-image-url summary { cursor: pointer; color: #64748b; font-size: 13px; font-weight: 700; }
 .quote-image-url .quote-field { margin-top: 9px; }
 .public-quote-page { min-height: 100vh; max-width: 1180px; margin: 0 auto; padding: 24px; background: #f8fafc; }
+.purchase-page .quote-comparison-grid{grid-template-columns:minmax(0,620px);justify-content:center}.purchase-page .quote-form-card{max-width:760px;margin-left:auto;margin-right:auto}
 .public-quote-header { display: flex; align-items: center; gap: 22px; margin-bottom: 24px; }
 .public-quote-header img { width: 210px; max-width: 38vw; }
 .public-quote-header span { color: #64748b; font-weight: 800; text-transform: uppercase; font-size: 12px; }
