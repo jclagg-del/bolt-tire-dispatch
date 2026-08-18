@@ -13,6 +13,7 @@ type SavedQuote = {
   service_call_fee: number; disposal_fee: number; ny_state_tire_fee: number; sales_tax_rate: number;
   tax_exempt: boolean; selected_option_id: string | null; expires_at: string | null; converted_job_id: string | null;
   public_token: string; payment_status: "unpaid" | "pending" | "paid" | "refunded"; amount_paid: number | null;
+  stripe_sales_tax_amount: number | null;
   quote_options: Array<Omit<QuoteOption, "price_per_tire" | "warranty_miles"> & { id: string; price_per_tire: number; warranty_miles: number | null }>;
 };
 
@@ -104,7 +105,10 @@ export default function QuoteDetailPage() {
     setSaving(true);
     const tireSubtotal = Number(selected.price_per_tire) * quote.quantity;
     const taxableSubtotal = tireSubtotal + Number(quote.installation_cost) + Number(quote.service_call_fee) + Number(quote.disposal_fee);
-    const salesTax = quote.tax_exempt ? 0 : taxableSubtotal * (Number(quote.sales_tax_rate) / 100);
+    const estimatedSalesTax = quote.tax_exempt ? 0 : taxableSubtotal * (Number(quote.sales_tax_rate) / 100);
+    const salesTax = quote.payment_status === "paid" && quote.stripe_sales_tax_amount != null
+      ? Number(quote.stripe_sales_tax_amount)
+      : estimatedSalesTax;
     const total = taxableSubtotal + Number(quote.ny_state_tire_fee) + salesTax;
     const paidThroughStripe = quote.payment_status === "paid";
     const paymentDate = paidThroughStripe ? new Date().toISOString() : null;
@@ -115,7 +119,7 @@ export default function QuoteDetailPage() {
       qty: quote.quantity, price_tires: Number(selected.price_per_tire), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
       tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee),
       address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + Number(quote.ny_state_tire_fee),
-      sales_tax_rate: quote.tax_exempt ? 0 : Number(quote.sales_tax_rate), sales_tax_amount: salesTax,
+      sales_tax_rate: quote.tax_exempt ? 0 : (taxableSubtotal > 0 ? (salesTax / taxableSubtotal) * 100 : 0), sales_tax_amount: salesTax,
       tax_exempt: quote.tax_exempt, job_total: total,
       payment_status: paidThroughStripe ? "paid" : "unpaid",
       job_status: paidThroughStripe ? "paid" : "unscheduled",
