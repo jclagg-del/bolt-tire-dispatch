@@ -379,8 +379,8 @@ const weekButton: React.CSSProperties = {
   minHeight: 42,
   padding: "10px 14px",
   borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
+  border: "1px solid #d1d5db",
+  background: "#e5e7eb",
   color: "#0f172a",
   fontWeight: 800,
   cursor: "pointer",
@@ -388,8 +388,8 @@ const weekButton: React.CSSProperties = {
 
 const thisWeekButton: React.CSSProperties = {
   ...weekButton,
-  background: "#0f172a",
-  borderColor: "#0f172a",
+  background: "#2563eb",
+  borderColor: "#2563eb",
   color: "#ffffff",
 };
 
@@ -430,17 +430,18 @@ const weekGrid: React.CSSProperties = {
 
 const dayColumn: React.CSSProperties = {
   minWidth: 0,
-  border: "1px solid #dbe3ef",
-  borderRadius: 14,
-  background: "#eef2f7",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  background: "#f8fafc",
   overflow: "hidden",
 };
 
 const dayHeader: React.CSSProperties = {
   minHeight: 68,
   padding: "13px 12px",
-  background: "#0f172a",
-  color: "#ffffff",
+  background: "#e2e8f0",
+  color: "#111827",
+  borderBottom: "1px solid #cbd5e1",
   display: "flex",
   flexDirection: "column",
   gap: 5,
