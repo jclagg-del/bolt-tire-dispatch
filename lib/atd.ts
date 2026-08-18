@@ -15,21 +15,25 @@ function credentials() {
 
 async function atdRequest<T>(path: string, body?: unknown): Promise<T> {
   const { username, password, clientId } = credentials();
-  const response = await fetch(`${baseUrl}/${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
-      clientId,
-      "Content-Type": "application/json",
-      "Accept-Language": "en-US",
-      Accept: "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof payload?.errorMessage === "string" ? payload.errorMessage : `ATD request failed (${response.status})`);
-  return payload as T;
+  for(let attempt=0;attempt<2;attempt++){
+    const response = await fetch(`${baseUrl}/${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
+        clientId,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US",
+        Accept: "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if(response.ok)return payload as T;
+    if(attempt===0&&response.status>=500){await new Promise(resolve=>setTimeout(resolve,350));continue}
+    throw new Error(typeof payload?.errorMessage === "string" ? payload.errorMessage : `ATD request failed (${response.status})`);
+  }
+  throw new Error("ATD is temporarily unavailable");
 }
 
 type AtdProduct = {
@@ -82,11 +86,13 @@ async function pricingSettings() {
 async function inventoryFor(products: AtdProduct[]) {
   const ids = products.map((product) => product.atdproductnumber).filter(Boolean);
   if (!ids.length) return new Map<string, InventoryProduct>();
-  const response = await atdRequest<{ products?: InventoryProduct[] }>("product/product-availability", {
-    locationnumber: locationNumber,
-    criteria: { atdproductnumber: ids },
-  });
-  return new Map((response.products || []).map((item) => [item.atdproductnumber, item]));
+  try{
+    const response = await atdRequest<{ products?: InventoryProduct[] }>("product/product-availability", {
+      locationnumber: locationNumber,
+      criteria: { atdproductnumber: ids },
+    });
+    return new Map((response.products || []).map((item) => [item.atdproductnumber, item]));
+  }catch{return new Map<string,InventoryProduct>()}
 }
 
 function presentProducts(products: AtdProduct[], inventory: Map<string, InventoryProduct>, includeCost: boolean, settings: BusinessSettings) {
