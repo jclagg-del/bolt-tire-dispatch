@@ -44,6 +44,7 @@ type AtdProduct = {
   price?: { cost?: number; map?: number; msrp?: number };
   images?: Record<string, { image?: Array<{ url?: string }>; images?: Array<{ url?: string }> }>;
   productspec?: Record<string, string>;
+  rebates?: Array<{ code?: string; description?: string; url?: string }>;
 };
 
 type InventoryProduct = { local?: number; localplus?: number; nationwide?: number; onhand?: number; atdproductnumber: string };
@@ -104,10 +105,11 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       loadSpeed: [product.productspec?.loadindex, product.productspec?.speedrating].filter(Boolean).join(" "),
       warranty: product.productspec?.mileagewarranty || "",
       snowRated: (product.productspec?.winterdesignation || "").toLowerCase().includes("snowflake"),
-      runFlat: product.productspec?.runflat === "Y",
       loadRange: product.productspec?.loadrange || "",
       imageUrl: firstImage(product),
       discontinued: Boolean(product.discontinued),
+      runFlat: product.productspec?.runflat === "Y" || product.productspec?.runflat === "1",
+      hasRebate: Boolean(product.rebates?.length),
       quotePrice: customerPricing.quotePrice,
       installedPrice: customerPricing.installedPrice,
       ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0) } : {}),
@@ -125,6 +127,8 @@ export async function searchAtdBySize(query: string, includeCost: boolean) {
       price: { cost: 1, map: 1, msrp: 1 },
       images: { small: 1 },
       productspec: {},
+      includerebates: 1,
+      includemarketingprograms: 1,
     },
   });
   const products = (response.products || []).slice(0, 30);
@@ -143,7 +147,7 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
     locationnumber: locationNumber,
     vehicle,
     criteria: { productgroup: ["passenger tires", "light truck tires"] },
-    options: { price: { cost: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {} },
+    options: { price: { cost: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {}, includerebates: 1, includemarketingprograms: 1 },
   });
   const products = (response.fitments || []).flatMap((fitment) => (fitment.fitmentresults || []).flatMap((result) => Object.values(result.position || {}).flatMap((position) => position.products || []))).slice(0, 30);
   return presentProducts(products, await inventoryFor(products), includeCost, await pricingSettings());
