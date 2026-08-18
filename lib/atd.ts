@@ -131,21 +131,32 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
   });
 }
 
-export async function searchAtdBySize(query: string, includeCost: boolean) {
+type PresentedProduct=ReturnType<typeof presentProducts>[number];
+
+export async function searchAtdBySize(query: string, includeCost: boolean):Promise<PresentedProduct[]> {
   const keywords = query.replace(/[^0-9]/g, "");
-  const response = await atdRequest<{ products?: AtdProduct[] }>("product/product-by-keyword", {
-    locationnumber: locationNumber,
-    keywords,
-    options: {
-      price: { cost: 1, map: 1, msrp: 1 },
-      images: { small: 1 },
-      productspec: {},
-      includerebates: 1,
-      includemarketingprograms: 1,
-    },
-  });
-  const products = (response.products || []).slice(0, 30);
-  return presentProducts(products, await inventoryFor(products), includeCost, await pricingSettings());
+  const cacheKey=`${keywords}:${includeCost?"staff":"public"}`;
+  try{
+    const response = await atdRequest<{ products?: AtdProduct[] }>("product/product-by-keyword", {
+      locationnumber: locationNumber,
+      keywords,
+      options: {
+        price: { cost: 1, map: 1, msrp: 1 },
+        images: { small: 1 },
+        productspec: {},
+        includerebates: 1,
+        includemarketingprograms: 1,
+      },
+    });
+    const products = (response.products || []).slice(0, 30);
+    const presented=presentProducts(products,await inventoryFor(products),includeCost,await pricingSettings());
+    await createAdminClient().from("atd_search_cache").upsert({cache_key:cacheKey,products:presented,cached_at:new Date().toISOString()}).then(()=>{});
+    return presented;
+  }catch(error){
+    const{data}=await createAdminClient().from("atd_search_cache").select("products,cached_at").eq("cache_key",cacheKey).maybeSingle();
+    if(data?.products&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[];
+    throw error;
+  }
 }
 
 export async function fitmentList(action: string, selection: Record<string, string>) {
