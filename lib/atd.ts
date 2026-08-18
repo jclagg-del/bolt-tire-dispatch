@@ -155,5 +155,9 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
     options: { price: { cost: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {}, includerebates: 1, includemarketingprograms: 1 },
   });
   const products = (response.fitments || []).flatMap((fitment) => (fitment.fitmentresults || []).flatMap((result) => Object.values(result.position || {}).flatMap((position) => position.products || []))).slice(0, 30);
+  if (!products.length) {
+    const factorySize = String(vehicle.trimoption || "").match(/(?:LT|P)?\d{3}\/\d{2}(?:ZR|R)\d{2}/i)?.[0] || "";
+    if (factorySize) return searchAtdBySize(factorySize, includeCost);
+  }
   return presentProducts(products, await inventoryFor(products), includeCost, await pricingSettings());
 }
