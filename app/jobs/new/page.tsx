@@ -99,7 +99,7 @@ export default function NewJobPage() {
   const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
   const [stateFeeOverridden, setStateFeeOverridden] = useState(false);
   const [installationOverridden, setInstallationOverridden] = useState(false);
-  const [pricingCategory, setPricingCategory] = useState<"passenger" | "truck">("passenger");
+  const [pricingCategory, setPricingCategory] = useState<"passenger" | "trailer_atv" | "truck">("passenger");
   const [pricingSettings, setPricingSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [lookupMessage, setLookupMessage] = useState("");
   const [vehicles, setVehicles] = useState<VehicleOption[]>(fallbackVehicles);
@@ -665,7 +665,7 @@ export default function NewJobPage() {
               <select
                 value={pricingCategory}
                 onChange={(event) => {
-                  const category = event.target.value as "passenger" | "truck";
+                  const category = event.target.value as "passenger" | "trailer_atv" | "truck";
                   setPricingCategory(category);
                   setForm((current) => ({
                     ...current,
@@ -680,7 +680,8 @@ export default function NewJobPage() {
                 style={input}
               >
                 <option value="passenger">Passenger vehicle</option>
-                <option value="truck">Light truck</option>
+                <option value="trailer_atv">Trailer / ATV</option>
+                <option value="truck">Light / medium truck</option>
               </select>
             </Field>
             <Field>

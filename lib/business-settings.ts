@@ -4,6 +4,13 @@ export type BusinessSettings = {
   passenger_four_install: number;
   truck_two_install: number;
   truck_four_install: number;
+  truck_six_install: number;
+  heavy_truck_two_install: number;
+  heavy_truck_four_install: number;
+  medium_dismount_two_install: number;
+  medium_dismount_four_install: number;
+  trailer_atv_install_discount: number;
+  minimum_site_price: number;
   commercial_service_call: number;
   commercial_17_install: number;
   commercial_19_install: number;
@@ -26,10 +33,17 @@ export type BusinessSettings = {
 
 export const fallbackBusinessSettings: BusinessSettings = {
   id: true,
-  passenger_two_install: 175,
-  passenger_four_install: 275,
-  truck_two_install: 195,
-  truck_four_install: 325,
+  passenger_two_install: 189,
+  passenger_four_install: 299,
+  truck_two_install: 229,
+  truck_four_install: 329,
+  truck_six_install: 425,
+  heavy_truck_two_install: 249,
+  heavy_truck_four_install: 375,
+  medium_dismount_two_install: 229,
+  medium_dismount_four_install: 329,
+  trailer_atv_install_discount: 50,
+  minimum_site_price: 189,
   commercial_service_call: 95,
   commercial_17_install: 45,
   commercial_19_install: 55,
@@ -53,15 +67,22 @@ export const fallbackBusinessSettings: BusinessSettings = {
 export function installationDefault(
   settings: BusinessSettings,
   quantity: number,
-  category: "passenger" | "truck" = "passenger"
+  category: "passenger" | "truck" | "commercial" | "trailer_atv" = "passenger"
 ) {
+  if (category === "trailer_atv") {
+    if (quantity < 3) return Math.max(settings.minimum_site_price, settings.passenger_two_install);
+    return Math.max(settings.minimum_site_price, settings.passenger_four_install - settings.trailer_atv_install_discount);
+  }
+  if (category === "commercial") {
+    if (quantity >= 3) return Math.max(settings.minimum_site_price, settings.heavy_truck_four_install);
+    return Math.max(settings.minimum_site_price, settings.heavy_truck_two_install);
+  }
   if (category === "truck") {
-    if (quantity >= 4) return settings.truck_four_install;
-    if (quantity >= 2) return settings.truck_two_install;
-    return settings.truck_two_install / 2;
+    if (quantity >= 5) return Math.max(settings.minimum_site_price, settings.truck_six_install);
+    if (quantity >= 3) return Math.max(settings.minimum_site_price, settings.truck_four_install);
+    return Math.max(settings.minimum_site_price, settings.truck_two_install);
   }
 
-  if (quantity >= 4) return settings.passenger_four_install;
-  if (quantity >= 2) return settings.passenger_two_install;
-  return settings.passenger_two_install / 2;
+  if (quantity >= 3) return Math.max(settings.minimum_site_price, settings.passenger_four_install);
+  return Math.max(settings.minimum_site_price, settings.passenger_two_install);
 }

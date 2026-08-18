@@ -41,19 +41,44 @@ const pricingGroups: Array<{
     ],
   },
   {
-    title: "Passenger installation",
-    description: "Default mobile installation totals used when building jobs and quotes.",
+    title: "Passenger vehicle - on-site mount & balance",
+    description: "Service totals used automatically on passenger jobs and quotes.",
     fields: [
-      { key: "passenger_two_install", label: "Two tires", prefix: "$" },
-      { key: "passenger_four_install", label: "Four tires", prefix: "$" },
+      { key: "minimum_site_price", label: "Minimum on-site service price", prefix: "$" },
+      { key: "passenger_two_install", label: "1–2 tires", prefix: "$" },
+      { key: "passenger_four_install", label: "3–4 tires", prefix: "$" },
     ],
   },
   {
-    title: "Light-truck installation",
-    description: "Higher defaults for larger and more difficult truck tires.",
+    title: "Light/medium truck - on-site mount & balance",
+    description: "Service totals for light- and medium-duty trucks.",
     fields: [
-      { key: "truck_two_install", label: "Two tires", prefix: "$" },
-      { key: "truck_four_install", label: "Four tires", prefix: "$" },
+      { key: "truck_two_install", label: "1–2 tires", prefix: "$" },
+      { key: "truck_four_install", label: "3–4 tires", prefix: "$" },
+      { key: "truck_six_install", label: "6 tires", prefix: "$" },
+    ],
+  },
+  {
+    title: "Heavy truck - on-site mount & balance",
+    description: "Service totals for heavy-truck installation and balancing.",
+    fields: [
+      { key: "heavy_truck_two_install", label: "1–2 tires", prefix: "$" },
+      { key: "heavy_truck_four_install", label: "3–4 tires", prefix: "$" },
+    ],
+  },
+  {
+    title: "Medium truck - on-site mount & dismount",
+    description: "Service totals for mount and dismount work without balancing.",
+    fields: [
+      { key: "medium_dismount_two_install", label: "1–2 tires", prefix: "$" },
+      { key: "medium_dismount_four_install", label: "3–4 tires", prefix: "$" },
+    ],
+  },
+  {
+    title: "Trailer and ATV discount",
+    description: "The 1–2 tire price remains the passenger rate. This discount applies only to 3–4 tires.",
+    fields: [
+      { key: "trailer_atv_install_discount", label: "3–4 tire discount", prefix: "$" },
     ],
   },
   {

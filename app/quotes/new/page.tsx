@@ -10,7 +10,7 @@ import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
 type QuoteForm = {
   customer: string; contact_name: string; phone: string; email: string; vehicle: string;
   tire_size: string; quantity: string; address: string; notes: string;
-  service_category: "passenger" | "truck" | "commercial";
+  service_category: "passenger" | "truck" | "commercial" | "trailer_atv";
   installation_cost: string; service_call_fee: string; disposal_fee: string;
   ny_state_tire_fee: string; sales_tax_rate: string; tax_exempt: boolean; expires_at: string;
 };
@@ -65,8 +65,8 @@ export default function NewQuotePage() {
   }, []);
 
   const applyPricing = (pricing: BusinessSettings, category: QuoteForm["service_category"], quantity: number) => {
-    const disposalEach = category === "passenger" ? pricing.passenger_disposal_fee : category === "truck" ? pricing.truck_disposal_fee : pricing.commercial_disposal_fee;
-    const installation = category === "commercial" ? pricing.commercial_22_install * quantity : installationDefault(pricing, quantity, category);
+    const disposalEach = category === "passenger" || category === "trailer_atv" ? pricing.passenger_disposal_fee : category === "truck" ? pricing.truck_disposal_fee : pricing.commercial_disposal_fee;
+    const installation = installationDefault(pricing, quantity, category);
     setForm((current) => ({
       ...current,
       service_category: category,
@@ -143,7 +143,7 @@ export default function NewQuotePage() {
         <QuoteField label="Vehicle" value={form.vehicle} onChange={(value) => setForm({ ...form, vehicle: value })} placeholder="Year, make, model or unit" />
         <QuoteField label="Tire size" value={form.tire_size} onChange={(value) => setForm({ ...form, tire_size: value })} placeholder="275/65R18" />
         <QuoteField label="Quantity" value={form.quantity} type="number" onChange={(value) => { const quantity = Number(value) || 0; setForm((current) => ({ ...current, quantity: value })); applyPricing(settings, form.service_category, quantity); }} />
-        <label className="quote-field"><span>Pricing category</span><select value={form.service_category} onChange={(event) => applyPricing(settings, event.target.value as QuoteForm["service_category"], Number(form.quantity) || 0)}><option value="passenger">Passenger</option><option value="truck">Light truck</option><option value="commercial">Commercial</option></select></label>
+        <label className="quote-field"><span>Pricing category</span><select value={form.service_category} onChange={(event) => applyPricing(settings, event.target.value as QuoteForm["service_category"], Number(form.quantity) || 0)}><option value="passenger">Passenger</option><option value="trailer_atv">Trailer / ATV</option><option value="truck">Light / medium truck</option><option value="commercial">Heavy truck</option></select></label>
         <QuoteField label="Address" value={form.address} onChange={(value) => setForm({ ...form, address: value })} />
         <QuoteField label="Expiration date" value={form.expires_at} type="date" onChange={(value) => setForm({ ...form, expires_at: value })} />
       </div></section>
