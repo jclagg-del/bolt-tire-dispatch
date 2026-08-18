@@ -37,8 +37,8 @@ async function sendReviewRequest(admin: ReturnType<typeof createAdminClient>, jo
   const google = process.env.GOOGLE_REVIEW_URL || "https://maps.app.goo.gl/DjpassNHco6CA78B8?g_st=ic";
   const yelp = process.env.YELP_REVIEW_URL || "https://m.yelp.com/biz/bolt-tire-pine-bush-2";
   const firstName = String(job.contact_name || "").trim().split(/\s+/)[0];
-  const greeting = firstName ? `Hi ${firstName}, thanks` : "Thanks";
-  const content = `${greeting} for choosing Bolt Tire! We would appreciate your feedback. Google: ${google} Yelp: ${yelp} Reply STOP to opt out.`;
+  const greeting = firstName ? `Hi ${firstName}!` : "Hi!";
+  const content = `${greeting} Thanks for choosing Bolt Tire. We hope you are happy with your service. If you have a moment, we would appreciate a review. Google: ${google} Yelp: ${yelp} If you need anything, reply here. Reply STOP to opt out.`;
 
   const response = await fetch("https://api.openphone.com/v1/messages", {
     method: "POST",
