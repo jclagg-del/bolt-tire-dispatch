@@ -11,7 +11,7 @@ type Product = {
 };
 
 export default function TireShoppingBeta({ internal = false }: { internal?: boolean }) {
-  const [query, setQuery] = useState("275/65R18");
+  const [query, setQuery] = useState("2756518");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -53,7 +53,7 @@ export default function TireShoppingBeta({ internal = false }: { internal?: bool
     <header className="tire-beta-hero"><div><span className="tire-beta-kicker">{internal ? "Bolt Tire staff beta" : "Bolt Tire shopping beta"}</span><h1>{internal ? "Tire Search & Quoting" : "Find the right tires"}</h1><p>Live ATD sandbox products, pricing, images, and inventory.</p></div><span className="tire-beta-badge">ATD sandbox</span></header>
     <section className="tire-beta-search-card">
       <div className="tire-beta-tabs"><button className="active" type="button">Tire size</button><button type="button" disabled>Vehicle fitment · connecting next</button>{internal && <button type="button" disabled>VIN / plate · coming next</button>}</div>
-      <label className="tire-beta-search"><span>Enter any tire size</span><div><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") search(); }} placeholder="275/65R18, 275 65 18, or 2756518" /><button type="button" onClick={search} disabled={loading || !query.trim()}>{loading ? "Searching ATD…" : "Search ATD"}</button></div><small>Flexible search accepts slashes, spaces, dashes, or numbers only.</small></label>
+      <label className="tire-beta-search"><span>Enter tire size using digits only</span><div><input value={query} inputMode="numeric" pattern="[0-9]*" onChange={(event) => setQuery(event.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(event) => { if (event.key === "Enter") search(); }} placeholder="2756518" /><button type="button" onClick={search} disabled={loading || !query.trim()}>{loading ? "Searching ATD…" : "Search ATD"}</button></div><small>Example: enter 2756518 for 275/65R18.</small></label>
     </section>
     {error && <div className="tire-beta-error"><strong>ATD sandbox error</strong><span>{error}</span></div>}
     <div className="tire-beta-layout">
