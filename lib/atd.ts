@@ -1,4 +1,6 @@
 import "server-only";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fallbackBusinessSettings, type BusinessSettings } from "@/lib/business-settings";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
 const locationNumber = process.env.ATD_LOCATION_NUMBER || "3375509";
@@ -54,11 +56,24 @@ function firstImage(product: AtdProduct) {
   return null;
 }
 
-function customerPrice(cost: number, productGroup = "") {
+function customerPrice(cost: number, productGroup: string, settings: BusinessSettings) {
   const truck = productGroup.toLowerCase().includes("truck");
-  const installationPerTire = (truck ? 325 : 275) / 4;
-  const disposal = truck ? 12 : 7;
-  return Math.ceil(cost * 1.25 + installationPerTire + disposal + 2.5);
+  const markupPercent = truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent;
+  const minimumProfit = truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit;
+  const tireProfit = Math.max(cost * (markupPercent / 100), minimumProfit);
+  const installationPerTire = (truck ? settings.truck_four_install : settings.passenger_four_install) / 4;
+  const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
+  return Math.ceil(cost + tireProfit + installationPerTire + disposal + settings.ny_state_tire_fee);
+}
+
+async function pricingSettings() {
+  try {
+    const { data, error } = await createAdminClient().from("business_settings").select("*").eq("id", true).maybeSingle();
+    if (error || !data) return fallbackBusinessSettings;
+    return { ...fallbackBusinessSettings, ...data } as BusinessSettings;
+  } catch {
+    return fallbackBusinessSettings;
+  }
 }
 
 async function inventoryFor(products: AtdProduct[]) {
@@ -71,7 +86,7 @@ async function inventoryFor(products: AtdProduct[]) {
   return new Map((response.products || []).map((item) => [item.atdproductnumber, item]));
 }
 
-function presentProducts(products: AtdProduct[], inventory: Map<string, InventoryProduct>, includeCost: boolean) {
+function presentProducts(products: AtdProduct[], inventory: Map<string, InventoryProduct>, includeCost: boolean, settings: BusinessSettings) {
   return products.filter((product) => !product.replaced).map((product) => {
     const stock = inventory.get(product.atdproductnumber);
     const cost = Number(product.price?.cost || 0);
@@ -91,7 +106,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       loadRange: product.productspec?.loadrange || "",
       imageUrl: firstImage(product),
       discontinued: Boolean(product.discontinued),
-      installedPrice: customerPrice(cost, product.productgroup),
+      installedPrice: customerPrice(cost, product.productgroup || "", settings),
       ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0) } : {}),
       availability: { local: stock?.local || 0, localPlus: stock?.localplus || 0, nationwide: stock?.nationwide || 0 },
     };
@@ -110,7 +125,7 @@ export async function searchAtdBySize(query: string, includeCost: boolean) {
     },
   });
   const products = (response.products || []).slice(0, 30);
-  return presentProducts(products, await inventoryFor(products), includeCost);
+  return presentProducts(products, await inventoryFor(products), includeCost, await pricingSettings());
 }
 
 export async function fitmentList(action: string, selection: Record<string, string>) {
@@ -128,5 +143,5 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
     options: { price: { cost: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {} },
   });
   const products = (response.fitments || []).flatMap((fitment) => (fitment.fitmentresults || []).flatMap((result) => Object.values(result.position || {}).flatMap((position) => position.products || []))).slice(0, 30);
-  return presentProducts(products, await inventoryFor(products), includeCost);
+  return presentProducts(products, await inventoryFor(products), includeCost, await pricingSettings());
 }

@@ -18,6 +18,10 @@ export type BusinessSettings = {
   base_address: string | null;
   included_radius_miles: number;
   extra_mileage_rate: number;
+  tire_shop_passenger_markup_percent: number;
+  tire_shop_passenger_min_profit: number;
+  tire_shop_truck_markup_percent: number;
+  tire_shop_truck_min_profit: number;
 };
 
 export const fallbackBusinessSettings: BusinessSettings = {
@@ -40,6 +44,10 @@ export const fallbackBusinessSettings: BusinessSettings = {
   base_address: null,
   included_radius_miles: 20,
   extra_mileage_rate: 0,
+  tire_shop_passenger_markup_percent: 25,
+  tire_shop_passenger_min_profit: 50,
+  tire_shop_truck_markup_percent: 25,
+  tire_shop_truck_min_profit: 60,
 };
 
 export function installationDefault(
