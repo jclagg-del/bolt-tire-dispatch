@@ -99,7 +99,7 @@ export default function NewJobPage() {
   const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
   const [stateFeeOverridden, setStateFeeOverridden] = useState(false);
   const [installationOverridden, setInstallationOverridden] = useState(false);
-  const [pricingCategory, setPricingCategory] = useState<"passenger" | "trailer_atv" | "truck" | "commercial" | "medium_dismount">("passenger");
+  const [pricingCategory, setPricingCategory] = useState<"passenger" | "trailer_atv" | "truck" | "commercial" | "medium_dismount" | "tires_only">("passenger");
   const [pricingSettings, setPricingSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [lookupMessage, setLookupMessage] = useState("");
   const [vehicles, setVehicles] = useState<VehicleOption[]>(fallbackVehicles);
@@ -220,7 +220,7 @@ export default function NewJobPage() {
       ...prev,
       [name]: value,
       ...(name === "qty" && !disposalFeeOverridden ? {
-        tire_disposal_fee: (quantity * (pricingCategory === "truck" ? pricingSettings.truck_disposal_fee : pricingCategory === "commercial" || pricingCategory === "medium_dismount" ? pricingSettings.commercial_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
+        tire_disposal_fee: (quantity * (pricingCategory === "tires_only" ? 0 : pricingCategory === "truck" ? pricingSettings.truck_disposal_fee : pricingCategory === "commercial" || pricingCategory === "medium_dismount" ? pricingSettings.commercial_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
         ...(!stateFeeOverridden ? { ny_state_tire_fee: (quantity * pricingSettings.ny_state_tire_fee).toFixed(2) } : {}),
         ...(!installationOverridden ? { installation_cost: installationDefault(pricingSettings, quantity, pricingCategory).toFixed(2) } : {}),
       } : name === "qty" ? {
@@ -665,7 +665,7 @@ export default function NewJobPage() {
               <select
                 value={pricingCategory}
                 onChange={(event) => {
-                  const category = event.target.value as "passenger" | "trailer_atv" | "truck" | "commercial" | "medium_dismount";
+                  const category = event.target.value as "passenger" | "trailer_atv" | "truck" | "commercial" | "medium_dismount" | "tires_only";
                   setPricingCategory(category);
                   setForm((current) => ({
                     ...current,
@@ -673,13 +673,14 @@ export default function NewJobPage() {
                       installation_cost: installationDefault(pricingSettings, Number(current.qty) || 0, category).toFixed(2),
                     } : {}),
                     ...(!disposalFeeOverridden ? {
-                      tire_disposal_fee: ((Number(current.qty) || 0) * (category === "truck" ? pricingSettings.truck_disposal_fee : category === "commercial" || category === "medium_dismount" ? pricingSettings.commercial_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
+                      tire_disposal_fee: ((Number(current.qty) || 0) * (category === "tires_only" ? 0 : category === "truck" ? pricingSettings.truck_disposal_fee : category === "commercial" || category === "medium_dismount" ? pricingSettings.commercial_disposal_fee : pricingSettings.passenger_disposal_fee)).toFixed(2),
                     } : {}),
                   }));
                 }}
                 style={input}
               >
                 <option value="passenger">Passenger vehicle</option>
+                <option value="tires_only">Loose tires only - no installation</option>
                 <option value="trailer_atv">Trailer / ATV</option>
                 <option value="truck">Light / medium truck</option>
                 <option value="commercial">Heavy truck - mount & balance</option>
