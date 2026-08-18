@@ -71,6 +71,7 @@ body{
 .quote-image-url .quote-field { margin-top: 9px; }
 .public-quote-page { min-height: 100vh; max-width: 1180px; margin: 0 auto; padding: 24px; background: #f8fafc; }
 .purchase-page .quote-comparison-grid{grid-template-columns:minmax(0,620px);justify-content:center}.purchase-page .quote-form-card{max-width:760px;margin-left:auto;margin-right:auto}
+.embedded-checkout-shell{max-width:760px;margin:20px auto;padding:20px;border:1px solid #dbe3ee;border-radius:18px;background:#fff;box-shadow:0 14px 35px rgba(15,23,42,.09);scroll-margin-top:20px}.embedded-checkout-heading{display:grid;gap:4px;margin-bottom:14px}.embedded-checkout-heading strong{font-size:22px;color:#0f172a}.embedded-checkout-heading span{color:#64748b;font-size:14px}
 .public-quote-header { display: flex; align-items: center; gap: 22px; margin-bottom: 24px; }
 .public-quote-header img { width: 210px; max-width: 38vw; }
 .public-quote-header span { color: #64748b; font-weight: 800; text-transform: uppercase; font-size: 12px; }
