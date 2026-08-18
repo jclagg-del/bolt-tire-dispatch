@@ -29,16 +29,17 @@ export async function POST(request: Request) {
     const { data: savedSettings } = await admin.from("business_settings").select("*").eq("id", true).maybeSingle();
     const settings = { ...fallbackBusinessSettings, ...(savedSettings || {}) } as BusinessSettings;
     const category = products.some((item) => item.serviceCategory === "truck") ? "truck" : "passenger";
+    const installationSelected = body.service !== "tires_only";
     const quoteQuantity = staggered ? 4 : quantity;
     const disposalEach = category === "truck" ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const { data: quote, error } = await admin.from("quotes").insert({
       status: "approved", customer: name, contact_name: name, phone: phone || null, email: email || null,
       vehicle: String(body.vehicle || "").trim() || null, address: String(body.address || "").trim() || null,
       tire_size: staggered ? products.map((item) => `${item.requestedPosition}: ${item.size}`).join(" / ") : product.size || query, quantity: quoteQuantity, service_category: category,
-      installation_cost: installationDefault(settings, quoteQuantity, category), service_call_fee: 0,
-      disposal_fee: disposalEach * quoteQuantity, ny_state_tire_fee: settings.ny_state_tire_fee * quoteQuantity,
+      installation_cost: installationSelected ? installationDefault(settings, quoteQuantity, category) : 0, service_call_fee: 0,
+      disposal_fee: installationSelected ? disposalEach * quoteQuantity : 0, ny_state_tire_fee: settings.ny_state_tire_fee * quoteQuantity,
       sales_tax_rate: settings.default_sales_tax_rate, tax_exempt: false,
-      notes: "Created from the public Tire Shop.",
+      notes: `Created from the public Tire Shop. Service: ${installationSelected ? "mobile installation" : "tires only"}.`,
     }).select("id,public_token").single();
     if (error || !quote) throw new Error(error?.message || "Could not create quote");
     const stock = Math.min(...products.map((item) => item.availability.local || item.availability.localPlus));
