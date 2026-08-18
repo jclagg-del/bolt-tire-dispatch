@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const { data: option, error: optionError } = await admin.from("quote_options").insert({
       quote_id: quote.id, tier: "better", brand: staggered ? products.map((item) => item.brand).join(" / ") : product.brand, model: staggered ? products.map((item) => `${item.requestedPosition}: ${item.model}`).join(" | ") : product.model,
       image_url: product.imageUrl, price_per_tire: combinedTirePrice,
-      warranty_miles: Number((product.warranty.match(/[\d,]+/)?.[0] || "0").replace(/,/g, "")) || null,
+      warranty_miles: (()=>{const value=Number((product.warranty.match(/[\d,]+/)?.[0]||"0").replace(/,/g,""));return value*(/k/i.test(product.warranty)?1000:1)||null})(),
       tire_type: product.category, load_speed_rating: product.loadSpeed || null,
       snow_rating: product.snowRated ? "3PMSF" : null, availability: stock ? `In stock (${stock})` : "Special order",
       recommended: true, sort_order: 0,
