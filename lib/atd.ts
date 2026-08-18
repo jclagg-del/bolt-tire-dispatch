@@ -99,7 +99,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
 }
 
 export async function searchAtdBySize(query: string, includeCost: boolean) {
-  const keywords = query.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const keywords = query.replace(/[^0-9]/g, "");
   const response = await atdRequest<{ products?: AtdProduct[] }>("product/product-by-keyword", {
     locationnumber: locationNumber,
     keywords,
@@ -130,4 +130,3 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
   const products = (response.fitments || []).flatMap((fitment) => (fitment.fitmentresults || []).flatMap((result) => Object.values(result.position || {}).flatMap((position) => position.products || []))).slice(0, 30);
   return presentProducts(products, await inventoryFor(products), includeCost);
 }
-
