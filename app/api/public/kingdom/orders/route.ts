@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function GET() {
   const admin = createAdminClient();
   const { data: orders, error } = await admin.from("customer_orders").select(`
-    id, submitted_at, requested_date, requested_time, job_number, mo_number,
+    id, submitted_at, requested_date, requested_time, job_number, mo_number, goodyear_order, service_method,
     vehicle_year, vehicle_make, vehicle_model, vehicle_color, tire_position,
     qty, tire_size, tire_product_number, order_status, tires_ordered, approved_job_id
   `).eq("customer", "Kingdom Support Services").order("submitted_at", { ascending: false });

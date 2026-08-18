@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type OrderForm = {
+  goodyear_order: boolean;
+  service_method: "" | "installed" | "delivery_pickup";
   submitted_by: string;
   contact_name: string;
   contact_number: string;
@@ -52,6 +54,8 @@ const APPOINTMENT_TIMES: AppointmentTime[] = [
 ];
 
 const initialForm: OrderForm = {
+  goodyear_order: false,
+  service_method: "",
   submitted_by: "",
   contact_name: "",
   contact_number: "",
@@ -249,10 +253,13 @@ export default function KingdomOrderPage() {
     >
   ) => {
     const { name, value } = event.target;
+    const nextValue = event.target instanceof HTMLInputElement && event.target.type === "checkbox"
+      ? event.target.checked
+      : value;
 
     setForm((current) => ({
       ...current,
-      [name]: value,
+      [name]: nextValue,
       ...(name === "requested_date" ? { requested_time: "" } : {}),
     }));
 
@@ -260,6 +267,7 @@ export default function KingdomOrderPage() {
   };
 
   const validateForm = () => {
+    if (!form.service_method) return "Please choose Installed or Delivery / Pickup.";
     if (!form.submitted_by.trim()) return "Please enter who submitted this request.";
     if (!form.contact_name.trim()) return "Please enter the contact person.";
     if (!form.contact_number.trim()) return "Please enter a contact number.";
@@ -358,6 +366,8 @@ export default function KingdomOrderPage() {
 
     const { error } = await supabase.from("customer_orders").insert({
       customer: "Kingdom Support Services",
+      goodyear_order: form.goodyear_order,
+      service_method: form.service_method,
       submitted_by: form.submitted_by.trim(),
       contact_name: form.contact_name.trim(),
       contact_number: form.contact_number.trim(),
@@ -453,6 +463,25 @@ export default function KingdomOrderPage() {
             </section>
 
             <form onSubmit={handleSubmit} style={formCard}>
+              <label style={{ ...goodyearChoice, ...(form.goodyear_order ? goodyearChoiceSelected : {}) }}>
+                <input type="checkbox" name="goodyear_order" checked={form.goodyear_order} onChange={handleChange} style={choiceInput} />
+                <span><strong style={choiceTitle}>Goodyear order?</strong><small style={choiceHelp}>Check this box when the request is for Goodyear tires.</small></span>
+              </label>
+
+              <section style={serviceChoiceSection}>
+                <div style={sectionHeading}>How should this order be handled?</div>
+                <div style={serviceChoiceGrid}>
+                  <label style={{ ...serviceChoice, ...(form.service_method === "installed" ? serviceChoiceSelected : {}) }}>
+                    <input type="radio" name="service_method" value="installed" checked={form.service_method === "installed"} onChange={handleChange} style={choiceInput} />
+                    <span><strong style={choiceTitle}>Installed</strong><small style={choiceHelp}>Bolt Tire installs the tires at the scheduled appointment.</small></span>
+                  </label>
+                  <label style={{ ...serviceChoice, ...(form.service_method === "delivery_pickup" ? serviceChoiceSelected : {}) }}>
+                    <input type="radio" name="service_method" value="delivery_pickup" checked={form.service_method === "delivery_pickup"} onChange={handleChange} style={choiceInput} />
+                    <span><strong style={choiceTitle}>Delivery / Pickup</strong><small style={choiceHelp}>The order will be delivered or prepared for pickup without installation.</small></span>
+                  </label>
+                </div>
+              </section>
+
               <section style={formSection}>
                 <div style={sectionHeading}>Contact Information</div>
 
@@ -888,6 +917,75 @@ const formCard: React.CSSProperties = {
   border: "1px solid #e5e7eb",
   background: "#ffffff",
   boxShadow: "0 3px 12px rgba(15, 23, 42, 0.06)",
+};
+
+const goodyearChoice: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  margin: "20px 0 0",
+  padding: 16,
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  cursor: "pointer",
+};
+
+const goodyearChoiceSelected: React.CSSProperties = {
+  borderColor: "#2563eb",
+  background: "#eff6ff",
+  boxShadow: "0 0 0 1px #2563eb",
+};
+
+const serviceChoiceSection: React.CSSProperties = {
+  padding: "20px 0",
+  borderBottom: "1px solid #e5e7eb",
+};
+
+const serviceChoiceGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 12,
+  marginTop: 12,
+};
+
+const serviceChoice: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  padding: 16,
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  cursor: "pointer",
+};
+
+const serviceChoiceSelected: React.CSSProperties = {
+  borderColor: "#2563eb",
+  background: "#eff6ff",
+  boxShadow: "0 0 0 1px #2563eb",
+};
+
+const choiceInput: React.CSSProperties = {
+  width: 20,
+  height: 20,
+  margin: 0,
+  accentColor: "#2563eb",
+  flexShrink: 0,
+};
+
+const choiceTitle: React.CSSProperties = {
+  display: "block",
+  color: "#111827",
+  fontSize: 15,
+};
+
+const choiceHelp: React.CSSProperties = {
+  display: "block",
+  marginTop: 4,
+  color: "#64748b",
+  fontSize: 12,
+  lineHeight: 1.45,
 };
 
 const formSection: React.CSSProperties = {

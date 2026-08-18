@@ -8,6 +8,8 @@ import AppHeader from "@/components/AppHeader";
 type CustomerOrder = {
   id: number;
   customer: string;
+  goodyear_order: boolean | null;
+  service_method: "installed" | "delivery_pickup" | null;
   submitted_by: string | null;
   contact_name: string;
   contact_number: string;
@@ -86,6 +88,7 @@ function buildVehicleDescription(order: CustomerOrder) {
 
 function buildJobNotes(order: CustomerOrder) {
   const noteParts = [
+    order.goodyear_order ? "Goodyear Order: Yes" : "",
     order.tire_position ? `Tire Position: ${order.tire_position}` : "",
     order.submitted_by ? `Submitted By: ${order.submitted_by}` : "",
     order.notes || "",
@@ -111,6 +114,8 @@ export default function OrdersPage() {
       .select(`
         id,
         customer,
+        goodyear_order,
+        service_method,
         submitted_by,
         contact_name,
         contact_number,
@@ -341,7 +346,7 @@ export default function OrdersPage() {
         submitted_by_customer: true,
         customer_order_status: "approved",
         vehicle_id: "stepvan",
-        service_type: "new tires",
+        service_type: order.service_method === "delivery_pickup" ? "delivery / pickup" : "new tires - installed",
         payment_status: "unpaid",
         job_status: "scheduled",
         complete: false,
@@ -604,6 +609,16 @@ function OrderSection({
                 </div>
 
                 <div style={detailsGrid}>
+                  <Detail
+                    label="Goodyear Order"
+                    value={order.goodyear_order ? "Yes" : "No"}
+                  />
+
+                  <Detail
+                    label="Order Type"
+                    value={order.service_method === "delivery_pickup" ? "Delivery / Pickup" : "Installed"}
+                  />
+
                   <Detail
                     label="Vehicle"
                     value={buildVehicleDescription(order) || "—"}
