@@ -75,10 +75,11 @@ const pricingGroups: Array<{
     ],
   },
   {
-    title: "Trailer and ATV discount",
-    description: "The 1–2 tire price remains the passenger rate. This discount applies only to 3–4 tires.",
+    title: "Off-road installation",
+    description: "Flat installation totals used for trailers, ATVs and skid steers.",
     fields: [
-      { key: "trailer_atv_install_discount", label: "3–4 tire discount", prefix: "$" },
+      { key: "trailer_atv_install_price", label: "Trailer / ATV flat installation", prefix: "$" },
+      { key: "skid_steer_install_price", label: "Skid-steer flat installation", prefix: "$" },
     ],
   },
   {

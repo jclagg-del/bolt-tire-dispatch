@@ -10,6 +10,8 @@ export type BusinessSettings = {
   medium_dismount_two_install: number;
   medium_dismount_four_install: number;
   trailer_atv_install_discount: number;
+  trailer_atv_install_price: number;
+  skid_steer_install_price: number;
   minimum_site_price: number;
   commercial_service_call: number;
   commercial_17_install: number;
@@ -43,6 +45,8 @@ export const fallbackBusinessSettings: BusinessSettings = {
   medium_dismount_two_install: 229,
   medium_dismount_four_install: 329,
   trailer_atv_install_discount: 50,
+  trailer_atv_install_price: 249,
+  skid_steer_install_price: 329,
   minimum_site_price: 189,
   commercial_service_call: 95,
   commercial_17_install: 45,
@@ -67,13 +71,13 @@ export const fallbackBusinessSettings: BusinessSettings = {
 export function installationDefault(
   settings: BusinessSettings,
   quantity: number,
-  category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" | "off_road" | "tires_only" = "passenger"
+  category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" | "off_road" | "skid_steer" | "tires_only" = "passenger"
 ) {
   if (category === "tires_only") return 0;
   if (category === "trailer_atv" || category === "off_road") {
-    if (quantity < 3) return Math.max(settings.minimum_site_price, settings.passenger_two_install);
-    return Math.max(settings.minimum_site_price, settings.passenger_four_install - settings.trailer_atv_install_discount);
+    return Math.max(settings.minimum_site_price, settings.trailer_atv_install_price);
   }
+  if (category === "skid_steer") return Math.max(settings.minimum_site_price, settings.skid_steer_install_price);
   if (category === "commercial") {
     if (quantity >= 3) return Math.max(settings.minimum_site_price, settings.heavy_truck_four_install);
     return Math.max(settings.minimum_site_price, settings.heavy_truck_two_install);

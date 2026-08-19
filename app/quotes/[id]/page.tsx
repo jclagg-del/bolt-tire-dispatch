@@ -183,6 +183,6 @@ export default function QuoteDetailPage() {
       })}
     </section>
 
-    <section className="quote-form-card"><h2>Included pricing</h2><div className="quote-fee-summary"><span>Installation <strong>${Number(quote.installation_cost).toFixed(2)}</strong></span><span>Service call <strong>${Number(quote.service_call_fee).toFixed(2)}</strong></span><span>Disposal <strong>${Number(quote.disposal_fee).toFixed(2)}</strong></span><span>NY state fee <strong>${Number(quote.ny_state_tire_fee).toFixed(2)}</strong></span><span>Sales tax <strong>{quote.tax_exempt ? "Exempt" : `${Number(quote.sales_tax_rate)}%`}</strong></span></div>{quote.notes ? <p className="quote-notes">{quote.notes}</p> : null}</section>
+    <section className="quote-form-card"><h2>Included pricing</h2><div className="quote-fee-summary"><span>Installation <strong>${Number(quote.installation_cost).toFixed(2)}</strong></span>{Number(quote.service_call_fee) > 0 ? <span>Service call <strong>${Number(quote.service_call_fee).toFixed(2)}</strong></span> : null}<span>Disposal <strong>${Number(quote.disposal_fee).toFixed(2)}</strong></span><span>NY state fee <strong>${Number(quote.ny_state_tire_fee).toFixed(2)}</strong></span><span>Sales tax <strong>{quote.tax_exempt ? "Exempt" : `${Number(quote.sales_tax_rate)}%`}</strong></span></div>{quote.notes ? <p className="quote-notes">{quote.notes}</p> : null}</section>
   </main></div>;
 }
