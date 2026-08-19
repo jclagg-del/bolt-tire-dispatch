@@ -16,6 +16,7 @@ type Job = {
   phone?: string | null;
   scheduled?: string | null;
   complete?: boolean | null;
+  archived?: boolean | null;
   notes?: string | null;
   tires?: string | null;
   size?: string | null;
@@ -192,6 +193,7 @@ export default function RoutePage() {
         phone,
         scheduled,
         complete,
+        archived,
         notes,
         tires,
         size,
@@ -228,7 +230,7 @@ export default function RoutePage() {
   const todaysJobs = useMemo(() => {
     return jobs
       .filter((job) => {
-        if (!job.scheduled || job.complete) return false;
+        if (!job.scheduled || job.complete || job.archived) return false;
         return getNYDateKey(job.scheduled) === todayKey;
       })
       .sort((a, b) => (a.scheduled || "").localeCompare(b.scheduled || ""));

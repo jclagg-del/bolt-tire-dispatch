@@ -15,6 +15,7 @@ type Job = {
   phone?: string | null;
   scheduled?: string | null;
   complete?: boolean | null;
+  archived?: boolean | null;
   notes?: string | null;
   tires?: string | null;
   size?: string | null;
@@ -235,6 +236,7 @@ export default function SchedulePage() {
       phone,
       scheduled,
       complete,
+      archived,
       notes,
       tires,
       size,
@@ -293,7 +295,7 @@ export default function SchedulePage() {
     for (const day of weekDays) grouped[day.dateKey] = [];
 
     for (const job of jobs) {
-      if (!job.scheduled || job.complete) continue;
+      if (!job.scheduled || job.complete || job.archived) continue;
 
       const dateKey = getNYDateKey(job.scheduled);
 

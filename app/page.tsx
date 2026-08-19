@@ -14,6 +14,7 @@ type Job = {
   address?: string | null;
   scheduled?: string | null;
   complete?: boolean | null;
+  archived?: boolean | null;
   service_type?: string | null;
   po_number?: string | null;
   size?: string | null;
@@ -184,6 +185,7 @@ export default function DashboardPage() {
       address,
       scheduled,
       complete,
+      archived,
       service_type,
       po_number,
       size,
@@ -228,7 +230,7 @@ export default function DashboardPage() {
   }, [vehicles]);
 
   const scheduledJobs = useMemo(() => {
-    return jobs.filter((j) => !!j.scheduled && !j.complete);
+    return jobs.filter((j) => !!j.scheduled && !j.complete && !j.archived);
   }, [jobs]);
 
   const todaysJobs = useMemo(() => {
