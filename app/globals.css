@@ -65,6 +65,7 @@ body{
 .quote-image-placeholder { height: 150px; border-radius: 10px; background: #f1f5f9; color: #94a3b8; display: grid; place-items: center; font-weight: 700; }
 .quote-photo-drop { display: grid; gap: 7px; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 7px; cursor: pointer; transition: .15s ease; background: #f8fafc; }
 .quote-photo-drop.dragging { border-color: #2563eb; background: #eff6ff; transform: scale(1.01); }
+.quote-photo-drop:focus{outline:3px solid rgba(37,99,235,.2);border-color:#2563eb}.quote-photo-paste-hint{display:block;text-align:center;color:#64748b;font-size:11px;font-weight:700}
 .quote-photo-drop input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .quote-photo-change { text-align: center; color: #64748b; font-size: 12px; font-weight: 700; padding-bottom: 3px; }
 .quote-image-url summary { cursor: pointer; color: #64748b; font-size: 13px; font-weight: 700; }

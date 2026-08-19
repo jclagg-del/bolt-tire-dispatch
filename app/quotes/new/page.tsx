@@ -10,7 +10,7 @@ import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
 type QuoteForm = {
   customer: string; contact_name: string; phone: string; email: string; vehicle: string;
   tire_size: string; quantity: string; address: string; notes: string;
-  service_category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" | "tires_only";
+  service_category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" | "off_road" | "tires_only";
   installation_cost: string; service_call_fee: string; disposal_fee: string;
   ny_state_tire_fee: string; sales_tax_rate: string; tax_exempt: boolean; expires_at: string;
 };
@@ -65,7 +65,7 @@ export default function NewQuotePage() {
   }, []);
 
   const applyPricing = (pricing: BusinessSettings, category: QuoteForm["service_category"], quantity: number) => {
-    const disposalEach = category === "tires_only" ? 0 : category === "passenger" || category === "trailer_atv" ? pricing.passenger_disposal_fee : category === "truck" ? pricing.truck_disposal_fee : pricing.commercial_disposal_fee;
+    const disposalEach = category === "tires_only" ? 0 : category === "passenger" || category === "trailer_atv" || category === "off_road" ? pricing.passenger_disposal_fee : category === "truck" ? pricing.truck_disposal_fee : pricing.commercial_disposal_fee;
     const installation = installationDefault(pricing, quantity, category);
     setForm((current) => ({
       ...current,
@@ -88,7 +88,7 @@ export default function NewQuotePage() {
     if (file.size > 8 * 1024 * 1024) return alert("The image must be smaller than 8 MB.");
     const option = options[index];
     setUploadingTier(option.tier);
-    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const extension = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() : ({ "image/png": "png", "image/webp": "webp", "image/jpeg": "jpg" }[file.type] || "jpg");
     const path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${extension}`;
     const { error } = await supabase.storage.from("quote-images").upload(path, file, { contentType: file.type, upsert: false });
     if (error) { setUploadingTier(null); return alert(`Could not upload photo: ${error.message}`); }
@@ -143,7 +143,7 @@ export default function NewQuotePage() {
         <QuoteField label="Vehicle" value={form.vehicle} onChange={(value) => setForm({ ...form, vehicle: value })} placeholder="Year, make, model or unit" />
         <QuoteField label="Tire size" value={form.tire_size} onChange={(value) => setForm({ ...form, tire_size: value })} placeholder="275/65R18" />
         <QuoteField label="Quantity" value={form.quantity} type="number" onChange={(value) => { const quantity = Number(value) || 0; setForm((current) => ({ ...current, quantity: value })); applyPricing(settings, form.service_category, quantity); }} />
-        <label className="quote-field"><span>Pricing category</span><select value={form.service_category} onChange={(event) => applyPricing(settings, event.target.value as QuoteForm["service_category"], Number(form.quantity) || 0)}><option value="passenger">Passenger - mount & balance</option><option value="tires_only">Loose tires only - no installation</option><option value="trailer_atv">Trailer / ATV</option><option value="truck">Light / medium truck - mount & balance</option><option value="commercial">Heavy truck - mount & balance</option><option value="medium_dismount">Medium truck - mount & dismount</option></select></label>
+        <label className="quote-field"><span>Pricing category</span><select value={form.service_category} onChange={(event) => applyPricing(settings, event.target.value as QuoteForm["service_category"], Number(form.quantity) || 0)}><option value="passenger">Passenger - mount & balance</option><option value="tires_only">Loose tires only - no installation</option><option value="off_road">Off-road / ATV installation</option><option value="trailer_atv">Trailer installation</option><option value="truck">Light / medium truck - mount & balance</option><option value="commercial">Heavy truck - mount & balance</option><option value="medium_dismount">Medium truck - mount & dismount</option></select></label>
         <QuoteField label="Address" value={form.address} onChange={(value) => setForm({ ...form, address: value })} />
         <QuoteField label="Expiration date" value={form.expires_at} type="date" onChange={(value) => setForm({ ...form, expires_at: value })} />
       </div></section>
@@ -151,10 +151,10 @@ export default function NewQuotePage() {
       <section className="quote-option-grid">
         {options.map((option, index) => <div className={`quote-option-card ${option.recommended ? "recommended" : ""}`} key={option.tier}>
           <div className="quote-tier-row"><span className={`quote-tier ${option.tier}`}>{option.tier}</span><label><input type="radio" name="recommended" checked={option.recommended} onChange={() => setOptions((items) => items.map((item, itemIndex) => ({ ...item, recommended: itemIndex === index })))} /> Recommended</label></div>
-          <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
+          <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} tabIndex={0} onPaste={(event) => { const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (image) { event.preventDefault(); uploadPhoto(index, image); } }} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadPhoto(index, event.target.files?.[0]); event.target.value = ""; }} />
-            {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Drag tire photo here or tap to choose"}</div>}
-            {option.image_url ? <span className="quote-photo-change">Drop or tap to replace photo</span> : null}
+            {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Paste, drag, or tap to add a tire photo"}</div>}
+            {option.image_url ? <span className="quote-photo-change">Paste, drop, or tap to replace photo</span> : <span className="quote-photo-paste-hint">Click this box, then press ⌘V</span>}
           </label>
           <QuoteField label="Brand" value={option.brand} onChange={(value) => updateOption(index, "brand", value)} />
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
