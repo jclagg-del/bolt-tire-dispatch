@@ -59,19 +59,24 @@ async function sendReviewRequest(admin: ReturnType<typeof createAdminClient>, jo
 export async function POST(request: Request) {
   const user = await requireApiUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { jobId } = await request.json();
+  const { jobId, mode } = await request.json();
   const admin = createAdminClient();
   const { data: job, error: jobError } = await admin.from("jobs").select("id,customer,contact_name,phone,po_number,mo_number,vehicle,unit_number,service_type,completed_at,complete,review_request_sent_at").eq("id", jobId).single();
   if (jobError || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (!job.complete) return NextResponse.json({ skipped: true });
 
   if (job.customer !== "Kingdom Support Services") {
+    if (mode !== "review_text") {
+      return NextResponse.json({ skipped: true, reason: "manual-send-required" });
+    }
     try {
       return NextResponse.json({ review: await sendReviewRequest(admin, job) });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Review text could not be sent" }, { status: 502 });
     }
   }
+
+  if (mode === "review_text") return NextResponse.json({ skipped: true, reason: "fleet-account" });
 
   const { data: order } = await admin.from("customer_orders").select("id,completion_notification_sent_at").eq("approved_job_id", job.id).maybeSingle();
   if (order?.completion_notification_sent_at) return NextResponse.json({ sent: true, duplicate: true });

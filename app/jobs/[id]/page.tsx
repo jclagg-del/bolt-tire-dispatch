@@ -470,7 +470,7 @@ export default function EditJobPage() {
     const notification = await fetch("/api/notifications/job-completed", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionData.session?.access_token || ""}` },
-      body: JSON.stringify({ jobId: id }),
+      body: JSON.stringify({ jobId: id, mode: "automatic_completion" }),
     });
     if (!notification.ok) {
       const result = await notification.json().catch(() => ({}));
