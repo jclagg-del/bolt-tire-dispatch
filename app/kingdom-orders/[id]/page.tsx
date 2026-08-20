@@ -7,12 +7,17 @@ import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type EditableOrder = {
   id: number; goodyear_order: boolean; service_method: "installed" | "delivery_pickup" | null;
+  submitted_by: string; contact_name: string; contact_number: string;
+  facility_id: number | null; facility_name: string | null; address: string;
+  requested_date: string; requested_time: string;
   vehicle_year: string; vehicle_make: string; vehicle_model: string; vehicle_color: string | null;
   license_plate: string | null; job_number: string | null; mo_number: string | null;
   tire_position: string | null; qty: number; tire_size: string; tire_product_number: string | null;
   notes: string | null; order_status: string;
   job: null | { complete: boolean; completed_at: string | null };
 };
+
+type Facility = { id: number; name: string; address: string };
 
 export default function KingdomOrderEditPage() {
   const params = useParams();
@@ -22,6 +27,7 @@ export default function KingdomOrderEditPage() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
+  const [facilities, setFacilities] = useState<Facility[]>([]);
 
   useEffect(() => {
     fetch("/api/public/kingdom/orders", { cache: "no-store" }).then(async (response) => {
@@ -33,7 +39,17 @@ export default function KingdomOrderEditPage() {
     }).catch((error) => setMessage(error.message)).finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    fetch("/api/public/kingdom/facilities", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : [])
+      .then(setFacilities);
+  }, []);
+
   const change = (name: keyof EditableOrder, value: string | number | boolean) => setOrder((current) => current ? { ...current, [name]: value } : current);
+  const selectFacility = (value: string) => {
+    const facility = facilities.find((item) => String(item.id) === value);
+    setOrder((current) => current && facility ? { ...current, facility_id: facility.id, facility_name: facility.name, address: facility.address } : current);
+  };
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -63,6 +79,13 @@ export default function KingdomOrderEditPage() {
 
       <label style={checkRow}><input type="checkbox" checked={order.goodyear_order} onChange={(event) => change("goodyear_order", event.target.checked)} /> Goodyear order?</label>
       <div style={choices}><label style={choice}><input type="radio" checked={order.service_method === "installed"} onChange={() => change("service_method", "installed")} /> Installed</label><label style={choice}><input type="radio" checked={order.service_method === "delivery_pickup"} onChange={() => change("service_method", "delivery_pickup")} /> Delivery / Pickup</label></div>
+
+      <h2 style={sectionTitle}>Contact & Facility</h2>
+      <div style={grid2}><Field label="Submitted By" value={order.submitted_by || ""} onChange={(value) => change("submitted_by", value)} /><Field label="Contact Person" value={order.contact_name || ""} onChange={(value) => change("contact_name", value)} /><Field label="Contact Number" type="tel" value={order.contact_number || ""} onChange={(value) => change("contact_number", value)} /></div>
+      <label style={label}>Facility<select value={order.facility_id || ""} onChange={(event) => selectFacility(event.target.value)} style={input}><option value="">Choose facility</option>{facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</select></label>
+      <Field label="Service Address" value={order.address || ""} onChange={(value) => change("address", value)} />
+
+      <h2 style={sectionTitle}>Appointment</h2><div style={grid2}><Field label="Requested Date" type="date" value={order.requested_date} onChange={(value) => change("requested_date", value)} /><label style={label}>Requested Time<select value={(order.requested_time || "").substring(0,5)} onChange={(event) => change("requested_time", event.target.value)} style={input}><option value="08:00">8:00 AM</option><option value="09:30">9:30 AM</option><option value="11:00">11:00 AM</option><option value="12:30">12:30 PM</option><option value="14:00">2:00 PM</option></select></label></div>
 
       <h2 style={sectionTitle}>Vehicle</h2><div style={grid3}><Field label="Year" value={order.vehicle_year} onChange={(value) => change("vehicle_year", value)} /><Field label="Make" value={order.vehicle_make} onChange={(value) => change("vehicle_make", value)} /><Field label="Model" value={order.vehicle_model} onChange={(value) => change("vehicle_model", value)} /></div>
       <div style={grid2}><Field label="Color" value={order.vehicle_color || ""} onChange={(value) => change("vehicle_color", value)} /><Field label="License Plate" value={order.license_plate || ""} onChange={(value) => change("license_plate", value)} /></div>

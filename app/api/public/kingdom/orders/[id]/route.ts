@@ -27,6 +27,17 @@ export async function PATCH(request: Request, { params }: Context) {
 
   const serviceMethod = body.service_method === "delivery_pickup" ? "delivery_pickup" : "installed";
   const qty = Number(body.qty);
+  const requestedDate = String(body.requested_date || "").trim();
+  const requestedTime = String(body.requested_time || "").trim().substring(0, 5);
+  if (!String(body.submitted_by || "").trim() || !String(body.contact_name || "").trim() || !String(body.contact_number || "").trim()) {
+    return NextResponse.json({ error: "Submitted by, contact name, and contact number are required." }, { status: 400 });
+  }
+  if (!String(body.facility_name || "").trim() || !String(body.address || "").trim()) {
+    return NextResponse.json({ error: "Facility and service address are required." }, { status: 400 });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) || !/^\d{2}:\d{2}$/.test(requestedTime)) {
+    return NextResponse.json({ error: "A valid appointment date and time are required." }, { status: 400 });
+  }
   if (!String(body.vehicle_year || "").trim() || !String(body.vehicle_make || "").trim() || !String(body.vehicle_model || "").trim()) {
     return NextResponse.json({ error: "Vehicle year, make, and model are required." }, { status: 400 });
   }
@@ -37,6 +48,11 @@ export async function PATCH(request: Request, { params }: Context) {
   const updates = {
     goodyear_order: Boolean(body.goodyear_order),
     service_method: serviceMethod,
+    submitted_by: String(body.submitted_by).trim(),
+    contact_name: String(body.contact_name).trim(),
+    contact_number: String(body.contact_number).trim(),
+    requested_date: requestedDate,
+    requested_time: requestedTime,
     facility_id: body.facility_id ? Number(body.facility_id) : null,
     facility_name: String(body.facility_name || "").trim() || null,
     address: String(body.address || "").trim() || order.address,
@@ -58,10 +74,12 @@ export async function PATCH(request: Request, { params }: Context) {
 
   if (linkedJob) {
     const vehicle = [updates.vehicle_year, updates.vehicle_make, updates.vehicle_model, updates.vehicle_color && `Color: ${updates.vehicle_color}`, updates.license_plate && `Plate: ${updates.license_plate}`].filter(Boolean).join(" • ");
-    const notes = [updates.goodyear_order ? "Goodyear Order: Yes" : null, updates.tire_position && `Tire Position: ${updates.tire_position}`, order.submitted_by && `Submitted By: ${order.submitted_by}`, updates.notes].filter(Boolean).join("\n") || null;
+    const notes = [updates.goodyear_order ? "Goodyear Order: Yes" : null, updates.tire_position && `Tire Position: ${updates.tire_position}`, `Submitted By: ${updates.submitted_by}`, updates.notes].filter(Boolean).join("\n") || null;
     const { error: jobError } = await admin.from("jobs").update({
       vehicle, po_number: updates.job_number, mo_number: updates.mo_number,
       facility_id: updates.facility_id, facility_name: updates.facility_name, address: updates.address,
+      contact_name: updates.contact_name, phone: updates.contact_number,
+      scheduled: `${updates.requested_date}T${updates.requested_time}:00`,
       qty: updates.qty, size: updates.tire_size, tire_product_number: updates.tire_product_number,
       notes, service_type: serviceMethod === "delivery_pickup" ? "delivery / pickup" : null,
     }).eq("id", linkedJob.id);
