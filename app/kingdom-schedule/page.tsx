@@ -11,7 +11,7 @@ type KingdomJob = {
   scheduled: string | null;
   vehicle: string | null;
   unit_number: string | null;
-  service_type: string | null;
+  facility_name: string | null;
   tires: string | null;
   size: string | null;
   qty: number | string | null;
@@ -127,7 +127,7 @@ export default function KingdomSchedulePage() {
           scheduled,
           vehicle,
           unit_number,
-          service_type,
+          facility_name,
           tires,
           size,
           qty,
@@ -253,7 +253,7 @@ export default function KingdomSchedulePage() {
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
                     <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
-                    <Detail label="Service" value={job.service_type || "Tire service"} />
+                    <Detail label="Facility" value={job.facility_name || "Not provided"} />
                     <Detail label="Tires" value={[job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "", job.tires, job.size].filter(Boolean).join(" • ") || "Not provided"} />
                     <Detail label="Reference" value={[job.po_number && `Job/PO ${job.po_number}`, job.mo_number && `MO ${job.mo_number}`].filter(Boolean).join(" • ") || "Not provided"} />
                   </div>
@@ -262,7 +262,7 @@ export default function KingdomSchedulePage() {
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
                     <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
-                    <Detail label="Service" value={job.service_type || "Tire service"} />
+                    <Detail label="Facility" value={job.facility_name || "Not provided"} />
                     <Detail label="Tires" value={[job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "", job.tires, job.size].filter(Boolean).join(" • ") || "Not provided"} />
                     <Detail label="Reference" value={[job.po_number && `Job/PO ${job.po_number}`, job.mo_number && `MO ${job.mo_number}`].filter(Boolean).join(" • ") || "Not provided"} />
                   </div>
@@ -275,7 +275,7 @@ export default function KingdomSchedulePage() {
 
         <p style={privacyNote}>
           This page shows scheduling and work-order details only. Customer
-          contact information, service addresses, internal notes, and pricing
+          contact information, full service addresses, internal notes, and pricing
           are not displayed.
         </p>
       </div>

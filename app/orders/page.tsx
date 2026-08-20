@@ -13,6 +13,8 @@ type CustomerOrder = {
   submitted_by: string | null;
   contact_name: string;
   contact_number: string;
+  facility_id: number | null;
+  facility_name: string | null;
   address: string;
   vehicle_year: string | null;
   vehicle_make: string | null;
@@ -119,6 +121,8 @@ export default function OrdersPage() {
         submitted_by,
         contact_name,
         contact_number,
+        facility_id,
+        facility_name,
         address,
         vehicle_year,
         vehicle_make,
@@ -334,6 +338,8 @@ export default function OrdersPage() {
         contact_name: order.contact_name,
         phone: order.contact_number,
         address: order.address,
+        facility_id: order.facility_id,
+        facility_name: order.facility_name,
         vehicle: buildVehicleDescription(order) || null,
         scheduled,
         po_number: order.job_number,
@@ -346,7 +352,7 @@ export default function OrdersPage() {
         submitted_by_customer: true,
         customer_order_status: "approved",
         vehicle_id: "stepvan",
-        service_type: order.service_method === "delivery_pickup" ? "delivery / pickup" : "new tires - installed",
+        service_type: order.service_method === "delivery_pickup" ? "delivery / pickup" : null,
         payment_status: "unpaid",
         job_status: "scheduled",
         complete: false,
@@ -676,7 +682,7 @@ function OrderSection({
                 </div>
 
                 <div style={addressBox}>
-                  <strong>Service Address</strong>
+                  <strong>{order.facility_name || "Service Address"}</strong>
                   <span>{order.address}</span>
                 </div>
 

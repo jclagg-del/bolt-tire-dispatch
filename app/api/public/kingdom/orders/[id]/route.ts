@@ -37,6 +37,9 @@ export async function PATCH(request: Request, { params }: Context) {
   const updates = {
     goodyear_order: Boolean(body.goodyear_order),
     service_method: serviceMethod,
+    facility_id: body.facility_id ? Number(body.facility_id) : null,
+    facility_name: String(body.facility_name || "").trim() || null,
+    address: String(body.address || "").trim() || order.address,
     vehicle_year: String(body.vehicle_year).trim(),
     vehicle_make: String(body.vehicle_make).trim(),
     vehicle_model: String(body.vehicle_model).trim(),
@@ -58,11 +61,11 @@ export async function PATCH(request: Request, { params }: Context) {
     const notes = [updates.goodyear_order ? "Goodyear Order: Yes" : null, updates.tire_position && `Tire Position: ${updates.tire_position}`, order.submitted_by && `Submitted By: ${order.submitted_by}`, updates.notes].filter(Boolean).join("\n") || null;
     const { error: jobError } = await admin.from("jobs").update({
       vehicle, po_number: updates.job_number, mo_number: updates.mo_number,
+      facility_id: updates.facility_id, facility_name: updates.facility_name, address: updates.address,
       qty: updates.qty, size: updates.tire_size, tire_product_number: updates.tire_product_number,
-      notes, service_type: serviceMethod === "delivery_pickup" ? "delivery / pickup" : "new tires - installed",
+      notes, service_type: serviceMethod === "delivery_pickup" ? "delivery / pickup" : null,
     }).eq("id", linkedJob.id);
     if (jobError) return NextResponse.json({ error: `Order saved, but the linked job could not be updated: ${jobError.message}` }, { status: 500 });
   }
   return NextResponse.json({ saved: true });
 }
-

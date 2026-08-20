@@ -11,6 +11,8 @@ type OrderForm = {
   submitted_by: string;
   contact_name: string;
   contact_number: string;
+  facility_id: string;
+  facility_name: string;
   address: string;
   vehicle_year: string;
   vehicle_make: string;
@@ -28,6 +30,8 @@ type OrderForm = {
   tire_product_number: string;
   notes: string;
 };
+
+type Facility = { id: number; name: string; address: string };
 
 type ScheduledJob = {
   id: string | number;
@@ -61,6 +65,8 @@ const initialForm: OrderForm = {
   submitted_by: "",
   contact_name: "",
   contact_number: "",
+  facility_id: "",
+  facility_name: "",
   address: "",
   vehicle_year: "",
   vehicle_make: "",
@@ -174,8 +180,23 @@ export default function KingdomOrderPage() {
   const [availabilityError, setAvailabilityError] = useState("");
   const [availableTimes, setAvailableTimes] = useState<AppointmentTime[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [addingFacility, setAddingFacility] = useState(false);
+  const [newFacilityName, setNewFacilityName] = useState("");
+  const [newFacilityAddress, setNewFacilityAddress] = useState("");
+  const [facilityMessage, setFacilityMessage] = useState("");
 
   const today = useMemo(() => getTodayDate(), []);
+
+  useEffect(() => {
+    fetch("/api/public/kingdom/facilities", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Facilities could not be loaded.");
+        setFacilities(result);
+      })
+      .catch((error) => setFacilityMessage(error.message));
+  }, []);
 
   useEffect(() => {
     const loadAvailability = async () => {
@@ -282,11 +303,39 @@ export default function KingdomOrderPage() {
     setErrorMessage("");
   };
 
+  const selectFacility = (facilityId: string) => {
+    const facility = facilities.find((item) => String(item.id) === facilityId);
+    setForm((current) => ({
+      ...current,
+      facility_id: facilityId,
+      facility_name: facility?.name || "",
+      address: facility?.address || "",
+    }));
+    setErrorMessage("");
+  };
+
+  const saveFacility = async () => {
+    setFacilityMessage("");
+    const response = await fetch("/api/public/kingdom/facilities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newFacilityName, address: newFacilityAddress }),
+    });
+    const result = await response.json();
+    if (!response.ok) return setFacilityMessage(result.error || "Facility could not be saved.");
+    setFacilities((current) => [...current, result].sort((a, b) => a.name.localeCompare(b.name)));
+    setForm((current) => ({ ...current, facility_id: String(result.id), facility_name: result.name, address: result.address }));
+    setNewFacilityName("");
+    setNewFacilityAddress("");
+    setAddingFacility(false);
+  };
+
   const validateForm = () => {
     if (!form.service_method) return "Please choose Installed or Delivery / Pickup.";
     if (!form.submitted_by.trim()) return "Please enter who submitted this request.";
     if (!form.contact_name.trim()) return "Please enter the contact person.";
     if (!form.contact_number.trim()) return "Please enter a contact number.";
+    if (!form.facility_id || !form.facility_name.trim()) return "Please choose a facility.";
     if (!form.address.trim()) return "Please enter the service address.";
     if (!form.vehicle_year.trim()) return "Please enter the vehicle year.";
     if (!form.vehicle_make.trim()) return "Please enter the vehicle make.";
@@ -388,6 +437,8 @@ export default function KingdomOrderPage() {
       submitted_by: form.submitted_by.trim(),
       contact_name: form.contact_name.trim(),
       contact_number: form.contact_number.trim(),
+      facility_id: Number(form.facility_id),
+      facility_name: form.facility_name.trim(),
       address: form.address.trim(),
       vehicle_year: form.vehicle_year.trim(),
       vehicle_make: form.vehicle_make.trim(),
@@ -537,6 +588,22 @@ export default function KingdomOrderPage() {
                 />
 
                 <FieldLabel text="Service Address" required />
+                <select value={form.facility_id} onChange={(event) => selectFacility(event.target.value)} style={input}>
+                  <option value="">Choose a facility</option>
+                  {facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.name}</option>)}
+                </select>
+                <button type="button" onClick={() => setAddingFacility((value) => !value)} style={addFacilityButton}>
+                  {addingFacility ? "Cancel adding facility" : "+ Add a facility"}
+                </button>
+                {addingFacility ? <div style={addFacilityBox}>
+                  <FieldLabel text="Facility Name" required />
+                  <input value={newFacilityName} onChange={(event) => setNewFacilityName(event.target.value)} style={input} placeholder="Facility name" />
+                  <FieldLabel text="Facility Address" required />
+                  <input value={newFacilityAddress} onChange={(event) => setNewFacilityAddress(event.target.value)} style={input} placeholder="Street, city, state, and ZIP" />
+                  <button type="button" onClick={saveFacility} disabled={!newFacilityName.trim() || !newFacilityAddress.trim()} style={saveFacilityButton}>Save Facility</button>
+                </div> : null}
+                {facilityMessage ? <div style={errorBox}>{facilityMessage}</div> : null}
+                <FieldLabel text="Address" required />
                 <input
                   type="text"
                   name="address"
@@ -545,6 +612,7 @@ export default function KingdomOrderPage() {
                   style={input}
                   placeholder="Street, city, state, and ZIP"
                   autoComplete="street-address"
+                  readOnly={Boolean(form.facility_id)}
                 />
               </section>
 
@@ -1123,6 +1191,36 @@ const errorBox: React.CSSProperties = {
   color: "#991b1b",
   fontSize: 14,
   fontWeight: 600,
+};
+
+const addFacilityButton: React.CSSProperties = {
+  marginTop: 10,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  color: "#2563eb",
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 800,
+};
+
+const addFacilityBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: 14,
+  border: "1px solid #bfdbfe",
+  borderRadius: 12,
+  background: "#eff6ff",
+};
+
+const saveFacilityButton: React.CSSProperties = {
+  marginTop: 12,
+  padding: "10px 14px",
+  border: 0,
+  borderRadius: 9,
+  background: "#2563eb",
+  color: "#fff",
+  cursor: "pointer",
+  fontWeight: 800,
 };
 
 const submitButton: React.CSSProperties = {
