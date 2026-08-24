@@ -201,3 +201,38 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
   if (factoryFits.length > 1) return [...combined.filter((item) => item.fitmentPosition === "front").slice(0, 15), ...combined.filter((item) => item.fitmentPosition === "rear").slice(0, 15)];
   return combined.slice(0, 30);
 }
+
+export type AtdOrderRequest = {
+  atdProductNumber: string;
+  quantity: number;
+  customerPoNumber?: string;
+  customerComment?: string;
+};
+
+function atdOrderPayload(request: AtdOrderRequest) {
+  return {
+    locationnumber: locationNumber,
+    order: {
+      customerponumber: request.customerPoNumber?.trim() || undefined,
+      customercomment: request.customerComment?.trim().slice(0, 255) || undefined,
+      fillkill: "fok",
+      pickup: false,
+      localplus: true,
+      ordertype: "d",
+      lineitems: [{
+        cartlinenumber: "1",
+        atdproductnumber: request.atdProductNumber,
+        quantity: request.quantity,
+        quickship: false,
+      }],
+    },
+  };
+}
+
+export async function previewAtdOrder(request: AtdOrderRequest) {
+  return atdRequest<Record<string, unknown>>("order/preview-order", atdOrderPayload(request));
+}
+
+export async function placeAtdOrder(request: AtdOrderRequest) {
+  return atdRequest<Record<string, unknown>>("order/place-order", atdOrderPayload(request));
+}
