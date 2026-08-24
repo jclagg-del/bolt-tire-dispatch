@@ -171,7 +171,7 @@ export default function QuoteDetailPage() {
       {quote.quote_options.map((option, index) => {
         const selected = quote.selected_option_id === option.id;
         return <article className={`quote-compare-card ${option.recommended ? "recommended" : ""} ${selected ? "selected" : ""}`} key={option.id}>
-          <div className="quote-tier-row"><span className={`quote-tier ${option.tier}`}>{option.tier}</span>{option.recommended ? <span className="quote-recommended">Bolt recommends</span> : null}</div>
+          {option.recommended ? <div className="quote-tier-row"><span className="quote-recommended">Bolt recommends</span></div> : null}
           {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">No tire image</div>}
           <h2>{option.brand}</h2><h3>{option.model}</h3>
           <div className="quote-price-each">${Number(option.price_per_tire).toFixed(2)} <span>per tire</span></div>

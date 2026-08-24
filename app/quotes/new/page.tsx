@@ -133,7 +133,7 @@ export default function NewQuotePage() {
 
   return (
     <div className="quote-shell"><AppHeader /><main className="quote-page">
-      <div className="quote-page-header"><div><div className="quote-eyebrow">Quotes</div><h1>Build Tire Quote</h1><p>Create a visual Good/Better/Best comparison.</p></div><button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : "Save Quote"}</button></div>
+      <div className="quote-page-header"><div><div className="quote-eyebrow">Quotes</div><h1>Build Tire Quote</h1><p>Create a visual tire comparison.</p></div><button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : "Save Quote"}</button></div>
 
       <section className="quote-form-card"><h2>Customer and vehicle</h2><div className="quote-form-grid">
         <QuoteField label="Customer" value={form.customer} onChange={(value) => setForm({ ...form, customer: value })} />
@@ -150,7 +150,7 @@ export default function NewQuotePage() {
 
       <section className="quote-option-grid">
         {options.map((option, index) => <div className={`quote-option-card ${option.recommended ? "recommended" : ""}`} key={option.tier}>
-          <div className="quote-tier-row"><span className={`quote-tier ${option.tier}`}>{option.tier}</span><label><input type="radio" name="recommended" checked={option.recommended} onChange={() => setOptions((items) => items.map((item, itemIndex) => ({ ...item, recommended: itemIndex === index })))} /> Recommended</label></div>
+          <div className="quote-tier-row"><label><input type="radio" name="recommended" checked={option.recommended} onChange={() => setOptions((items) => items.map((item, itemIndex) => ({ ...item, recommended: itemIndex === index })))} /> Recommended</label></div>
           <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} tabIndex={0} onPaste={(event) => { const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (image) { event.preventDefault(); uploadPhoto(index, image); } }} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadPhoto(index, event.target.files?.[0]); event.target.value = ""; }} />
             {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Paste, drag, or tap to add a tire photo"}</div>}

@@ -79,7 +79,7 @@ export default function QuotesPage() {
         {error ? <div className="quote-error">Run the new quotes migration in Supabase, then reload. {error}</div> : null}
         {loading ? <div className="quote-empty">Loading quotes...</div> : null}
         {!loading && !error && visibleQuotes.length === 0 ? (
-          <div className="quote-empty"><h2>No quotes yet</h2><p>Create your first Good/Better/Best tire comparison.</p></div>
+          <div className="quote-empty"><h2>No quotes yet</h2><p>Create your first tire comparison.</p></div>
         ) : null}
 
         <div className="quote-list">
