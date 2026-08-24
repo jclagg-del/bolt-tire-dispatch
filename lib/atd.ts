@@ -3,13 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
+export const atdEnvironment = (process.env.ATD_ENVIRONMENT || "sandbox").trim().toLowerCase();
 const locationNumber = process.env.ATD_LOCATION_NUMBER || "3375509";
 
 function credentials() {
   const username = process.env.ATD_USERNAME;
   const password = process.env.ATD_PASSWORD;
   const clientId = process.env.ATD_CLIENT_ID;
-  if (!username || !password || !clientId) throw new Error("ATD sandbox credentials are not configured");
+  if (!username || !password || !clientId) throw new Error("ATD credentials are not configured");
   return { username, password, clientId };
 }
 
