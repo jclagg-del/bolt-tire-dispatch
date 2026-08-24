@@ -17,7 +17,7 @@ type EditableOrder = {
   job: null | { complete: boolean; completed_at: string | null };
 };
 
-type Facility = { id: number; name: string; address: string };
+type Facility = { id: number; name: string; address: string; contact_name: string | null; contact_number: string | null };
 
 export default function KingdomOrderEditPage() {
   const params = useParams();
@@ -48,7 +48,7 @@ export default function KingdomOrderEditPage() {
   const change = (name: keyof EditableOrder, value: string | number | boolean) => setOrder((current) => current ? { ...current, [name]: value } : current);
   const selectFacility = (value: string) => {
     const facility = facilities.find((item) => String(item.id) === value);
-    setOrder((current) => current && facility ? { ...current, facility_id: facility.id, facility_name: facility.name, address: facility.address } : current);
+    setOrder((current) => current && facility ? { ...current, facility_id: facility.id, facility_name: facility.name, address: facility.address, contact_name: facility.contact_name || "", contact_number: facility.contact_number || "" } : current);
   };
 
   const save = async (event: FormEvent) => {
@@ -81,9 +81,9 @@ export default function KingdomOrderEditPage() {
       <div style={choices}><label style={choice}><input type="radio" checked={order.service_method === "installed"} onChange={() => change("service_method", "installed")} /> Installed</label><label style={choice}><input type="radio" checked={order.service_method === "delivery_pickup"} onChange={() => change("service_method", "delivery_pickup")} /> Delivery / Pickup</label></div>
 
       <h2 style={sectionTitle}>Contact & Facility</h2>
-      <div style={grid2}><Field label="Submitted By" value={order.submitted_by || ""} onChange={(value) => change("submitted_by", value)} /><Field label="Contact Person" value={order.contact_name || ""} onChange={(value) => change("contact_name", value)} /><Field label="Contact Number" type="tel" value={order.contact_number || ""} onChange={(value) => change("contact_number", value)} /></div>
       <label style={label}>Facility<select value={order.facility_id || ""} onChange={(event) => selectFacility(event.target.value)} style={input}><option value="">Choose facility</option>{facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</select></label>
       <Field label="Service Address" value={order.address || ""} onChange={(value) => change("address", value)} />
+      <div style={grid2}><Field label="Submitted By" value={order.submitted_by || ""} onChange={(value) => change("submitted_by", value)} /><Field label="Contact Person" value={order.contact_name || ""} onChange={(value) => change("contact_name", value)} /><Field label="Contact Number" type="tel" value={order.contact_number || ""} onChange={(value) => change("contact_number", value)} /></div>
 
       <h2 style={sectionTitle}>Appointment</h2><div style={grid2}><Field label="Requested Date" type="date" value={order.requested_date} onChange={(value) => change("requested_date", value)} /><label style={label}>Requested Time<select value={(order.requested_time || "").substring(0,5)} onChange={(event) => change("requested_time", event.target.value)} style={input}><option value="08:00">8:00 AM</option><option value="09:30">9:30 AM</option><option value="11:00">11:00 AM</option><option value="12:30">12:30 PM</option><option value="14:00">2:00 PM</option></select></label></div>
 

@@ -31,7 +31,7 @@ type OrderForm = {
   notes: string;
 };
 
-type Facility = { id: number; name: string; address: string };
+type Facility = { id: number; name: string; address: string; contact_name: string | null; contact_number: string | null };
 
 type ScheduledJob = {
   id: string | number;
@@ -184,6 +184,8 @@ export default function KingdomOrderPage() {
   const [addingFacility, setAddingFacility] = useState(false);
   const [newFacilityName, setNewFacilityName] = useState("");
   const [newFacilityAddress, setNewFacilityAddress] = useState("");
+  const [newFacilityContactName, setNewFacilityContactName] = useState("");
+  const [newFacilityContactNumber, setNewFacilityContactNumber] = useState("");
   const [facilityMessage, setFacilityMessage] = useState("");
 
   const today = useMemo(() => getTodayDate(), []);
@@ -310,6 +312,8 @@ export default function KingdomOrderPage() {
       facility_id: facilityId,
       facility_name: facility?.name || "",
       address: facility?.address || "",
+      contact_name: facility?.contact_name || "",
+      contact_number: facility?.contact_number || "",
     }));
     setErrorMessage("");
   };
@@ -319,14 +323,16 @@ export default function KingdomOrderPage() {
     const response = await fetch("/api/public/kingdom/facilities", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newFacilityName, address: newFacilityAddress }),
+      body: JSON.stringify({ name: newFacilityName, address: newFacilityAddress, contact_name: newFacilityContactName, contact_number: newFacilityContactNumber }),
     });
     const result = await response.json();
     if (!response.ok) return setFacilityMessage(result.error || "Facility could not be saved.");
     setFacilities((current) => [...current, result].sort((a, b) => a.name.localeCompare(b.name)));
-    setForm((current) => ({ ...current, facility_id: String(result.id), facility_name: result.name, address: result.address }));
+    setForm((current) => ({ ...current, facility_id: String(result.id), facility_name: result.name, address: result.address, contact_name: result.contact_name || "", contact_number: result.contact_number || "" }));
     setNewFacilityName("");
     setNewFacilityAddress("");
+    setNewFacilityContactName("");
+    setNewFacilityContactNumber("");
     setAddingFacility(false);
   };
 
@@ -427,6 +433,18 @@ export default function KingdomOrderPage() {
           ? `We could not verify availability. ${availabilityCheck.error}`
           : "That appointment time was just filled. Please select another available time."
       );
+      return;
+    }
+
+    const facilityResponse = await fetch("/api/public/kingdom/facilities", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: Number(form.facility_id), contact_name: form.contact_name, contact_number: form.contact_number }),
+    });
+    if (!facilityResponse.ok) {
+      const result = await facilityResponse.json();
+      setSubmitting(false);
+      setErrorMessage(result.error || "The facility contact could not be saved.");
       return;
     }
 
@@ -553,6 +571,39 @@ export default function KingdomOrderPage() {
               <section style={formSection}>
                 <div style={sectionHeading}>Contact Information</div>
 
+                <FieldLabel text="Facility" required />
+                <select value={form.facility_id} onChange={(event) => selectFacility(event.target.value)} style={input}>
+                  <option value="">Choose a facility first</option>
+                  {facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.name}</option>)}
+                </select>
+                <button type="button" onClick={() => setAddingFacility((value) => !value)} style={addFacilityButton}>
+                  {addingFacility ? "Cancel adding facility" : "+ Add a facility"}
+                </button>
+                {addingFacility ? <div style={addFacilityBox}>
+                  <FieldLabel text="Facility Name" required />
+                  <input value={newFacilityName} onChange={(event) => setNewFacilityName(event.target.value)} style={input} placeholder="Facility name" />
+                  <FieldLabel text="Facility Address" required />
+                  <input value={newFacilityAddress} onChange={(event) => setNewFacilityAddress(event.target.value)} style={input} placeholder="Street, city, state, and ZIP" />
+                  <FieldLabel text="Contact Person" required />
+                  <input value={newFacilityContactName} onChange={(event) => setNewFacilityContactName(event.target.value)} style={input} placeholder="On-site contact person" />
+                  <FieldLabel text="Contact Number" required />
+                  <input type="tel" value={newFacilityContactNumber} onChange={(event) => setNewFacilityContactNumber(event.target.value)} style={input} placeholder="Phone number" />
+                  <button type="button" onClick={saveFacility} disabled={!newFacilityName.trim() || !newFacilityAddress.trim() || !newFacilityContactName.trim() || !newFacilityContactNumber.trim()} style={saveFacilityButton}>Save Facility</button>
+                </div> : null}
+                {facilityMessage ? <div style={errorBox}>{facilityMessage}</div> : null}
+
+                <FieldLabel text="Address" required />
+                <input
+                  type="text"
+                  name="address"
+                  value={form.address}
+                  onChange={handleChange}
+                  style={input}
+                  placeholder="Select a facility to fill its address"
+                  autoComplete="street-address"
+                  readOnly={Boolean(form.facility_id)}
+                />
+
                 <FieldLabel text="Submitted By" required />
                 <input
                   type="text"
@@ -587,33 +638,6 @@ export default function KingdomOrderPage() {
                   autoComplete="tel"
                 />
 
-                <FieldLabel text="Service Address" required />
-                <select value={form.facility_id} onChange={(event) => selectFacility(event.target.value)} style={input}>
-                  <option value="">Choose a facility</option>
-                  {facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.name}</option>)}
-                </select>
-                <button type="button" onClick={() => setAddingFacility((value) => !value)} style={addFacilityButton}>
-                  {addingFacility ? "Cancel adding facility" : "+ Add a facility"}
-                </button>
-                {addingFacility ? <div style={addFacilityBox}>
-                  <FieldLabel text="Facility Name" required />
-                  <input value={newFacilityName} onChange={(event) => setNewFacilityName(event.target.value)} style={input} placeholder="Facility name" />
-                  <FieldLabel text="Facility Address" required />
-                  <input value={newFacilityAddress} onChange={(event) => setNewFacilityAddress(event.target.value)} style={input} placeholder="Street, city, state, and ZIP" />
-                  <button type="button" onClick={saveFacility} disabled={!newFacilityName.trim() || !newFacilityAddress.trim()} style={saveFacilityButton}>Save Facility</button>
-                </div> : null}
-                {facilityMessage ? <div style={errorBox}>{facilityMessage}</div> : null}
-                <FieldLabel text="Address" required />
-                <input
-                  type="text"
-                  name="address"
-                  value={form.address}
-                  onChange={handleChange}
-                  style={input}
-                  placeholder="Street, city, state, and ZIP"
-                  autoComplete="street-address"
-                  readOnly={Boolean(form.facility_id)}
-                />
               </section>
 
               <section style={formSection}>

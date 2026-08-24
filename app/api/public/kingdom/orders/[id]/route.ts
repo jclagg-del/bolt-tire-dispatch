@@ -72,6 +72,11 @@ export async function PATCH(request: Request, { params }: Context) {
   const { error: updateError } = await admin.from("customer_orders").update(updates).eq("id", order.id);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
+  if (updates.facility_id) {
+    const { error: facilityError } = await admin.from("kingdom_facilities").update({ contact_name: updates.contact_name, contact_number: updates.contact_number }).eq("id", updates.facility_id);
+    if (facilityError) return NextResponse.json({ error: `Order saved, but the facility contact could not be updated: ${facilityError.message}` }, { status: 500 });
+  }
+
   if (linkedJob) {
     const vehicle = [updates.vehicle_year, updates.vehicle_make, updates.vehicle_model, updates.vehicle_color && `Color: ${updates.vehicle_color}`, updates.license_plate && `Plate: ${updates.license_plate}`].filter(Boolean).join(" • ");
     const notes = [updates.goodyear_order ? "Goodyear Order: Yes" : null, updates.tire_position && `Tire Position: ${updates.tire_position}`, `Submitted By: ${updates.submitted_by}`, updates.notes].filter(Boolean).join("\n") || null;
