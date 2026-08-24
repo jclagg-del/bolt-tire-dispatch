@@ -22,11 +22,8 @@ type Job = {
   qty?: string | number | null;
   service_type?: string | null;
   po_number?: string | null;
-  job_total?: number | string | null;
-  payment_status?: string | null;
-  invoice_number?: string | null;
+  mo_number?: string | null;
   job_status?: string | null;
-  billing_name?: string | null;
 };
 
 type Vehicle = {
@@ -176,13 +173,6 @@ function makeUTCISOStringFromNYLocal(dateKey: string, hour: number, minute: numb
   return guess.toISOString();
 }
 
-function formatMoney(value?: number | string | null) {
-  if (value === null || value === undefined || value === "") return "";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "";
-  return `$${num.toFixed(2)}`;
-}
-
 function getTextColor(background: string) {
   const hex = background.replace("#", "");
   if (hex.length !== 6) return "white";
@@ -243,11 +233,8 @@ export default function SchedulePage() {
       qty,
       service_type,
       po_number,
-      job_total,
-      payment_status,
-      invoice_number,
-      job_status,
-      billing_name
+      mo_number,
+      job_status
     `);
 
     if (error) {
@@ -534,9 +521,9 @@ function JobCard({
   const textColor = getTextColor(vehicleColor);
   const isDragging = draggingJobId === String(job.id);
   const isSelectedForMove = moveModeJobId === String(job.id);
-  const total = formatMoney(job.job_total);
   const unitOrVehicle = job.unit_number || job.vehicle || "";
   const tireText = [job.qty, job.tires, job.size].filter(Boolean).join(" • ");
+  const isKingdomOrder = job.customer === "Kingdom Support Services";
 
   return (
     <div
@@ -575,13 +562,10 @@ function JobCard({
 
         <div style={infoGrid}>
           <Info label="Service" value={job.service_type || "-"} />
-          <Info label="PO #" value={job.po_number || "-"} />
+          <Info label={isKingdomOrder ? "Job Number" : "PO #"} value={job.po_number || "-"} />
+          {isKingdomOrder ? <Info label="MO Number" value={job.mo_number || "-"} /> : null}
           <Info label="Tires" value={tireText || "-"} />
-          <Info label="Total" value={total || "-"} strong />
-          <Info label="Billing" value={job.payment_status || "unpaid"} />
-          <Info label="Invoice" value={job.invoice_number || "-"} />
           <Info label="Status" value={job.job_status || "scheduled"} />
-          <Info label="Bill To" value={job.billing_name || "-"} />
         </div>
 
         {job.notes && <div style={notes}>📝 {job.notes}</div>}
@@ -629,11 +613,11 @@ function JobCard({
   );
 }
 
-function Info({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Info({ label, value }: { label: string; value: string }) {
   return (
     <div style={infoItem}>
       <div style={infoLabel}>{label}</div>
-      <div style={strong ? infoValueStrong : infoValue}>{value}</div>
+      <div style={infoValue}>{value}</div>
     </div>
   );
 }
@@ -900,13 +884,6 @@ const infoLabel: React.CSSProperties = {
 
 const infoValue: React.CSSProperties = {
   fontSize: 13,
-  color: "#111827",
-  wordBreak: "break-word",
-};
-
-const infoValueStrong: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
   color: "#111827",
   wordBreak: "break-word",
 };
