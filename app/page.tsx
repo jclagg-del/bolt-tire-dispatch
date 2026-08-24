@@ -121,6 +121,7 @@ export default function DashboardPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [newOrdersCount, setNewOrdersCount] = useState(0);
+  const [tiresToOrderCount, setTiresToOrderCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
@@ -175,6 +176,16 @@ export default function DashboardPage() {
     setNewOrdersCount(count || 0);
   };
 
+  const fetchTiresToOrder = async () => {
+    const { count, error } = await supabase.from("jobs").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("tires_ordered", false).eq("archived", false).not("source_quote_id", "is", null);
+    if (error) {
+      console.error("Dashboard website order count error:", error.message);
+      setTiresToOrderCount(0);
+      return;
+    }
+    setTiresToOrderCount(count || 0);
+  };
+
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select(`
       id,
@@ -213,6 +224,7 @@ export default function DashboardPage() {
       fetchAssignments(),
       fetchJobs(),
       fetchNewOrders(),
+      fetchTiresToOrder(),
     ]);
     setLoading(false);
   };
@@ -307,6 +319,7 @@ export default function DashboardPage() {
             value={newOrdersCount}
             onClick={() => router.push("/orders")}
           />
+          <QuickCard label="Paid Tires to Order" value={tiresToOrderCount} onClick={() => router.push("/jobs?payment=paid")} />
           <QuickCard label="Open Jobs" value={scheduledJobs.length} onClick={() => router.push("/jobs")} />
           <QuickCard label="Today's Route" value={todaysJobs.length} onClick={() => router.push("/route")} />
           <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />

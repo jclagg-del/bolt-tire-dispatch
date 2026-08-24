@@ -166,6 +166,7 @@ function JobsPageContent() {
   const searchParams = useSearchParams();
 
   const customerFilter = searchParams.get("customer") || "";
+  const initialPaymentFilter = searchParams.get("payment") || "all";
   const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
 
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -175,7 +176,7 @@ function JobsPageContent() {
   const [searchText, setSearchText] = useState(customerFilter);
   const [vehicleFilter, setVehicleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState(initialPaymentFilter);
   const [serviceFilter, setServiceFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [startDateFilter, setStartDateFilter] = useState("");
