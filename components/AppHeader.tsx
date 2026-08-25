@@ -14,6 +14,7 @@ export default function AppHeader() {
     { label: "Jobs", path: "/jobs" },
     { label: "Quotes", path: "/quotes" },
     { label: "Tire Shop", path: "/tire-shop" },
+    { label: "Supplier Orders", path: "/supplier-orders" },
     { label: "Tire Receiving", path: "/tire-receiving" },
     { label: "Orders", path: "/orders" },
     { label: "Customers", path: "/customers" },
