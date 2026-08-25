@@ -23,11 +23,8 @@ type Job = {
   qty?: number | string | null;
   service_type?: string | null;
   po_number?: string | null;
-  job_total?: number | string | null;
-  payment_status?: string | null;
-  invoice_number?: string | null;
+  mo_number?: string | null;
   job_status?: string | null;
-  billing_name?: string | null;
   vehicle_mileage?: string | null;
 };
 
@@ -97,13 +94,6 @@ function formatTimeNY(input?: string | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
-}
-
-function formatMoney(value?: number | string | null) {
-  if (value === null || value === undefined || value === "") return "";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "";
-  return `$${num.toFixed(2)}`;
 }
 
 function mapsUrl(address?: string | null) {
@@ -200,11 +190,8 @@ export default function RoutePage() {
         qty,
         service_type,
         po_number,
-        job_total,
-        payment_status,
-        invoice_number,
+        mo_number,
         job_status,
-        billing_name,
         vehicle_mileage
       `);
 
@@ -528,7 +515,6 @@ function RouteCard({
   const phone = job.phone || "";
   const quoCallUrl = getQuoCallUrl(phone);
   const quoTextUrl = getQuoTextUrl(phone);
-  const total = formatMoney(job.job_total);
   const unitOrVehicle = job.unit_number || job.vehicle || "";
 
   const tireParts: string[] = [];
@@ -555,13 +541,10 @@ function RouteCard({
 
       <div style={infoGrid}>
         <Info label="Service" value={job.service_type || "-"} />
-        <Info label="PO #" value={job.po_number || "-"} />
+        <Info label="Job Number" value={job.po_number || "-"} />
+        <Info label="MO Number" value={job.mo_number || "-"} />
         <Info label="Tires" value={tireText} />
-        <Info label="Total" value={total || "-"} strong />
-        <Info label="Billing" value={job.payment_status || "unpaid"} />
-        <Info label="Invoice" value={job.invoice_number || "-"} />
         <Info label="Status" value={job.job_status || "scheduled"} />
-        <Info label="Bill To" value={job.billing_name || "-"} />
       </div>
 
       {job.notes && <div style={notes}>📝 {job.notes}</div>}
