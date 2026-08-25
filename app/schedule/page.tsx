@@ -561,7 +561,9 @@ function JobCard({
         {phone ? <div style={sub}>📞 {phone}</div> : null}
 
         <div style={infoGrid}>
-          <Info label="Service" value={job.service_type || "-"} />
+          {job.service_type && !/^new tires(?:\s*-\s*installed)?$/i.test(job.service_type.trim()) ? (
+            <Info label="Service" value={job.service_type} />
+          ) : null}
           <Info label={isKingdomOrder ? "Job Number" : "PO #"} value={job.po_number || "-"} />
           {isKingdomOrder ? <Info label="MO Number" value={job.mo_number || "-"} /> : null}
           <Info label="Tires" value={tireText || "-"} />

@@ -540,7 +540,9 @@ function RouteCard({
       {phone ? <div style={sub}>📞 {phone}</div> : null}
 
       <div style={infoGrid}>
-        <Info label="Service" value={job.service_type || "-"} />
+        {job.service_type && !/^new tires(?:\s*-\s*installed)?$/i.test(job.service_type.trim()) ? (
+          <Info label="Service" value={job.service_type} />
+        ) : null}
         <Info label="Job Number" value={job.po_number || "-"} />
         <Info label="MO Number" value={job.mo_number || "-"} />
         <Info label="Tires" value={tireText} />
