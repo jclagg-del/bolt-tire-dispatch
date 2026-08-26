@@ -86,7 +86,7 @@ export async function PATCH(request: Request, { params }: Context) {
       contact_name: updates.contact_name, phone: updates.contact_number,
       scheduled: `${updates.requested_date}T${updates.requested_time}:00`,
       qty: updates.qty, size: updates.tire_size, tire_product_number: updates.tire_product_number,
-      notes, service_type: serviceMethod === "delivery_pickup" ? "delivery / pickup" : null,
+      notes, service_type: serviceMethod === "delivery_pickup" ? "Delivery" : "Installation",
     }).eq("id", linkedJob.id);
     if (jobError) return NextResponse.json({ error: `Order saved, but the linked job could not be updated: ${jobError.message}` }, { status: 500 });
   }
