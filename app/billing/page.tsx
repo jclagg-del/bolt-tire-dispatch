@@ -19,6 +19,9 @@ type BillingJob = {
   billing_name?: string | null;
   complete?: boolean | null;
   paid_date?: string | Date | null;
+  phone?: string | null;
+  contact_number?: string | null;
+  review_request_sent_at?: string | null;
 };
 
 const NY_TIMEZONE = "America/New_York";
@@ -66,6 +69,7 @@ export default function BillingPage() {
   const [linkingId, setLinkingId] = useState<string | number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [sendingTextId, setSendingTextId] = useState<string | number | null>(null);
 
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select("*");
@@ -198,6 +202,29 @@ export default function BillingPage() {
     }
 
     await fetchJobs();
+  };
+
+  const sendCompletionText = async (job: BillingJob) => {
+    if (sendingTextId !== null || job.review_request_sent_at) return;
+    const phone = job.phone || job.contact_number;
+    if (!phone) return alert("Add a valid customer phone number first.");
+    if (!window.confirm(`Send the completed-work text to ${phone}?`)) return;
+
+    setSendingTextId(job.id);
+    const response = await authenticatedFetch("/api/notifications/job-completed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, mode: "review_text" }),
+    });
+    const result = await response.json().catch(() => ({}));
+    setSendingTextId(null);
+
+    if (!response.ok) return alert(result.error || "The completion text could not be sent.");
+    if (result.review?.skipped) {
+      return alert(result.review.reason === "no-valid-phone" ? "Add a valid customer phone number first." : "The completion text was not sent.");
+    }
+
+    setJobs((current) => current.map((item) => item.id === job.id ? { ...item, review_request_sent_at: new Date().toISOString() } : item));
   };
 
   const readyToBill = jobs.filter(
@@ -338,6 +365,7 @@ export default function BillingPage() {
                         </td>
 
                         <td style={td}>
+                          <div style={actionButtons}>
                           {!job.invoice_number && quickBooksConnected ? (
                             <button
                               type="button"
@@ -350,7 +378,7 @@ export default function BillingPage() {
                           ) : isPaid ? (
                             <span style={paidText}>Paid</span>
                           ) : (
-                            <div style={actionButtons}>
+                            <>
                               {job.quickbooks_invoice_id && (
                                 <>
                                   <button
@@ -382,8 +410,19 @@ export default function BillingPage() {
                               >
                                 {isUpdating ? "Updating..." : "Mark Paid"}
                               </button>
-                            </div>
+                            </>
                           )}
+                          {job.complete && job.customer !== "Kingdom Support Services" && (job.phone || job.contact_number) ? (
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); sendCompletionText(job); }}
+                              style={textButton}
+                              disabled={sendingTextId === job.id || Boolean(job.review_request_sent_at)}
+                            >
+                              {job.review_request_sent_at ? "Text Sent" : sendingTextId === job.id ? "Sending..." : "Send Completion Text"}
+                            </button>
+                          ) : null}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -437,6 +476,7 @@ const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0,
 const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
 const numberButton: React.CSSProperties = { ...quickBooksButton, background: "#7c3aed", padding: "8px 12px" };
 const linkButton: React.CSSProperties = { ...quickBooksButton, background: "#0369a1", padding: "8px 12px" };
+const textButton: React.CSSProperties = { ...quickBooksButton, background: "#111827", padding: "8px 12px" };
 const actionButtons: React.CSSProperties = { display: "flex", gap: 6, flexWrap: "wrap" };
 const disconnectButton: React.CSSProperties = { ...quickBooksButton, background: "#6b7280" };
 
