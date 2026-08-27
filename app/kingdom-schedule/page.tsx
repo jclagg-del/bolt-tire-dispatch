@@ -110,6 +110,22 @@ function statusStyle(job: KingdomJob): React.CSSProperties {
   };
 }
 
+function organizationCardStyle(job: KingdomJob): React.CSSProperties {
+  if (job.customer === "HPR") {
+    return {
+      background: "#f0fdf4",
+      borderColor: "#86efac",
+      boxShadow: "0 2px 8px rgba(22, 101, 52, 0.10)",
+    };
+  }
+
+  return {
+    background: "#eff6ff",
+    borderColor: "#93c5fd",
+    boxShadow: "0 2px 8px rgba(37, 99, 235, 0.10)",
+  };
+}
+
 export default function KingdomSchedulePage() {
   const [jobs, setJobs] = useState<KingdomJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -225,6 +241,12 @@ export default function KingdomSchedulePage() {
           <Link href="/kingdom-orders" style={{ ...backButton, marginLeft: 10, background: "#e2e8f0", color: "#0f172a" }}>
             Search All Orders
           </Link>
+
+          <div style={organizationLegend} aria-label="Schedule color key">
+            <span style={legendTitle}>Schedule colors</span>
+            <span style={legendItem}><i style={{ ...legendDot, background: "#2563eb" }} />Kingdom Support Services</span>
+            <span style={legendItem}><i style={{ ...legendDot, background: "#16a34a" }} />HPR</span>
+          </div>
         </section>
 
         {loading && (
@@ -251,7 +273,7 @@ export default function KingdomSchedulePage() {
             {weekDays.map((day) => <section key={day.dateKey} style={dayColumn}>
               <div style={dayHeader}><strong>{day.label}</strong><span>{jobsByDay[day.dateKey].length} job{jobsByDay[day.dateKey].length === 1 ? "" : "s"}</span></div>
               <div style={dayBody}>
-                {jobsByDay[day.dateKey].length === 0 ? <div style={emptyDay}>No work scheduled</div> : jobsByDay[day.dateKey].map((job) => job.order_id ? <Link key={job.id} href={`/kingdom-orders/${job.order_id}`} style={jobCardLink}>
+                {jobsByDay[day.dateKey].length === 0 ? <div style={emptyDay}>No work scheduled</div> : jobsByDay[day.dateKey].map((job) => job.order_id ? <Link key={job.id} href={`/kingdom-orders/${job.order_id}`} style={{ ...jobCardLink, ...organizationCardStyle(job) }}>
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
                     <Detail label="Organization" value={job.customer || "Watchtower"} />
@@ -261,7 +283,7 @@ export default function KingdomSchedulePage() {
                     <Detail label="Reference" value={[job.po_number && `Job/PO ${job.po_number}`, job.mo_number && `MO ${job.mo_number}`].filter(Boolean).join(" • ") || "Not provided"} />
                   </div>
                   <div style={openOrder}>View / Edit Order →</div>
-                </Link> : <article key={job.id} style={jobCard}>
+                </Link> : <article key={job.id} style={{ ...jobCard, ...organizationCardStyle(job) }}>
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
                     <Detail label="Organization" value={job.customer || "Watchtower"} />
@@ -400,6 +422,42 @@ const backButton: React.CSSProperties = {
   textDecoration: "none",
   fontSize: 14,
   fontWeight: 800,
+};
+
+const organizationLegend: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  flexWrap: "wrap",
+  marginTop: 18,
+  padding: "11px 13px",
+  borderRadius: 10,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+};
+
+const legendTitle: React.CSSProperties = {
+  color: "#475569",
+  fontSize: 12,
+  fontWeight: 850,
+  textTransform: "uppercase",
+  letterSpacing: 0.4,
+};
+
+const legendItem: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  color: "#1f2937",
+  fontSize: 13,
+  fontWeight: 750,
+};
+
+const legendDot: React.CSSProperties = {
+  display: "inline-block",
+  width: 12,
+  height: 12,
+  borderRadius: 999,
 };
 
 const weekControls: React.CSSProperties = {
