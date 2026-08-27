@@ -334,7 +334,7 @@ export default function OrdersPage() {
     const { data: newJob, error: jobError } = await supabase
       .from("jobs")
       .insert({
-        customer: "Kingdom Support Services",
+        customer: order.customer,
         contact_name: order.contact_name,
         phone: order.contact_number,
         address: order.address,
@@ -436,7 +436,7 @@ export default function OrdersPage() {
             <h1 style={title}>Orders</h1>
 
             <p style={subtitle}>
-              Review Kingdom Support Services requests and
+              Review Watchtower requests and
               approve them into your schedule.
             </p>
           </div>

@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type EditableOrder = {
-  id: number; goodyear_order: boolean; service_method: "installed" | "delivery_pickup" | null;
+  id: number; customer: "Kingdom Support Services" | "HPR"; goodyear_order: boolean; service_method: "installed" | "delivery_pickup" | null;
   submitted_by: string; contact_name: string; contact_number: string;
   facility_id: number | null; facility_name: string | null; address: string;
   requested_date: string; requested_time: string;
@@ -72,11 +72,12 @@ export default function KingdomOrderEditPage() {
 
   return <KingdomPortalGate><main style={shell}><div style={page}><Link href="/kingdom-orders" style={back}>← Back to Orders</Link>
     {loading ? <div style={card}>Loading order...</div> : !order ? <div style={errorCard}>{message || "Order not found."}</div> : <form onSubmit={save} style={card}>
-      <div style={eyebrow}>Kingdom Support Services</div><h1 style={title}>Edit {order.job_number ? `Job/PO ${order.job_number}` : `Request #${order.id}`}</h1>
+      <div style={eyebrow}>Watchtower</div><h1 style={title}>Edit {order.job_number ? `Job/PO ${order.job_number}` : `Request #${order.id}`}</h1>
       {order.job?.complete ? <div style={completeBanner}>This job is completed and can no longer be changed or cancelled.</div> : null}
       {order.order_status === "cancellation_requested" ? <div style={cancelBanner}>Cancellation has been requested. Bolt Tire will review it.</div> : null}
       {message ? <div style={notice}>{message}</div> : null}
 
+      <label style={label}>Organization<select value={order.customer} onChange={(event) => change("customer", event.target.value)} style={input}><option value="Kingdom Support Services">Kingdom Support Services</option><option value="HPR">HPR</option></select></label>
       <label style={checkRow}><input type="checkbox" checked={order.goodyear_order} onChange={(event) => change("goodyear_order", event.target.checked)} /> Goodyear order?</label>
       <div style={choices}><label style={choice}><input type="radio" checked={order.service_method === "installed"} onChange={() => change("service_method", "installed")} /> Installed</label><label style={choice}><input type="radio" checked={order.service_method === "delivery_pickup"} onChange={() => change("service_method", "delivery_pickup")} /> Delivery / Pickup</label></div>
 

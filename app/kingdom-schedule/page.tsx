@@ -20,6 +20,7 @@ type KingdomJob = {
   job_status: string | null;
   customer_order_status: string | null;
   complete: boolean | null;
+  customer?: string | null;
 };
 
 const NY_TIMEZONE = "America/New_York";
@@ -124,6 +125,7 @@ export default function KingdomSchedulePage() {
         .from("jobs")
         .select(`
           id,
+          customer,
           scheduled,
           vehicle,
           unit_number,
@@ -137,7 +139,7 @@ export default function KingdomSchedulePage() {
           customer_order_status,
           complete
         `)
-        .eq("customer", "Kingdom Support Services")
+        .in("customer", ["Kingdom Support Services", "HPR"])
         .eq("submitted_by_customer", true)
         .eq("customer_order_status", "approved")
         .eq("archived", false)
@@ -210,7 +212,7 @@ export default function KingdomSchedulePage() {
 
       <div style={pageContent}>
         <section style={heroCard}>
-          <div style={eyebrow}>Kingdom Support Services</div>
+          <div style={eyebrow}>Watchtower</div>
           <h1 style={title}>Weekly Schedule</h1>
 
           <p style={subtitle}>
@@ -252,6 +254,7 @@ export default function KingdomSchedulePage() {
                 {jobsByDay[day.dateKey].length === 0 ? <div style={emptyDay}>No work scheduled</div> : jobsByDay[day.dateKey].map((job) => job.order_id ? <Link key={job.id} href={`/kingdom-orders/${job.order_id}`} style={jobCardLink}>
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
+                    <Detail label="Organization" value={job.customer || "Watchtower"} />
                     <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
                     <Detail label="Facility" value={job.facility_name || "Not provided"} />
                     <Detail label="Tires" value={[job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "", job.tires, job.size].filter(Boolean).join(" • ") || "Not provided"} />
@@ -261,6 +264,7 @@ export default function KingdomSchedulePage() {
                 </Link> : <article key={job.id} style={jobCard}>
                   <div style={jobHeader}><div style={jobTime}>{formatTime(job.scheduled)}</div><span style={statusStyle(job)}>{formatStatus(job)}</span></div>
                   <div style={compactDetails}>
+                    <Detail label="Organization" value={job.customer || "Watchtower"} />
                     <Detail label="Vehicle" value={[job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided"} />
                     <Detail label="Facility" value={job.facility_name || "Not provided"} />
                     <Detail label="Tires" value={[job.qty ? `${job.qty} tire${Number(job.qty) === 1 ? "" : "s"}` : "", job.tires, job.size].filter(Boolean).join(" • ") || "Not provided"} />

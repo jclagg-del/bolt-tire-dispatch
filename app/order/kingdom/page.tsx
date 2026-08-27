@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type OrderForm = {
+  customer: "" | "Kingdom Support Services" | "HPR";
   goodyear_order: boolean;
   service_method: "" | "installed" | "delivery_pickup";
   submitted_by: string;
@@ -60,6 +61,7 @@ const APPOINTMENT_TIMES: AppointmentTime[] = [
 ];
 
 const initialForm: OrderForm = {
+  customer: "",
   goodyear_order: false,
   service_method: "",
   submitted_by: "",
@@ -337,6 +339,7 @@ export default function KingdomOrderPage() {
   };
 
   const validateForm = () => {
+    if (!form.customer) return "Please choose Kingdom Support Services or HPR.";
     if (!form.service_method) return "Please choose Installed or Delivery / Pickup.";
     if (!form.submitted_by.trim()) return "Please enter who submitted this request.";
     if (!form.contact_name.trim()) return "Please enter the contact person.";
@@ -449,7 +452,7 @@ export default function KingdomOrderPage() {
     }
 
     const { error } = await supabase.from("customer_orders").insert({
-      customer: "Kingdom Support Services",
+      customer: form.customer,
       goodyear_order: form.goodyear_order,
       service_method: form.service_method,
       submitted_by: form.submitted_by.trim(),
@@ -512,7 +515,7 @@ export default function KingdomOrderPage() {
         {submitted ? (
           <section style={successCard}>
             <div style={successIcon}>✓</div>
-            <div style={eyebrow}>Kingdom Support Services</div>
+            <div style={eyebrow}>Watchtower</div>
             <h1 style={successTitle}>Request Received</h1>
             <p style={successText}>
               Your tire service request has been sent to Bolt Tire.
@@ -533,7 +536,7 @@ export default function KingdomOrderPage() {
           <>
             <section style={heroCard}>
               <div style={eyebrow}>Customer Service Portal</div>
-              <h1 style={title}>Kingdom Support Services</h1>
+              <h1 style={title}>Watchtower</h1>
               <h2 style={portalTitle}>Request Tire Service</h2>
               <p style={subtitle}>
                 Enter the service, vehicle, and tire information below. Bolt
@@ -549,10 +552,14 @@ export default function KingdomOrderPage() {
             </section>
 
             <form onSubmit={handleSubmit} style={formCard}>
-              <label style={{ ...goodyearChoice, ...(form.goodyear_order ? goodyearChoiceSelected : {}) }}>
-                <input type="checkbox" name="goodyear_order" checked={form.goodyear_order} onChange={handleChange} style={choiceInput} />
-                <span><strong style={choiceTitle}>Goodyear order?</strong><small style={choiceHelp}>Check this box when the request is for Goodyear tires.</small></span>
-              </label>
+              <section style={serviceChoiceSection}>
+                <div style={sectionHeading}>Which organization is this request for?</div>
+                <select name="customer" value={form.customer} onChange={handleChange} style={{ ...input, fontSize: 18, fontWeight: 800 }} required>
+                  <option value="">Select an organization</option>
+                  <option value="Kingdom Support Services">Kingdom Support Services</option>
+                  <option value="HPR">HPR</option>
+                </select>
+              </section>
 
               <section style={serviceChoiceSection}>
                 <div style={sectionHeading}>How should this order be handled?</div>
@@ -567,6 +574,11 @@ export default function KingdomOrderPage() {
                   </label>
                 </div>
               </section>
+
+              <label style={{ ...goodyearChoice, ...(form.goodyear_order ? goodyearChoiceSelected : {}) }}>
+                <input type="checkbox" name="goodyear_order" checked={form.goodyear_order} onChange={handleChange} style={choiceInput} />
+                <span><strong style={choiceTitle}>Goodyear order?</strong><small style={choiceHelp}>Check this box when the request is for Goodyear tires.</small></span>
+              </label>
 
               <section style={formSection}>
                 <div style={sectionHeading}>Contact Information</div>
