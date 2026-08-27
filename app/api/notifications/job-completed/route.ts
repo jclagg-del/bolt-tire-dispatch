@@ -61,9 +61,13 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { jobId, mode } = await request.json();
   const admin = createAdminClient();
-  const { data: job, error: jobError } = await admin.from("jobs").select("id,customer,contact_name,phone,po_number,mo_number,vehicle,unit_number,service_type,completed_at,complete,review_request_sent_at").eq("id", jobId).single();
+  const { data: job, error: jobError } = await admin.from("jobs").select("id,customer,contact_name,phone,po_number,mo_number,vehicle,unit_number,vehicle_mileage,service_type,completed_at,complete,review_request_sent_at").eq("id", jobId).single();
   if (jobError || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (!job.complete) return NextResponse.json({ skipped: true });
+
+  if (job.customer === "HPR" && mode !== "review_text") {
+    return NextResponse.json({ skipped: true, reason: "hpr-completion-email-disabled" });
+  }
 
   if (job.customer !== "Kingdom Support Services") {
     if (mode !== "review_text") {
@@ -90,6 +94,7 @@ export async function POST(request: Request) {
   const subject = `${status} | Job/PO ${jobNumber} | MO ${moNumber}`;
   const completed = job.completed_at ? new Date(job.completed_at).toLocaleString("en-US", { timeZone: "America/New_York" }) : "Completed";
   const vehicle = [job.vehicle, job.unit_number && `Unit ${job.unit_number}`].filter(Boolean).join(" • ") || "Not provided";
+  const mileage = String(job.vehicle_mileage || "").trim() || "Not provided";
   const service = job.service_type || "Tire service";
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -99,7 +104,7 @@ export async function POST(request: Request) {
       reply_to: "office@bolttire.com",
       to: [recipient],
       subject,
-      html: `<h2>Kingdom Support Services job completed</h2><p><strong>Status:</strong> Completed</p><p><strong>Job/PO:</strong> ${escapeHtml(jobNumber)}</p><p><strong>MO:</strong> ${escapeHtml(moNumber)}</p><p><strong>Vehicle:</strong> ${escapeHtml(vehicle)}</p><p><strong>Service:</strong> ${escapeHtml(service)}</p><p><strong>Completed:</strong> ${escapeHtml(completed)} ET</p>`,
+      html: `<h2>Kingdom Support Services job completed</h2><p><strong>Status:</strong> Completed</p><p><strong>Job/PO:</strong> ${escapeHtml(jobNumber)}</p><p><strong>MO:</strong> ${escapeHtml(moNumber)}</p><p><strong>Vehicle:</strong> ${escapeHtml(vehicle)}</p><p><strong>Mileage:</strong> ${escapeHtml(mileage)}</p><p><strong>Service:</strong> ${escapeHtml(service)}</p><p><strong>Completed:</strong> ${escapeHtml(completed)} ET</p>`,
     }),
   });
   const result = await response.json();
