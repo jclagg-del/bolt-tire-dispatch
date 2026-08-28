@@ -131,6 +131,7 @@ export default function KingdomSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [organization, setOrganization] = useState<"Kingdom Support Services" | "HPR">("Kingdom Support Services");
 
   useEffect(() => {
     const loadJobs = async () => {
@@ -203,13 +204,13 @@ export default function KingdomSchedulePage() {
 
   const jobsByDay = useMemo(() => {
     const grouped: Record<string, KingdomJob[]> = Object.fromEntries(weekDays.map((day) => [day.dateKey, []]));
-    jobs.forEach((job) => {
+    jobs.filter((job) => job.customer === organization).forEach((job) => {
       if (!job.scheduled) return;
       const dateKey = getNYDateKey(job.scheduled);
       if (grouped[dateKey]) grouped[dateKey].push(job);
     });
     return grouped;
-  }, [jobs, weekDays]);
+  }, [jobs, organization, weekDays]);
 
   const visibleJobCount = Object.values(jobsByDay).reduce((total, items) => total + items.length, 0);
 
@@ -242,10 +243,10 @@ export default function KingdomSchedulePage() {
             Search All Orders
           </Link>
 
-          <div style={organizationLegend} aria-label="Schedule color key">
-            <span style={legendTitle}>Schedule colors</span>
-            <span style={legendItem}><i style={{ ...legendDot, background: "#2563eb" }} />Kingdom Support Services</span>
-            <span style={legendItem}><i style={{ ...legendDot, background: "#16a34a" }} />HPR</span>
+          <div style={organizationLegend} aria-label="Choose organization calendar">
+            <span style={legendTitle}>Choose calendar</span>
+            <button type="button" onClick={() => setOrganization("Kingdom Support Services")} style={{ ...calendarButton, ...kssCalendarButton, ...(organization === "Kingdom Support Services" ? activeCalendarButton : {}) }}><i style={{ ...legendDot, background: "#2563eb" }} />Kingdom Support Services</button>
+            <button type="button" onClick={() => setOrganization("HPR")} style={{ ...calendarButton, ...hprCalendarButton, ...(organization === "HPR" ? activeCalendarButton : {}) }}><i style={{ ...legendDot, background: "#16a34a" }} />HPR</button>
           </div>
         </section>
 
@@ -267,7 +268,7 @@ export default function KingdomSchedulePage() {
             <button type="button" style={weekButton} onClick={() => setWeekStart((value) => addDays(value, 7))}>Next Week →</button>
           </div>
 
-          <div style={weekSummary}>{visibleJobCount} scheduled job{visibleJobCount === 1 ? "" : "s"} this week</div>
+          <div style={weekSummary}><strong>{organization}</strong> · {visibleJobCount} scheduled job{visibleJobCount === 1 ? "" : "s"} this week</div>
 
           <div className="kingdom-week-grid" style={weekGrid}>
             {weekDays.map((day) => <section key={day.dateKey} style={dayColumn}>
@@ -444,14 +445,21 @@ const legendTitle: React.CSSProperties = {
   letterSpacing: 0.4,
 };
 
-const legendItem: React.CSSProperties = {
+const calendarButton: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: 7,
-  color: "#1f2937",
+  padding: "9px 12px",
+  borderRadius: 9,
+  border: "1px solid",
   fontSize: 13,
-  fontWeight: 750,
+  fontWeight: 800,
+  cursor: "pointer",
 };
+
+const kssCalendarButton: React.CSSProperties = { background: "#eff6ff", borderColor: "#93c5fd", color: "#1d4ed8" };
+const hprCalendarButton: React.CSSProperties = { background: "#f0fdf4", borderColor: "#86efac", color: "#15803d" };
+const activeCalendarButton: React.CSSProperties = { boxShadow: "0 0 0 3px rgba(15,23,42,.12)", transform: "translateY(-1px)" };
 
 const legendDot: React.CSSProperties = {
   display: "inline-block",

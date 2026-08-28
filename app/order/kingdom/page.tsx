@@ -40,6 +40,7 @@ type ScheduledJob = {
   vehicle_id: string | null;
   complete: boolean | null;
   archived?: boolean | null;
+  service_type?: string | null;
 };
 
 type AppointmentTime = {
@@ -174,6 +175,10 @@ function rangesOverlap(
   return firstStart < secondEnd && secondStart < firstEnd;
 }
 
+function isDeliveryService(value?: string | null) {
+  return /delivery|pickup/i.test(String(value || ""));
+}
+
 export default function KingdomOrderPage() {
   const [form, setForm] = useState<OrderForm>(initialForm);
   const [submitting, setSubmitting] = useState(false);
@@ -217,6 +222,13 @@ export default function KingdomOrderPage() {
         return;
       }
 
+      if (form.service_method === "delivery_pickup") {
+        setAvailabilityLoading(false);
+        setAvailabilityError("");
+        setAvailableTimes(APPOINTMENT_TIMES);
+        return;
+      }
+
       setAvailabilityLoading(true);
       setAvailabilityError("");
 
@@ -225,7 +237,7 @@ export default function KingdomOrderPage() {
 
       const { data, error } = await supabase
         .from("jobs")
-        .select("id, scheduled, vehicle_id, complete, archived")
+        .select("id, scheduled, vehicle_id, complete, archived, service_type")
         .in("vehicle_id", ELIGIBLE_VEHICLES)
         .eq("complete", false)
         .gte("scheduled", `${dayBefore}T00:00:00`)
@@ -246,6 +258,7 @@ export default function KingdomOrderPage() {
           !!job.scheduled &&
           !job.complete &&
           !job.archived &&
+          !isDeliveryService(job.service_type) &&
           ELIGIBLE_VEHICLES.includes(job.vehicle_id || "")
       );
 
@@ -286,7 +299,7 @@ export default function KingdomOrderPage() {
     };
 
     loadAvailability();
-  }, [form.requested_date]);
+  }, [form.requested_date, form.service_method]);
 
   const handleChange = (
     event: React.ChangeEvent<
@@ -301,7 +314,7 @@ export default function KingdomOrderPage() {
     setForm((current) => ({
       ...current,
       [name]: nextValue,
-      ...(name === "requested_date" ? { requested_time: "" } : {}),
+      ...(name === "requested_date" || name === "service_method" ? { requested_time: "" } : {}),
     }));
 
     setErrorMessage("");
@@ -365,12 +378,16 @@ export default function KingdomOrderPage() {
   };
 
   const verifySelectedTimeIsStillAvailable = async () => {
+    if (form.service_method === "delivery_pickup") {
+      return { available: true, error: "" };
+    }
+
     const dayBefore = addDaysToDateKey(form.requested_date, -1);
     const dayAfter = addDaysToDateKey(form.requested_date, 2);
 
     const { data, error } = await supabase
       .from("jobs")
-      .select("id, scheduled, vehicle_id, complete, archived")
+      .select("id, scheduled, vehicle_id, complete, archived, service_type")
       .in("vehicle_id", ELIGIBLE_VEHICLES)
       .eq("complete", false)
       .gte("scheduled", `${dayBefore}T00:00:00`)
@@ -390,6 +407,7 @@ export default function KingdomOrderPage() {
         !job.vehicle_id ||
         job.complete ||
         job.archived ||
+        isDeliveryService(job.service_type) ||
         !ELIGIBLE_VEHICLES.includes(job.vehicle_id)
       ) {
         return;
