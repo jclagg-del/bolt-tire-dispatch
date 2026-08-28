@@ -32,7 +32,7 @@ const pricingGroups: Array<{
 }> = [
   {
     title: "Tire Shop pricing",
-    description: "Controls ATD shopping and quoting prices. The app uses whichever produces more tire profit: the percentage markup or the minimum dollar profit. Installation and fees are added afterward.",
+    description: "Controls supplier shopping and quoting prices. The app uses whichever produces more tire profit: the percentage markup or the minimum dollar profit. Installation and fees are added afterward.",
     fields: [
       { key: "tire_shop_passenger_markup_percent", label: "Passenger tire markup", suffix: "%" },
       { key: "tire_shop_passenger_min_profit", label: "Passenger minimum profit per tire", prefix: "$" },

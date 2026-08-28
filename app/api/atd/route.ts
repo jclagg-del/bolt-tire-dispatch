@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const quantity = Number(body.quantity);
       const atdProductNumber = String(body.atdProductNumber || "").trim();
-      if (!atdProductNumber || !Number.isInteger(quantity) || quantity < 1 || quantity > 24) return NextResponse.json({ error: "A valid ATD product and quantity are required." }, { status: 400 });
+      if (!atdProductNumber || !Number.isInteger(quantity) || quantity < 1 || quantity > 24) return NextResponse.json({ error: "A valid supplier product and quantity are required." }, { status: 400 });
       const orderRequest = { atdProductNumber, quantity, customerPoNumber: String(body.customerPoNumber || "").trim(), customerComment: String(body.customerComment || "").trim() };
       if (body.action === "preview-order") return NextResponse.json({ preview: await previewAtdOrder(orderRequest) });
       const requestId = String(body.requestId || "").trim();
@@ -32,14 +32,14 @@ export async function POST(request: NextRequest) {
       if (pendingError?.code === "23505") {
         const { data: existing } = await admin.from("supplier_orders").select("status,response").eq("request_id", requestId).maybeSingle();
         if (existing?.status === "placed" && existing.response) return NextResponse.json({ order: existing.response, duplicate: true });
-        return NextResponse.json({ error: "This order submission is already being processed. Check ATD order status before trying again." }, { status: 409 });
+        return NextResponse.json({ error: "This order submission is already being processed. Check the supplier order status before trying again." }, { status: 409 });
       }
       if (pendingError) return NextResponse.json({ error: pendingError.message }, { status: 500 });
       let order: Record<string, unknown>;
       try {
         order = await placeAtdOrder(orderRequest);
       } catch (orderError) {
-        await admin.from("supplier_orders").update({ status: "failed", response: { error: orderError instanceof Error ? orderError.message : "ATD order failed" } }).eq("request_id", requestId);
+        await admin.from("supplier_orders").update({ status: "failed", response: { error: orderError instanceof Error ? orderError.message : "Supplier order failed" } }).eq("request_id", requestId);
         throw orderError;
       }
       const orderObject = (order.order || {}) as Record<string, unknown>;
@@ -48,13 +48,13 @@ export async function POST(request: NextRequest) {
         confirmation_number: String(orderObject.confirmationnumber || "") || null,
         status: "placed", response: order,
       }).eq("request_id", requestId);
-      return NextResponse.json({ order, warning: recordError ? `ATD accepted the order, but its app record needs attention: ${recordError.message}` : null });
+      return NextResponse.json({ order, warning: recordError ? `The supplier accepted the order, but its app record needs attention: ${recordError.message}` : null });
     }
     if (body.action === "size") return NextResponse.json({ products: await searchAtdBySize(String(body.query || ""), includeCost), sandbox: atdEnvironment !== "production" });
     if (body.action === "fitment-products") return NextResponse.json({ products: await searchAtdByFitment(body.vehicle || {}, includeCost), sandbox: atdEnvironment !== "production" });
     if (["years", "makes", "models", "trims", "options"].includes(body.action)) return NextResponse.json(await fitmentList(body.action, body.selection || {}));
-    return NextResponse.json({ error: "Invalid ATD action" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid supplier action" }, { status: 400 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "ATD request failed" }, { status: 502 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Supplier request failed" }, { status: 502 });
   }
 }

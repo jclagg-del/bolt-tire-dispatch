@@ -144,7 +144,7 @@ export default function TireShoppingBeta({
       body: JSON.stringify({ ...body, internal }),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "ATD search failed");
+    if (!response.ok) throw new Error(payload.error || "Supplier search failed");
     return payload;
   }
   async function loadFitment(
@@ -161,7 +161,7 @@ export default function TireShoppingBeta({
       if (action === "trims") setTrims(payload.trims || []);
       if (action === "options") setFitmentOptions(payload.trimoptions || []);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "ATD fitment failed");
+      setError(reason instanceof Error ? reason.message : "Supplier fitment failed");
     } finally {
       setFitmentLoading("");
     }
@@ -177,7 +177,7 @@ export default function TireShoppingBeta({
       setSelected([]);
     } catch (reason) {
       setProducts([]);
-      setError(reason instanceof Error ? reason.message : "ATD search failed");
+      setError(reason instanceof Error ? reason.message : "Supplier search failed");
     } finally {
       setLoading(false);
     }
@@ -214,7 +214,7 @@ export default function TireShoppingBeta({
     } catch (reason) {
       setProducts([]);
       setError(
-        reason instanceof Error ? reason.message : "ATD fitment search failed",
+        reason instanceof Error ? reason.message : "Supplier fitment search failed",
       );
     } finally {
       setLoading(false);
@@ -364,7 +364,7 @@ export default function TireShoppingBeta({
       setOrderPreview(result.preview || null);
     } catch (reason) {
       setOrderError(
-        reason instanceof Error ? reason.message : "ATD order preview failed",
+        reason instanceof Error ? reason.message : "Supplier order preview failed",
       );
     } finally {
       setOrderBusy(false);
@@ -376,7 +376,7 @@ export default function TireShoppingBeta({
       !orderPreview ||
       !orderRequestId ||
       !window.confirm(
-        `Place this order for ${orderQuantity} ${orderProduct.brand} ${orderProduct.model} tires with ATD now?`,
+        `Place this supplier order for ${orderQuantity} ${orderProduct.brand} ${orderProduct.model} tires now?`,
       )
     )
       return;
@@ -396,14 +396,14 @@ export default function TireShoppingBeta({
           result.order?.confirmationnumber ||
           "",
       );
-      setOrderConfirmation(confirmation || "Order accepted by ATD");
+      setOrderConfirmation(confirmation || "Order accepted by supplier");
       setOrderPreview(result.order || orderPreview);
       if (result.warning) setOrderError(result.warning);
     } catch (reason) {
       setOrderError(
         reason instanceof Error
           ? reason.message
-          : "ATD order could not be placed",
+          : "Supplier order could not be placed",
       );
     } finally {
       setOrderBusy(false);
@@ -1088,7 +1088,7 @@ export default function TireShoppingBeta({
                     {internal && (
                       <>
                         <span>
-                          ATD cost{" "}
+                          Supplier cost{" "}
                           <strong>${(tire.cost || 0).toFixed(2)}</strong>
                         </span>
                         <span>
@@ -1165,7 +1165,7 @@ export default function TireShoppingBeta({
                         type="button"
                         onClick={() => beginOrder(tire)}
                       >
-                        Order from ATD
+                        Order from supplier
                       </button>
                     ) : null}
                   </div>
@@ -1230,7 +1230,7 @@ export default function TireShoppingBeta({
                   {orderProduct.brand} {orderProduct.model}
                 </h2>
                 <p>
-                  {orderProduct.size || orderProduct.description} · ATD #
+                  {orderProduct.size || orderProduct.description} · Supplier #
                   {orderProduct.atdProductNumber}
                 </p>
               </div>
@@ -1244,7 +1244,7 @@ export default function TireShoppingBeta({
             </div>
             {orderConfirmation ? (
               <div className="atd-order-success">
-                <strong>ATD order placed</strong>
+                <strong>Supplier order placed</strong>
                 <span>Confirmation: {orderConfirmation}</span>
                 <button type="button" onClick={closeOrder}>
                   Done
@@ -1282,7 +1282,7 @@ export default function TireShoppingBeta({
                     />
                   </label>
                   <label className="full">
-                    ATD comment
+                    Supplier comment
                     <input
                       value={orderComment}
                       maxLength={255}
@@ -1307,7 +1307,7 @@ export default function TireShoppingBeta({
                 {orderPreview?.order ? (
                   <div className="atd-order-preview">
                     <div>
-                      <span>ATD preview total</span>
+                      <span>Supplier preview total</span>
                       <strong>
                         ${Number(orderPreview.order.ordertotal || 0).toFixed(2)}
                       </strong>
@@ -1356,7 +1356,7 @@ export default function TireShoppingBeta({
                       disabled={orderBusy}
                       onClick={placeOrder}
                     >
-                      {orderBusy ? "Placing order…" : "Place ATD order"}
+                      {orderBusy ? "Placing order…" : "Place supplier order"}
                     </button>
                   ) : (
                     <button
@@ -1364,13 +1364,13 @@ export default function TireShoppingBeta({
                       disabled={orderBusy}
                       onClick={previewOrder}
                     >
-                      {orderBusy ? "Checking ATD…" : "Preview ATD order"}
+                      {orderBusy ? "Checking supplier…" : "Preview supplier order"}
                     </button>
                   )}
                 </div>
                 {orderPreview ? (
                   <small className="atd-order-warning">
-                    “Place ATD order” immediately submits this purchase to ATD.
+                    “Place supplier order” immediately submits this purchase to the supplier.
                   </small>
                 ) : null}
               </>
