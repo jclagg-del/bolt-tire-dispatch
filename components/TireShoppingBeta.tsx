@@ -64,6 +64,12 @@ type OrderResult = {
     orderlines?: OrderLine[];
   };
 };
+type WarehouseDetail = {
+  name: string;
+  quantity: number;
+  estimatedDelivery: string;
+  shipMethod: string;
+};
 
 export default function TireShoppingBeta({
   internal = false,
@@ -117,6 +123,10 @@ export default function TireShoppingBeta({
     [orderConfirmation, setOrderConfirmation] = useState("");
   const [orderRequestId, setOrderRequestId] = useState("");
   const [imagePreview, setImagePreview] = useState<Product | null>(null);
+  const [warehouseProductId, setWarehouseProductId] = useState("");
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
+  const [warehouseError, setWarehouseError] = useState("");
+  const [warehouseDetails, setWarehouseDetails] = useState<WarehouseDetail[]>([]);
   useEffect(() => {
     if (!internal && !years.length) loadFitment("years");
   }, [internal]);
@@ -368,6 +378,37 @@ export default function TireShoppingBeta({
       );
     } finally {
       setOrderBusy(false);
+    }
+  }
+  async function toggleWarehouseDetails(tire: Product) {
+    if (warehouseProductId === tire.id) {
+      setWarehouseProductId("");
+      return;
+    }
+    setWarehouseProductId(tire.id);
+    setWarehouseLoading(true);
+    setWarehouseError("");
+    setWarehouseDetails([]);
+    try {
+      const result = await atdApi({
+        action: "preview-order",
+        atdProductNumber: tire.atdProductNumber,
+        quantity,
+      });
+      const details: WarehouseDetail[] = (result.preview?.order?.orderlines || [])
+        .flatMap((line: OrderLine) => line.fulfillments || [])
+        .map((fulfillment: OrderFulfillment) => ({
+          name: fulfillment.sourcedcname || "Nearby supplier warehouse",
+          quantity: Number(fulfillment.quantity || 0),
+          estimatedDelivery: fulfillment.estimateddelivery || "",
+          shipMethod: fulfillment.shipmethod || "",
+        }));
+      setWarehouseDetails(details);
+      if (!details.length) setWarehouseError("The supplier did not provide a warehouse breakdown for this tire.");
+    } catch (reason) {
+      setWarehouseError(reason instanceof Error ? reason.message : "Warehouse details could not be loaded.");
+    } finally {
+      setWarehouseLoading(false);
     }
   }
   async function placeOrder() {
@@ -1073,14 +1114,48 @@ export default function TireShoppingBeta({
                         <span>
                           Local <strong>{tire.availability.local}</strong>
                         </span>
-                        <span>
-                          Nearby warehouse{" "}
-                          <strong>{tire.availability.localPlus}</strong>
-                        </span>
+                        <button
+                          type="button"
+                          className="tire-beta-warehouse-button"
+                          aria-expanded={warehouseProductId === tire.id}
+                          onClick={() => toggleWarehouseDetails(tire)}
+                        >
+                          Nearby warehouse <strong>{tire.availability.localPlus}</strong>
+                          <b>{warehouseProductId === tire.id ? "▲" : "▼"}</b>
+                        </button>
                         <span>
                           Nationwide{" "}
                           <strong>{tire.availability.nationwide}</strong>
                         </span>
+                      </div>
+                    )}
+                    {internal && warehouseProductId === tire.id && (
+                      <div className="tire-beta-warehouse-details">
+                        {warehouseLoading ? (
+                          <span>Checking warehouse and delivery details…</span>
+                        ) : warehouseError ? (
+                          <span>{warehouseError}</span>
+                        ) : (
+                          warehouseDetails.map((detail, index) => (
+                            <div key={`${detail.name}-${index}`}>
+                              <strong>{detail.name}</strong>
+                              <span>
+                                {detail.quantity || tire.availability.localPlus} tires
+                                {detail.estimatedDelivery
+                                  ? ` · Expected ${new Date(detail.estimatedDelivery).toLocaleDateString()}`
+                                  : ""}
+                                {detail.shipMethod ? ` · ${detail.shipMethod}` : ""}
+                              </span>
+                              <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(detail.name)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                View distance and directions
+                              </a>
+                            </div>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
