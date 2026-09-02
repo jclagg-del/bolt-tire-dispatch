@@ -351,6 +351,45 @@ export default function KingdomOrderPage() {
     setAddingFacility(false);
   };
 
+  const saveFacilityContact = async () => {
+    if (!form.facility_id) return;
+
+    const contactName = form.contact_name.trim();
+    const contactNumber = form.contact_number.trim();
+    if (!contactName || !contactNumber) {
+      setFacilityMessage("Enter both the contact person and phone number to save this facility contact.");
+      return;
+    }
+
+    const savedFacility = facilities.find((item) => String(item.id) === form.facility_id);
+    if (
+      savedFacility?.contact_name === contactName &&
+      savedFacility?.contact_number === contactNumber
+    ) return;
+
+    setFacilityMessage("Saving facility contact...");
+    const response = await fetch("/api/public/kingdom/facilities", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: Number(form.facility_id),
+        contact_name: contactName,
+        contact_number: contactNumber,
+      }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      setFacilityMessage(result.error || "The facility contact could not be saved.");
+      return;
+    }
+
+    setFacilities((current) => current.map((facility) =>
+      facility.id === result.id ? result : facility
+    ));
+    setFacilityMessage(`Contact saved for ${result.name}.`);
+  };
+
   const validateForm = () => {
     if (!form.customer) return "Please choose Kingdom Support Services or HPR.";
     if (!form.service_method) return "Please choose Installed or Delivery / Pickup.";
@@ -651,6 +690,7 @@ export default function KingdomOrderPage() {
                   name="contact_name"
                   value={form.contact_name}
                   onChange={handleChange}
+                  onBlur={saveFacilityContact}
                   style={input}
                   placeholder="On-site contact person"
                   autoComplete="name"
@@ -662,11 +702,13 @@ export default function KingdomOrderPage() {
                   name="contact_number"
                   value={form.contact_number}
                   onChange={handleChange}
+                  onBlur={saveFacilityContact}
                   style={input}
                   placeholder="Phone number"
                   inputMode="tel"
                   autoComplete="tel"
                 />
+                {form.facility_id ? <small style={autoSaveHelp}>Contact changes save automatically for this facility.</small> : null}
 
               </section>
 
@@ -1157,6 +1199,14 @@ const sectionHelp: React.CSSProperties = {
   fontSize: 13,
   lineHeight: 1.5,
   color: "#6b7280",
+};
+
+const autoSaveHelp: React.CSSProperties = {
+  display: "block",
+  marginTop: 8,
+  color: "#64748b",
+  fontSize: 12,
+  lineHeight: 1.4,
 };
 
 const label: React.CSSProperties = {
