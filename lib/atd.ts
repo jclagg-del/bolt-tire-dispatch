@@ -85,15 +85,25 @@ async function pricingSettings() {
 }
 
 async function inventoryFor(products: AtdProduct[]) {
-  const ids = products.map((product) => product.atdproductnumber).filter(Boolean);
+  const ids = Array.from(new Set(products.map((product) => product.atdproductnumber).filter(Boolean)));
   if (!ids.length) return new Map<string, InventoryProduct>();
-  try{
-    const response = await atdRequest<{ products?: InventoryProduct[] }>("product/product-availability", {
-      locationnumber: locationNumber,
-      criteria: { atdproductnumber: ids },
-    });
-    return new Map((response.products || []).map((item) => [item.atdproductnumber, item]));
-  }catch{return new Map<string,InventoryProduct>()}
+  try {
+    // ATD limits the number of product numbers accepted by an availability call.
+    // Chunking lets the keyword endpoint return its complete catalog without losing
+    // stock data for products beyond the first request.
+    const chunks = Array.from({ length: Math.ceil(ids.length / 50) }, (_, index) =>
+      ids.slice(index * 50, index * 50 + 50),
+    );
+    const responses = await Promise.all(chunks.map((productIds) =>
+      atdRequest<{ products?: InventoryProduct[] }>("product/product-availability", {
+        locationnumber: locationNumber,
+        criteria: { atdproductnumber: productIds },
+      }),
+    ));
+    return new Map(responses.flatMap((response) => response.products || []).map((item) => [item.atdproductnumber, item]));
+  } catch {
+    return new Map<string, InventoryProduct>();
+  }
 }
 
 function presentProducts(products: AtdProduct[], inventory: Map<string, InventoryProduct>, includeCost: boolean, settings: BusinessSettings) {
@@ -161,7 +171,9 @@ export async function searchAtdBySize(query: string, includeCost: boolean):Promi
         includemarketingprograms: 1,
       },
     });
-    const products = (response.products || []).slice(0, 30);
+    const products = Array.from(
+      new Map((response.products || []).map((product) => [product.atdproductnumber, product])).values(),
+    );
     const presented=presentProducts(products,await inventoryFor(products),includeCost,await pricingSettings());
     if(presented.length)await createAdminClient().from("atd_search_cache").upsert({cache_key:cacheKey,products:presented,cached_at:new Date().toISOString()}).then(()=>{});
     if(!presented.length){const{data}=await createAdminClient().from("atd_search_cache").select("products,cached_at").eq("cache_key",cacheKey).maybeSingle();if(Array.isArray(data?.products)&&data.products.length&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[]}

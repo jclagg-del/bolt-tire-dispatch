@@ -37,7 +37,9 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
   if (sizeKey.length < 5) return [];
   const admin = createAdminClient();
   const [{ data, error }, settings] = await Promise.all([
-    admin.from("usaf_inventory").select("part_number,brand,model,sales_class,tire_type,tire_size,ply_rating,utqg,sidewall,load_range,tread_depth,warranty,upc,discontinued,run_flat,snowflake,cost,map_price,retail_price,total_quantity,warehouse_inventory").eq("tire_size_key", sizeKey).eq("discontinued", false).gt("total_quantity", 0).order("cost").limit(60),
+    // Fetch the complete size catalog before removing warehouses outside our
+    // service region. A small pre-filter limit can hide valid regional products.
+    admin.from("usaf_inventory").select("part_number,brand,model,sales_class,tire_type,tire_size,ply_rating,utqg,sidewall,load_range,tread_depth,warranty,upc,discontinued,run_flat,snowflake,cost,map_price,retail_price,total_quantity,warehouse_inventory").eq("tire_size_key", sizeKey).eq("discontinued", false).gt("total_quantity", 0).order("cost").limit(1000),
     pricingSettings(),
   ]);
   if (error) {
