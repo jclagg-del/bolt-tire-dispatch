@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 import { BusinessSettings, fallbackBusinessSettings, installationDefault } from "@/lib/business-settings";
@@ -23,21 +23,54 @@ const initialForm: QuoteForm = {
 
 export default function NewQuotePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
   const [form, setForm] = useState<QuoteForm>(initialForm);
   const [options, setOptions] = useState<QuoteOption[]>(emptyQuoteOptions.map((option) => ({ ...option })));
   const [settings, setSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [saving, setSaving] = useState(false);
   const [uploadingTier, setUploadingTier] = useState<string | null>(null);
   const [draggingTier, setDraggingTier] = useState<string | null>(null);
+  const [loadingQuote, setLoadingQuote] = useState(Boolean(editId));
 
   useEffect(() => {
+    const initialize = async () => {
     const loadSettings = async () => {
       const { data } = await supabase.from("business_settings").select("*").eq("id", true).maybeSingle();
       const next = (data as BusinessSettings | null) || fallbackBusinessSettings;
       setSettings(next);
-      applyPricing(next, "passenger", 4);
+      if (!editId) applyPricing(next, "passenger", 4);
     };
-    loadSettings();
+    await loadSettings();
+
+    if (editId) {
+      const { data, error } = await supabase.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", editId).single();
+      if (error || !data) {
+        setLoadingQuote(false);
+        return alert(`Could not load quote: ${error?.message || "Quote not found"}`);
+      }
+      if (data.converted_job_id || data.payment_status === "paid") {
+        setLoadingQuote(false);
+        alert("Paid or converted quotes cannot be edited.");
+        return router.push(`/quotes/${editId}`);
+      }
+      setForm({
+        customer: data.customer || "", contact_name: data.contact_name || "", phone: data.phone || "", email: data.email || "",
+        vehicle: data.vehicle || "", tire_size: data.tire_size || "", quantity: String(data.quantity || 1), address: data.address || "",
+        notes: data.notes || "", service_category: data.service_category || "passenger", installation_cost: String(data.installation_cost ?? 0),
+        service_call_fee: String(data.service_call_fee ?? 0), disposal_fee: String(data.disposal_fee ?? 0), ny_state_tire_fee: String(data.ny_state_tire_fee ?? 0),
+        sales_tax_rate: String(data.sales_tax_rate ?? 0), tax_exempt: Boolean(data.tax_exempt), expires_at: data.expires_at || "",
+      });
+      const saved = [...(data.quote_options || [])].sort((a, b) => a.sort_order - b.sort_order).map((option) => ({
+        ...option, image_url: option.image_url || "", price_per_tire: String(option.price_per_tire ?? ""),
+        warranty_miles: option.warranty_miles == null ? "" : String(option.warranty_miles), tire_type: option.tire_type || "",
+        load_speed_rating: option.load_speed_rating || "", snow_rating: option.snow_rating || "", highlights: option.highlights || "",
+        availability: option.availability || "",
+      })) as QuoteOption[];
+      setOptions([...saved, ...emptyQuoteOptions.slice(saved.length).map((option) => ({ ...option }))].slice(0, 3));
+      setLoadingQuote(false);
+      return;
+    }
 
     const stored = sessionStorage.getItem("bolt-tire-quote-selection");
     if (stored) {
@@ -62,7 +95,9 @@ export default function NewQuotePage() {
         }
       } catch { sessionStorage.removeItem("bolt-tire-quote-selection"); }
     }
-  }, []);
+    };
+    initialize();
+  }, [editId]);
 
   const applyPricing = (pricing: BusinessSettings, category: QuoteForm["service_category"], quantity: number) => {
     const disposalEach = category === "tires_only" ? 0 : category === "passenger" || category === "trailer_atv" || category === "off_road" || category === "skid_steer" ? pricing.passenger_disposal_fee : category === "truck" ? pricing.truck_disposal_fee : pricing.commercial_disposal_fee;
@@ -108,7 +143,7 @@ export default function NewQuotePage() {
     const completedOptions = options.filter((option) => option.brand.trim() && option.model.trim());
     if (!completedOptions.length) return alert("Add at least one tire option.");
     setSaving(true);
-    const { data: quote, error } = await supabase.from("quotes").insert({
+    const quoteValues = {
       customer: form.customer.trim(), contact_name: form.contact_name.trim() || null, phone: form.phone.trim() || null,
       email: form.email.trim() || null, vehicle: form.vehicle.trim() || null, tire_size: form.tire_size.trim() || null,
       quantity: Number(form.quantity) || 1, address: form.address.trim() || null, notes: form.notes.trim() || null,
@@ -116,24 +151,54 @@ export default function NewQuotePage() {
       service_call_fee: Number(form.service_call_fee) || 0, disposal_fee: Number(form.disposal_fee) || 0,
       ny_state_tire_fee: Number(form.ny_state_tire_fee) || 0, sales_tax_rate: Number(form.sales_tax_rate) || 0,
       tax_exempt: form.tax_exempt, expires_at: form.expires_at || null,
-    }).select("id").single();
+      updated_at: new Date().toISOString(),
+    };
+    const quoteRequest = editId
+      ? supabase.from("quotes").update(quoteValues).eq("id", editId).select("id,selected_option_id").single()
+      : supabase.from("quotes").insert(quoteValues).select("id,selected_option_id").single();
+    const { data: quote, error } = await quoteRequest;
     if (error || !quote) { setSaving(false); return alert(`Could not save quote: ${error?.message || "Unknown error"}`); }
-    const { error: optionError } = await supabase.from("quote_options").insert(completedOptions.map((option) => ({
+    const optionValues = (option: QuoteOption) => ({
       quote_id: quote.id, tier: option.tier, brand: option.brand.trim(), model: option.model.trim(),
       image_url: option.image_url.trim() || null, price_per_tire: Number(option.price_per_tire) || 0,
       warranty_miles: option.warranty_miles ? Number(option.warranty_miles) : null, tire_type: option.tire_type.trim() || null,
       load_speed_rating: option.load_speed_rating.trim() || null, snow_rating: option.snow_rating.trim() || null,
       highlights: option.highlights.trim() || null, availability: option.availability.trim() || null,
-      recommended: option.recommended, sort_order: option.sort_order,
-    })));
+      supplier: option.supplier || null, supplier_product_id: option.supplier_product_id || null,
+      manufacturer_product_id: option.manufacturer_product_id || null, wholesale_cost: option.wholesale_cost == null ? null : Number(option.wholesale_cost),
+      supplier_availability: option.supplier_availability || null, recommended: option.recommended, sort_order: option.sort_order,
+    });
+    let optionError: { message: string } | null = null;
+    if (editId) {
+      const retainedIds = completedOptions.flatMap((option) => option.id ? [option.id] : []);
+      if (quote.selected_option_id && !retainedIds.includes(quote.selected_option_id)) {
+        const result = await supabase.from("quotes").update({ selected_option_id: null, status: "draft" }).eq("id", quote.id);
+        optionError = result.error;
+      }
+      for (const option of completedOptions) {
+        if (optionError) break;
+        const result = option.id
+          ? await supabase.from("quote_options").update(optionValues(option)).eq("id", option.id)
+          : await supabase.from("quote_options").insert(optionValues(option));
+        optionError = result.error;
+      }
+      if (!optionError) {
+        const oldIds = options.flatMap((option) => option.id ? [option.id] : []).filter((id) => !retainedIds.includes(id));
+        if (oldIds.length) optionError = (await supabase.from("quote_options").delete().in("id", oldIds)).error;
+      }
+    } else {
+      optionError = (await supabase.from("quote_options").insert(completedOptions.map(optionValues))).error;
+    }
     setSaving(false);
     if (optionError) return alert(`Quote saved, but options failed: ${optionError.message}`);
     router.push(`/quotes/${quote.id}`);
   };
 
+  if (loadingQuote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-empty">Loading quote...</div></main></div>;
+
   return (
     <div className="quote-shell"><AppHeader /><main className="quote-page">
-      <div className="quote-page-header"><div><div className="quote-eyebrow">Quotes</div><h1>Build Tire Quote</h1><p>Create a visual tire comparison.</p></div><button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : "Save Quote"}</button></div>
+      <div className="quote-page-header"><div><div className="quote-eyebrow">{editId ? "Edit quote" : "Quotes"}</div><h1>{editId ? "Edit Tire Quote" : "Build Tire Quote"}</h1><p>{editId ? "Update customer details, tire choices, and pricing." : "Create a visual tire comparison."}</p></div><div className="quote-actions">{editId ? <button onClick={() => router.push(`/quotes/${editId}`)} disabled={saving}>Cancel</button> : null}<button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : editId ? "Save Changes" : "Save Quote"}</button></div></div>
 
       <section className="quote-form-card"><h2>Customer and vehicle</h2><div className="quote-form-grid">
         <QuoteField label="Customer" value={form.customer} onChange={(value) => setForm({ ...form, customer: value })} />
