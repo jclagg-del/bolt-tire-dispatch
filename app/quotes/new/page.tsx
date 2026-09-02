@@ -111,12 +111,13 @@ export default function NewQuotePage() {
 
   const applyPricing = (pricing: BusinessSettings, category: QuoteForm["service_category"], quantity: number) => {
     const disposalEach = category === "tires_only" ? 0 : category === "passenger" || category === "trailer_atv" || category === "off_road" || category === "skid_steer" ? pricing.passenger_disposal_fee : category === "truck" ? pricing.truck_disposal_fee : pricing.commercial_disposal_fee;
-    const installation = installationDefault(pricing, quantity, category);
+    const serviceCall = category === "commercial" || category === "medium_dismount" ? pricing.commercial_service_call : 0;
+    const installation = installationDefault(pricing, quantity, category) - serviceCall;
     setForm((current) => ({
       ...current,
       service_category: category,
       installation_cost: installation.toFixed(2),
-      service_call_fee: category === "commercial" ? pricing.commercial_service_call.toFixed(2) : "0.00",
+      service_call_fee: serviceCall.toFixed(2),
       disposal_fee: (disposalEach * quantity).toFixed(2),
       ny_state_tire_fee: (pricing.ny_state_tire_fee * quantity).toFixed(2),
       sales_tax_rate: current.sales_tax_rate || String(pricing.default_sales_tax_rate || ""),

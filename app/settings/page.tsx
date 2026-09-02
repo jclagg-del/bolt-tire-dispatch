@@ -61,19 +61,12 @@ const pricingGroups: Array<{
     ],
   },
   {
-    title: "Heavy truck - on-site mount & dismount",
-    description: "Service totals for heavy-truck installation and balancing.",
+    title: "Medium and heavy truck - mount & dismount",
+    description: "Scalable pricing for any tire quantity: service call plus a per-tire charge.",
     fields: [
-      { key: "heavy_truck_two_install", label: "1–2 tires", prefix: "$" },
-      { key: "heavy_truck_four_install", label: "3–4 tires", prefix: "$" },
-    ],
-  },
-  {
-    title: "Medium truck - on-site mount & dismount",
-    description: "Service totals for mount and dismount work without balancing.",
-    fields: [
-      { key: "medium_dismount_two_install", label: "1–2 tires", prefix: "$" },
-      { key: "medium_dismount_four_install", label: "3–4 tires", prefix: "$" },
+      { key: "commercial_service_call", label: "Service call", prefix: "$" },
+      { key: "commercial_per_tire", label: "Mount & dismount per tire", prefix: "$" },
+      { key: "heavy_truck_four_install", label: "Minimum for 4 tires", prefix: "$" },
     ],
   },
   {
@@ -88,7 +81,6 @@ const pricingGroups: Array<{
     title: "Scheduled commercial service",
     description: "Fleet-yard pricing. These rates do not include emergency roadside work.",
     fields: [
-      { key: "commercial_service_call", label: "Service call", prefix: "$" },
       { key: "commercial_17_install", label: "16–17.5 inch per tire", prefix: "$" },
       { key: "commercial_19_install", label: "19.5 inch per tire", prefix: "$" },
       { key: "commercial_22_install", label: "22.5–24.5 inch per tire", prefix: "$" },
