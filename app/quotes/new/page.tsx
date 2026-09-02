@@ -233,17 +233,21 @@ export default function NewQuotePage() {
       <section className="quote-option-grid">
         {visibleOptions.map((option, index) => <div className={`quote-option-card ${option.recommended ? "recommended" : ""} ${splitFitment ? "split-option" : ""}`} key={option.tier}>
           <div className="quote-tier-row"><label><input type="radio" name="recommended" checked={option.recommended} onChange={() => setOptions((items) => items.map((item, itemIndex) => ({ ...item, recommended: itemIndex === index })))} /> Recommended</label></div>
+          <div className={splitFitment ? "quote-split-cards" : "quote-single-card"}>
+          <div className={splitFitment ? "quote-axle-card front" : "quote-axle-card"}>
+          {splitFitment ? <div className="quote-axle-label">Front / Steer tires · Qty {form.quantity}</div> : null}
           <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} tabIndex={0} onPaste={(event) => { const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (image) { event.preventDefault(); uploadPhoto(index, image); } }} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadPhoto(index, event.target.files?.[0]); event.target.value = ""; }} />
             {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Paste, drag, or tap to add a tire photo"}</div>}
             {option.image_url ? <span className="quote-photo-change">Paste, drop, or tap to replace photo</span> : <span className="quote-photo-paste-hint">Click this box, then press ⌘V</span>}
           </label>
-          {splitFitment ? <div className="quote-axle-label">Front / Steer tires · Qty {form.quantity}</div> : null}
           <QuoteField label="Brand" value={option.brand} onChange={(value) => updateOption(index, "brand", value)} />
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
           <details className="quote-image-url"><summary>Or use an image URL</summary><QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" /></details>
           <QuoteField label="Price per tire" value={option.price_per_tire} type="number" onChange={(value) => updateOption(index, "price_per_tire", value)} />
+          </div>
           {splitFitment ? <div className="quote-rear-fields"><div className="quote-axle-label">Rear / Drive tires · Qty {form.rear_quantity}</div>{option.rear_image_url ? <img className="quote-tire-image" src={option.rear_image_url} alt={`${option.rear_brand} ${option.rear_model}`} /> : <div className="quote-image-placeholder">Rear tire image</div>}<QuoteField label="Rear brand" value={option.rear_brand || ""} onChange={(value) => updateOption(index, "rear_brand", value)} /><QuoteField label="Rear model" value={option.rear_model || ""} onChange={(value) => updateOption(index, "rear_model", value)} /><QuoteField label="Rear price per tire" value={option.rear_price_per_tire || ""} type="number" onChange={(value) => updateOption(index, "rear_price_per_tire", value)} /><QuoteField label="Rear image URL" value={option.rear_image_url || ""} onChange={(value) => updateOption(index, "rear_image_url", value)} /></div> : null}
+          </div>
           <details className="quote-advanced">
             <summary>Optional tire details</summary>
             <div className="quote-advanced-fields">
