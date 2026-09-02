@@ -1,0 +1,20 @@
+name: Import U.S. AutoForce inventory
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Start inventory import
+        env:
+          IMPORT_SECRET: ${{ secrets.USAF_IMPORT_CRON_SECRET }}
+        run: |
+          curl --fail-with-body --show-error --silent \
+            --max-time 540 \
+            -H "Authorization: Bearer ${IMPORT_SECRET}" \
+            https://app.bolttire.com/api/usaf/import
