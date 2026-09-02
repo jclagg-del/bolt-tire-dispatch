@@ -9,7 +9,7 @@ type CustomerOrder = {
   id: number;
   customer: string;
   goodyear_order: boolean | null;
-  service_method: "installed" | "delivery_pickup" | null;
+  service_method: "installed" | "delivery" | "pickup" | "delivery_pickup" | null;
   submitted_by: string | null;
   contact_name: string;
   contact_number: string;
@@ -352,7 +352,7 @@ export default function OrdersPage() {
         submitted_by_customer: true,
         customer_order_status: "approved",
         vehicle_id: "stepvan",
-        service_type: order.service_method === "delivery_pickup" ? "Delivery" : "Installation",
+        service_type: order.service_method === "pickup" ? "Pickup" : order.service_method === "delivery" || order.service_method === "delivery_pickup" ? "Delivery" : "Installation",
         payment_status: "unpaid",
         job_status: "scheduled",
         complete: false,
@@ -645,7 +645,7 @@ function OrderSection({
 
                   <Detail
                     label="Order Type"
-                    value={order.service_method === "delivery_pickup" ? "Delivery / Pickup" : "Installed"}
+                    value={order.service_method === "pickup" ? "Pickup" : order.service_method === "delivery" ? "Delivery" : order.service_method === "delivery_pickup" ? "Delivery / Pickup" : "Installed"}
                   />
 
                   <Detail

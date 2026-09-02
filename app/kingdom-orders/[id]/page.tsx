@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import KingdomPortalGate from "@/components/KingdomPortalGate";
 
 type EditableOrder = {
-  id: number; customer: "Kingdom Support Services" | "HPR"; goodyear_order: boolean; service_method: "installed" | "delivery_pickup" | null;
+  id: number; customer: "Kingdom Support Services" | "HPR"; goodyear_order: boolean; service_method: "installed" | "delivery" | "pickup" | "delivery_pickup" | null;
   submitted_by: string; contact_name: string; contact_number: string;
   facility_id: number | null; facility_name: string | null; address: string;
   requested_date: string; requested_time: string;
@@ -79,7 +79,7 @@ export default function KingdomOrderEditPage() {
 
       <label style={label}>Organization<select value={order.customer} onChange={(event) => change("customer", event.target.value)} style={input}><option value="Kingdom Support Services">Kingdom Support Services</option><option value="HPR">HPR</option></select></label>
       <label style={checkRow}><input type="checkbox" checked={order.goodyear_order} onChange={(event) => change("goodyear_order", event.target.checked)} /> Goodyear order?</label>
-      <div style={choices}><label style={choice}><input type="radio" checked={order.service_method === "installed"} onChange={() => change("service_method", "installed")} /> Installed</label><label style={choice}><input type="radio" checked={order.service_method === "delivery_pickup"} onChange={() => change("service_method", "delivery_pickup")} /> Delivery / Pickup</label></div>
+      <div style={choices}><label style={choice}><input type="radio" checked={order.service_method === "installed"} onChange={() => change("service_method", "installed")} /> Installed</label><label style={choice}><input type="radio" checked={order.service_method === "delivery"} onChange={() => change("service_method", "delivery")} /> Delivery</label><label style={choice}><input type="radio" checked={order.service_method === "pickup"} onChange={() => change("service_method", "pickup")} /> Pickup</label></div>
 
       <h2 style={sectionTitle}>Contact & Facility</h2>
       <label style={label}>Facility<select value={order.facility_id || ""} onChange={(event) => selectFacility(event.target.value)} style={input}><option value="">Choose facility</option>{facilities.map((facility) => <option key={facility.id} value={facility.id}>{facility.name}</option>)}</select></label>

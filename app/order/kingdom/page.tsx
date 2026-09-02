@@ -8,7 +8,7 @@ import KingdomPortalGate from "@/components/KingdomPortalGate";
 type OrderForm = {
   customer: "" | "Kingdom Support Services" | "HPR";
   goodyear_order: boolean;
-  service_method: "" | "installed" | "delivery_pickup";
+  service_method: "" | "installed" | "delivery" | "pickup" | "delivery_pickup";
   submitted_by: string;
   contact_name: string;
   contact_number: string;
@@ -222,7 +222,7 @@ export default function KingdomOrderPage() {
         return;
       }
 
-      if (form.service_method === "delivery_pickup") {
+      if (isDeliveryService(form.service_method)) {
         setAvailabilityLoading(false);
         setAvailabilityError("");
         setAvailableTimes(APPOINTMENT_TIMES);
@@ -392,7 +392,7 @@ export default function KingdomOrderPage() {
 
   const validateForm = () => {
     if (!form.customer) return "Please choose Kingdom Support Services or HPR.";
-    if (!form.service_method) return "Please choose Installed or Delivery / Pickup.";
+    if (!form.service_method) return "Please choose Installed, Delivery, or Pickup.";
     if (!form.submitted_by.trim()) return "Please enter who submitted this request.";
     if (!form.contact_name.trim()) return "Please enter the contact person.";
     if (!form.contact_number.trim()) return "Please enter a contact number.";
@@ -417,7 +417,7 @@ export default function KingdomOrderPage() {
   };
 
   const verifySelectedTimeIsStillAvailable = async () => {
-    if (form.service_method === "delivery_pickup") {
+    if (isDeliveryService(form.service_method)) {
       return { available: true, error: "" };
     }
 
@@ -625,9 +625,13 @@ export default function KingdomOrderPage() {
                     <input type="radio" name="service_method" value="installed" checked={form.service_method === "installed"} onChange={handleChange} style={choiceInput} />
                     <span><strong style={choiceTitle}>Installed</strong><small style={choiceHelp}>Bolt Tire installs the tires at the scheduled appointment.</small></span>
                   </label>
-                  <label style={{ ...serviceChoice, ...(form.service_method === "delivery_pickup" ? serviceChoiceSelected : {}) }}>
-                    <input type="radio" name="service_method" value="delivery_pickup" checked={form.service_method === "delivery_pickup"} onChange={handleChange} style={choiceInput} />
-                    <span><strong style={choiceTitle}>Delivery / Pickup</strong><small style={choiceHelp}>The order will be delivered or prepared for pickup without installation.</small></span>
+                  <label style={{ ...serviceChoice, ...(form.service_method === "delivery" ? serviceChoiceSelected : {}) }}>
+                    <input type="radio" name="service_method" value="delivery" checked={form.service_method === "delivery"} onChange={handleChange} style={choiceInput} />
+                    <span><strong style={choiceTitle}>Delivery</strong><small style={choiceHelp}>Bolt Tire delivers the tires without installation.</small></span>
+                  </label>
+                  <label style={{ ...serviceChoice, ...(form.service_method === "pickup" ? serviceChoiceSelected : {}) }}>
+                    <input type="radio" name="service_method" value="pickup" checked={form.service_method === "pickup"} onChange={handleChange} style={choiceInput} />
+                    <span><strong style={choiceTitle}>Pickup</strong><small style={choiceHelp}>The tires will be prepared for pickup without installation.</small></span>
                   </label>
                 </div>
               </section>
