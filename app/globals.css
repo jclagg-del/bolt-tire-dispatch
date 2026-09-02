@@ -188,3 +188,4 @@ body{
 
 /* Dark customer-facing headers use the transparent white logo, never the boxed artwork. */
 .purchase-builder-header img { content: url("/bolt-logo-white.png"); }
+.quote-rear-fields,.quote-split-tire{margin-top:12px;padding:12px;border:1px solid #cbdaf6;border-radius:12px;background:#f4f7fc}.quote-rear-fields{display:grid;gap:10px}.quote-split-tire{display:flex;flex-direction:column;gap:4px}.quote-split-tire span{color:#5d6d88;font-size:.9rem}

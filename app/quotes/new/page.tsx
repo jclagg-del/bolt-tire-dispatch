@@ -9,14 +9,14 @@ import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
 
 type QuoteForm = {
   customer: string; contact_name: string; phone: string; email: string; vehicle: string;
-  tire_size: string; quantity: string; address: string; notes: string;
+  tire_size: string; quantity: string; rear_tire_size: string; rear_quantity: string; address: string; notes: string;
   service_category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" | "off_road" | "skid_steer" | "tires_only";
   installation_cost: string; service_call_fee: string; disposal_fee: string;
   ny_state_tire_fee: string; sales_tax_rate: string; tax_exempt: boolean; expires_at: string;
 };
 
 const initialForm: QuoteForm = {
-  customer: "", contact_name: "", phone: "", email: "", vehicle: "", tire_size: "", quantity: "4",
+  customer: "", contact_name: "", phone: "", email: "", vehicle: "", tire_size: "", quantity: "4", rear_tire_size: "", rear_quantity: "",
   address: "", notes: "", service_category: "passenger", installation_cost: "275", service_call_fee: "0",
   disposal_fee: "28", ny_state_tire_fee: "10", sales_tax_rate: "", tax_exempt: false, expires_at: "",
 };
@@ -56,7 +56,7 @@ export default function NewQuotePage() {
       }
       setForm({
         customer: data.customer || "", contact_name: data.contact_name || "", phone: data.phone || "", email: data.email || "",
-        vehicle: data.vehicle || "", tire_size: data.tire_size || "", quantity: String(data.quantity || 1), address: data.address || "",
+        vehicle: data.vehicle || "", tire_size: data.tire_size || "", quantity: String(data.quantity || 1), rear_tire_size: data.rear_tire_size || "", rear_quantity: data.rear_quantity ? String(data.rear_quantity) : "", address: data.address || "",
         notes: data.notes || "", service_category: data.service_category || "passenger", installation_cost: String(data.installation_cost ?? 0),
         service_call_fee: String(data.service_call_fee ?? 0), disposal_fee: String(data.disposal_fee ?? 0), ny_state_tire_fee: String(data.ny_state_tire_fee ?? 0),
         sales_tax_rate: String(data.sales_tax_rate ?? 0), tax_exempt: Boolean(data.tax_exempt), expires_at: data.expires_at || "",
@@ -65,7 +65,7 @@ export default function NewQuotePage() {
         ...option, image_url: option.image_url || "", price_per_tire: String(option.price_per_tire ?? ""),
         warranty_miles: option.warranty_miles == null ? "" : String(option.warranty_miles), tire_type: option.tire_type || "",
         load_speed_rating: option.load_speed_rating || "", snow_rating: option.snow_rating || "", highlights: option.highlights || "",
-        availability: option.availability || "",
+        availability: option.availability || "", rear_brand: option.rear_brand || "", rear_model: option.rear_model || "", rear_image_url: option.rear_image_url || "", rear_price_per_tire: option.rear_price_per_tire == null ? "" : String(option.rear_price_per_tire),
       })) as QuoteOption[];
       setOptions([...saved, ...emptyQuoteOptions.slice(saved.length).map((option) => ({ ...option }))].slice(0, 3));
       setLoadingQuote(false);
@@ -75,12 +75,19 @@ export default function NewQuotePage() {
     const stored = sessionStorage.getItem("bolt-tire-quote-selection");
     if (stored) {
       try {
-        const selection = JSON.parse(stored) as { tireSize?: string; products?: Array<{ brand:string; model:string; imageUrl:string|null; quotePrice:number; warranty:string; category:string; loadSpeed:string; snowRated:boolean; availability:{local:number;localPlus:number;nationwide:number} }> };
+        const selection = JSON.parse(stored) as { tireSize?: string; products?: Array<{ brand:string; model:string; imageUrl:string|null; quotePrice:number; warranty:string; category:string; loadSpeed:string; snowRated:boolean; fitmentPosition?:"front"|"rear"|"both"; size?:string; supplier?:string; atdProductNumber?:string; manufacturerProductNumber?:string; cost?:number; availability:{local:number;localPlus:number;nationwide:number} }> };
         const chosen = (selection.products || []).slice(0, 3);
         if (chosen.length) {
           const tiers: QuoteOption["tier"][] = ["good", "better", "best"];
-          setForm((current) => ({ ...current, tire_size: selection.tireSize || current.tire_size }));
+          const front = chosen.find((tire) => tire.fitmentPosition === "front");
+          const rear = chosen.find((tire) => tire.fitmentPosition === "rear");
+          setForm((current) => ({ ...current, tire_size: front?.size || selection.tireSize || current.tire_size, quantity: front && rear ? "2" : current.quantity, rear_tire_size: rear?.size || "", rear_quantity: rear ? "2" : "" }));
           setOptions(emptyQuoteOptions.map((option, index) => {
+            if (front && rear) {
+              if (index > 0) return { ...option };
+              const stock = front.availability.local || front.availability.localPlus;
+              return { ...option, brand: front.brand, model: front.model, image_url: front.imageUrl || "", price_per_tire: String(front.quotePrice), warranty_miles: (front.warranty.match(/[\d,]+/)?.[0] || "").replace(/,/g, ""), tire_type: front.category, load_speed_rating: front.loadSpeed, snow_rating: front.snowRated ? "3PMSF" : "", availability: stock ? `In stock (${stock})` : "Special order", supplier: front.supplier, supplier_product_id: front.atdProductNumber, manufacturer_product_id: front.manufacturerProductNumber, wholesale_cost: front.cost, rear_brand: rear.brand, rear_model: rear.model, rear_image_url: rear.imageUrl || "", rear_price_per_tire: String(rear.quotePrice), rear_supplier: rear.supplier, rear_supplier_product_id: rear.atdProductNumber, rear_manufacturer_product_id: rear.manufacturerProductNumber, rear_wholesale_cost: rear.cost, recommended: true };
+            }
             const tire = chosen[index];
             if (!tire) return { ...option };
             const stock = tire.availability.local || tire.availability.localPlus;
@@ -136,7 +143,7 @@ export default function NewQuotePage() {
     installation: Number(form.installation_cost) || 0, serviceCall: Number(form.service_call_fee) || 0,
     disposal: Number(form.disposal_fee) || 0, stateFee: Number(form.ny_state_tire_fee) || 0,
     taxRate: Number(form.sales_tax_rate) || 0, taxExempt: form.tax_exempt,
-  })), [options, form]);
+  }), Number(form.rear_quantity) || 0), [options, form]);
 
   const saveQuote = async () => {
     if (!form.customer.trim()) return alert("Enter a customer name.");
@@ -146,7 +153,7 @@ export default function NewQuotePage() {
     const quoteValues = {
       customer: form.customer.trim(), contact_name: form.contact_name.trim() || null, phone: form.phone.trim() || null,
       email: form.email.trim() || null, vehicle: form.vehicle.trim() || null, tire_size: form.tire_size.trim() || null,
-      quantity: Number(form.quantity) || 1, address: form.address.trim() || null, notes: form.notes.trim() || null,
+      quantity: Number(form.quantity) || 1, rear_tire_size: form.rear_tire_size.trim() || null, rear_quantity: form.rear_tire_size.trim() ? Number(form.rear_quantity) || 1 : null, address: form.address.trim() || null, notes: form.notes.trim() || null,
       service_category: form.service_category, installation_cost: Number(form.installation_cost) || 0,
       service_call_fee: Number(form.service_call_fee) || 0, disposal_fee: Number(form.disposal_fee) || 0,
       ny_state_tire_fee: Number(form.ny_state_tire_fee) || 0, sales_tax_rate: Number(form.sales_tax_rate) || 0,
@@ -167,6 +174,10 @@ export default function NewQuotePage() {
       supplier: option.supplier || null, supplier_product_id: option.supplier_product_id || null,
       manufacturer_product_id: option.manufacturer_product_id || null, wholesale_cost: option.wholesale_cost == null ? null : Number(option.wholesale_cost),
       supplier_availability: option.supplier_availability || null, recommended: option.recommended, sort_order: option.sort_order,
+      rear_brand: option.rear_brand?.trim() || null, rear_model: option.rear_model?.trim() || null,
+      rear_image_url: option.rear_image_url?.trim() || null, rear_price_per_tire: option.rear_price_per_tire ? Number(option.rear_price_per_tire) : null,
+      rear_supplier: option.rear_supplier || null, rear_supplier_product_id: option.rear_supplier_product_id || null,
+      rear_manufacturer_product_id: option.rear_manufacturer_product_id || null, rear_wholesale_cost: option.rear_wholesale_cost == null ? null : Number(option.rear_wholesale_cost),
     });
     let optionError: { message: string } | null = null;
     if (editId) {
@@ -206,8 +217,10 @@ export default function NewQuotePage() {
         <QuoteField label="Phone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
         <QuoteField label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} />
         <QuoteField label="Vehicle" value={form.vehicle} onChange={(value) => setForm({ ...form, vehicle: value })} placeholder="Year, make, model or unit" />
-        <QuoteField label="Tire size" value={form.tire_size} onChange={(value) => setForm({ ...form, tire_size: value })} placeholder="275/65R18" />
-        <QuoteField label="Quantity" value={form.quantity} type="number" onChange={(value) => { const quantity = Number(value) || 0; setForm((current) => ({ ...current, quantity: value })); applyPricing(settings, form.service_category, quantity); }} />
+        <QuoteField label="Front / primary tire size" value={form.tire_size} onChange={(value) => setForm({ ...form, tire_size: value })} placeholder="275/65R18" />
+        <QuoteField label="Front / primary quantity" value={form.quantity} type="number" onChange={(value) => { const quantity = Number(value) || 0; setForm((current) => ({ ...current, quantity: value })); applyPricing(settings, form.service_category, quantity + (Number(form.rear_quantity) || 0)); }} />
+        <QuoteField label="Rear tire size (optional)" value={form.rear_tire_size} onChange={(value) => setForm({ ...form, rear_tire_size: value, rear_quantity: value && !form.rear_quantity ? "2" : form.rear_quantity })} placeholder="For staggered or drive tires" />
+        <QuoteField label="Rear quantity" value={form.rear_quantity} type="number" onChange={(value) => setForm({ ...form, rear_quantity: value })} />
         <label className="quote-field"><span>Pricing category</span><select value={form.service_category} onChange={(event) => applyPricing(settings, event.target.value as QuoteForm["service_category"], Number(form.quantity) || 0)}><option value="passenger">Passenger - mount & balance</option><option value="tires_only">Loose tires only - no installation</option><option value="off_road">Off-road / ATV installation</option><option value="trailer_atv">Trailer installation</option><option value="skid_steer">Skid-steer installation</option><option value="truck">Light / medium truck - mount & balance</option><option value="commercial">Heavy truck - mount & balance</option><option value="medium_dismount">Medium truck - mount & dismount</option></select></label>
         <QuoteField label="Address" value={form.address} onChange={(value) => setForm({ ...form, address: value })} />
         <QuoteField label="Expiration date" value={form.expires_at} type="date" onChange={(value) => setForm({ ...form, expires_at: value })} />
@@ -225,6 +238,7 @@ export default function NewQuotePage() {
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
           <details className="quote-image-url"><summary>Or use an image URL</summary><QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" /></details>
           <QuoteField label="Price per tire" value={option.price_per_tire} type="number" onChange={(value) => updateOption(index, "price_per_tire", value)} />
+          {form.rear_tire_size ? <div className="quote-rear-fields"><strong>Rear tire for this option</strong><QuoteField label="Rear brand" value={option.rear_brand || ""} onChange={(value) => updateOption(index, "rear_brand", value)} /><QuoteField label="Rear model" value={option.rear_model || ""} onChange={(value) => updateOption(index, "rear_model", value)} /><QuoteField label="Rear price per tire" value={option.rear_price_per_tire || ""} type="number" onChange={(value) => updateOption(index, "rear_price_per_tire", value)} /><QuoteField label="Rear image URL" value={option.rear_image_url || ""} onChange={(value) => updateOption(index, "rear_image_url", value)} /></div> : null}
           <details className="quote-advanced">
             <summary>Optional tire details</summary>
             <div className="quote-advanced-fields">

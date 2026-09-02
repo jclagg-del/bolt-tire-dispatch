@@ -8,7 +8,7 @@ import { QuoteOption, QuoteStatus, quoteOptionTotal } from "@/lib/quotes";
 
 type SavedQuote = {
   id: string; quote_number: number; status: QuoteStatus; customer: string; contact_name: string | null;
-  phone: string | null; email: string | null; vehicle: string | null; tire_size: string | null; quantity: number;
+  phone: string | null; email: string | null; vehicle: string | null; tire_size: string | null; quantity: number; rear_tire_size: string | null; rear_quantity: number | null;
   address: string | null; notes: string | null; service_category: string; installation_cost: number;
   service_call_fee: number; disposal_fee: number; ny_state_tire_fee: number; sales_tax_rate: number;
   tax_exempt: boolean; selected_option_id: string | null; expires_at: string | null; converted_job_id: string | null;
@@ -39,8 +39,8 @@ export default function QuoteDetailPage() {
   useEffect(() => { loadQuote(); }, [id]);
 
   const totals = useMemo(() => quote ? quote.quote_options.map((option) => quoteOptionTotal(
-    { price_per_tire: String(option.price_per_tire) }, quote.quantity,
-    { installation: Number(quote.installation_cost), serviceCall: Number(quote.service_call_fee), disposal: Number(quote.disposal_fee), stateFee: Number(quote.ny_state_tire_fee), taxRate: Number(quote.sales_tax_rate), taxExempt: quote.tax_exempt }
+    { price_per_tire: String(option.price_per_tire), rear_price_per_tire: option.rear_price_per_tire == null ? "" : String(option.rear_price_per_tire) }, quote.quantity,
+    { installation: Number(quote.installation_cost), serviceCall: Number(quote.service_call_fee), disposal: Number(quote.disposal_fee), stateFee: Number(quote.ny_state_tire_fee), taxRate: Number(quote.sales_tax_rate), taxExempt: quote.tax_exempt }, quote.rear_quantity || 0
   )) : [], [quote]);
 
   const selectOption = async (optionId: string) => {
@@ -119,7 +119,7 @@ export default function QuoteDetailPage() {
     const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id);
     if (!selected) return alert("Approve one tire option before converting this quote.");
     setSaving(true);
-    const tireSubtotal = Number(selected.price_per_tire) * quote.quantity;
+    const tireSubtotal = Number(selected.price_per_tire) * quote.quantity + Number(selected.rear_price_per_tire || 0) * Number(quote.rear_quantity || 0);
     const taxableSubtotal = tireSubtotal + Number(quote.installation_cost) + Number(quote.service_call_fee) + Number(quote.disposal_fee);
     const estimatedSalesTax = quote.tax_exempt ? 0 : taxableSubtotal * (Number(quote.sales_tax_rate) / 100);
     const salesTax = quote.payment_status === "paid" && quote.stripe_sales_tax_amount != null
@@ -131,8 +131,8 @@ export default function QuoteDetailPage() {
     const combinedNotes = [quote.notes, `Converted from quote #${quote.quote_number}`, quote.service_call_fee > 0 ? `Service call: $${Number(quote.service_call_fee).toFixed(2)}` : null].filter(Boolean).join("\n");
     const { data: job, error } = await supabase.from("jobs").insert({
       customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
-      vehicle: quote.vehicle, tires: `${selected.brand} ${selected.model}`, size: quote.tire_size,
-      qty: quote.quantity, price_tires: Number(selected.price_per_tire), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
+      vehicle: quote.vehicle, tires: [ `${selected.brand} ${selected.model}`, selected.rear_model ? `Rear: ${selected.rear_brand || selected.brand} ${selected.rear_model}` : null ].filter(Boolean).join(" / "), size: [quote.tire_size, quote.rear_tire_size ? `Rear: ${quote.rear_tire_size}` : null].filter(Boolean).join(" / "),
+      qty: quote.quantity + Number(quote.rear_quantity || 0), price_tires: tireSubtotal / (quote.quantity + Number(quote.rear_quantity || 0)), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
       tire_supplier: selected.supplier || null, tire_product_number: selected.supplier_product_id || selected.manufacturer_product_id || null,
       tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee),
       address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + Number(quote.ny_state_tire_fee),
@@ -154,7 +154,7 @@ export default function QuoteDetailPage() {
   if (!quote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-error">{message || "Quote not found."}</div></main></div>;
 
   return <div className="quote-shell"><AppHeader /><main className="quote-page">
-    <div className="quote-page-header"><div><div className="quote-eyebrow">Quote #{quote.quote_number}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, quote.tire_size, `${quote.quantity} tires`].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
+    <div className="quote-page-header"><div><div className="quote-eyebrow">Quote #{quote.quote_number}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, `${quote.quantity} front/primary · ${quote.tire_size || "size TBD"}`, quote.rear_tire_size ? `${quote.rear_quantity} rear · ${quote.rear_tire_size}` : null].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
       <select value={quote.status} onChange={(event) => updateStatus(event.target.value as QuoteStatus)} disabled={saving || quote.status === "converted"}><option value="draft">Draft</option><option value="sent">Sent</option><option value="viewed">Viewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="expired">Expired</option><option value="converted">Converted</option></select>
       <button onClick={() => router.push(`/quotes/new?edit=${quote.id}`)} disabled={saving || quote.status === "converted" || quote.payment_status === "paid"}>Edit Quote</button>
       <button className="quote-primary" onClick={emailCustomerQuote} disabled={saving || !quote.email}>{saving ? "Sending..." : "Email Quote"}</button>
@@ -176,6 +176,7 @@ export default function QuoteDetailPage() {
           {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">No tire image</div>}
           <h2>{option.brand}</h2><h3>{option.model}</h3>
           <div className="quote-price-each">${Number(option.price_per_tire).toFixed(2)} <span>per tire</span></div>
+          {option.rear_model ? <div className="quote-split-tire"><strong>Rear: {option.rear_brand || option.brand} {option.rear_model}</strong><span>{quote.rear_tire_size} · ${Number(option.rear_price_per_tire || 0).toFixed(2)} each · qty {quote.rear_quantity}</span></div> : null}
           <dl className="quote-specs"><div><dt>Warranty</dt><dd>{option.warranty_miles ? `${Number(option.warranty_miles).toLocaleString()} miles` : "—"}</dd></div><div><dt>Type</dt><dd>{option.tire_type || "—"}</dd></div><div><dt>Load / speed</dt><dd>{option.load_speed_rating || "—"}</dd></div><div><dt>Snow rating</dt><dd>{option.snow_rating || "—"}</dd></div><div><dt>Availability</dt><dd>{option.availability || "Confirm availability"}</dd></div></dl>
           {option.highlights ? <p className="quote-highlights">{option.highlights}</p> : null}
           <div className="quote-installed-total"><span>Installed total</span><strong>${totals[index].toFixed(2)}</strong></div>

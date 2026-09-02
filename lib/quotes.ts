@@ -9,6 +9,14 @@ export type QuoteOption = {
   model: string;
   image_url: string;
   price_per_tire: string;
+  rear_brand?: string;
+  rear_model?: string;
+  rear_image_url?: string;
+  rear_price_per_tire?: string;
+  rear_supplier?: string;
+  rear_supplier_product_id?: string;
+  rear_manufacturer_product_id?: string;
+  rear_wholesale_cost?: number | string | null;
   warranty_miles: string;
   tire_type: string;
   load_speed_rating: string;
@@ -30,8 +38,8 @@ export const emptyQuoteOptions: QuoteOption[] = [
   { tier: "best", brand: "", model: "", image_url: "", price_per_tire: "", warranty_miles: "", tire_type: "", load_speed_rating: "", snow_rating: "", highlights: "", availability: "", recommended: false, sort_order: 3 },
 ];
 
-export function quoteOptionTotal(option: Pick<QuoteOption, "price_per_tire">, quantity: number, fees: { installation: number; serviceCall: number; disposal: number; stateFee: number; taxRate: number; taxExempt: boolean }) {
-  const tires = (Number(option.price_per_tire) || 0) * quantity;
+export function quoteOptionTotal(option: Pick<QuoteOption, "price_per_tire" | "rear_price_per_tire">, quantity: number, fees: { installation: number; serviceCall: number; disposal: number; stateFee: number; taxRate: number; taxExempt: boolean }, rearQuantity = 0) {
+  const tires = (Number(option.price_per_tire) || 0) * quantity + (Number(option.rear_price_per_tire) || 0) * rearQuantity;
   const taxable = tires + fees.installation + fees.serviceCall + fees.disposal;
   const tax = fees.taxExempt ? 0 : taxable * (fees.taxRate / 100);
   return taxable + fees.stateFee + tax;

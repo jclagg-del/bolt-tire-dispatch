@@ -14,7 +14,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   const o=(q.quote_options||[]).find((x:{id:string})=>x.id===optionId);
   if(!o)return NextResponse.json({error:"Choose a valid tire option"},{status:400});
 
-  const taxable=Number(o.price_per_tire)*Number(q.quantity)+Number(q.installation_cost)+Number(q.service_call_fee)+Number(q.disposal_fee);
+  const taxable=Number(o.price_per_tire)*Number(q.quantity)+Number(o.rear_price_per_tire||0)*Number(q.rear_quantity||0)+Number(q.installation_cost)+Number(q.service_call_fee)+Number(q.disposal_fee);
   const stateFee=Number(q.ny_state_tire_fee);
   const origin=new URL(request.url).origin;
   const body=new URLSearchParams();
@@ -33,7 +33,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   body.set("line_items[0][price_data][tax_behavior]","exclusive");
   body.set("line_items[0][price_data][product_data][tax_code]","txcd_99999999");
   body.set("line_items[0][price_data][product_data][name]",`Bolt Tire Order #${q.quote_number}`);
-  body.set("line_items[0][price_data][product_data][description]",`${q.quantity} × ${o.brand} ${o.model} — installed`);
+  body.set("line_items[0][price_data][product_data][description]",[`${q.quantity} × ${o.brand} ${o.model}`,q.rear_quantity&&o.rear_model?`${q.rear_quantity} × ${o.rear_brand||o.brand} ${o.rear_model}`:null,"installed"].filter(Boolean).join(" · "));
   if(stateFee>0){
     body.set("line_items[1][quantity]","1");
     body.set("line_items[1][price_data][currency]","usd");
