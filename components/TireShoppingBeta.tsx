@@ -125,6 +125,7 @@ export default function TireShoppingBeta({
     [orderError, setOrderError] = useState(""),
     [orderConfirmation, setOrderConfirmation] = useState("");
   const [orderRequestId, setOrderRequestId] = useState("");
+  const [orderChoosingSupplier, setOrderChoosingSupplier] = useState(false);
   const [imagePreview, setImagePreview] = useState<Product | null>(null);
   const [warehouseProductId, setWarehouseProductId] = useState("");
   const [warehouseLoading, setWarehouseLoading] = useState(false);
@@ -346,6 +347,7 @@ export default function TireShoppingBeta({
   }
   function beginOrder(tire: Product) {
     setOrderProduct(tire);
+    setOrderChoosingSupplier(false);
     setOrderQuantity(quantity);
     setOrderPo("");
     setOrderComment("");
@@ -353,6 +355,24 @@ export default function TireShoppingBeta({
     setOrderError("");
     setOrderConfirmation("");
     setOrderRequestId(crypto.randomUUID());
+  }
+  function chooseSupplier(tire: Product) {
+    setOrderProduct(tire);
+    setOrderChoosingSupplier(true);
+    setOrderQuantity(quantity);
+    setOrderPo("");
+    setOrderComment("");
+    setOrderPreview(null);
+    setOrderError("");
+    setOrderConfirmation("");
+  }
+  function supplierMatches(tire: Product) {
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const manufacturerNumber = normalize(tire.manufacturerProductNumber || "");
+    return products.filter((candidate) => {
+      if (manufacturerNumber && normalize(candidate.manufacturerProductNumber || "") === manufacturerNumber) return true;
+      return normalize(candidate.brand) === normalize(tire.brand) && normalize(candidate.model) === normalize(tire.model) && normalize(candidate.size) === normalize(tire.size);
+    });
   }
   function closeOrder() {
     if (orderBusy) return;
@@ -1249,15 +1269,15 @@ export default function TireShoppingBeta({
                           ? `Choose ${tire.fitmentPosition}`
                           : "Customize & buy"}
                     </button>
-                    {internal && tire.supplier !== "USAF" ? (
+                    {internal ? (
                       <button
                         className="tire-beta-direct-order"
                         type="button"
-                        onClick={() => beginOrder(tire)}
+                        onClick={() => chooseSupplier(tire)}
                       >
-                        Order from supplier
+                        Choose supplier
                       </button>
-                    ) : internal ? <span className="tire-beta-direct-order-note">U.S. AutoForce ordering coming next</span> : null}
+                    ) : null}
                   </div>
                 </article>
               );
@@ -1315,7 +1335,7 @@ export default function TireShoppingBeta({
           >
             <div className="atd-order-head">
               <div>
-                <span>DIRECT SUPPLIER ORDER</span>
+                <span>{orderChoosingSupplier ? "CHOOSE A SUPPLIER" : "DIRECT SUPPLIER ORDER"}</span>
                 <h2 id="atd-order-title">
                   {orderProduct.brand} {orderProduct.model}
                 </h2>
@@ -1332,7 +1352,19 @@ export default function TireShoppingBeta({
                 ×
               </button>
             </div>
-            {orderConfirmation ? (
+            {orderChoosingSupplier ? (
+              <div className="supplier-choice-list">
+                <p>Select where you want to order this exact tire. Connected suppliers with a matching product are available below.</p>
+                {(["ATD", "USAF", "K&M", "NTW"] as const).map((supplier) => {
+                  const match = supplierMatches(orderProduct).find((item) => item.supplier === supplier);
+                  const connected = supplier === "ATD" && Boolean(match);
+                  return <button type="button" key={supplier} disabled={!connected} onClick={() => match && beginOrder(match)}>
+                    <span><strong>{supplier === "USAF" ? "U.S. AutoForce" : supplier}</strong><small>{match ? `${match.atdProductNumber} · $${Number(match.cost || 0).toFixed(2)} each` : "No matching product in this search"}</small></span>
+                    <b>{connected ? "Select" : match && supplier === "USAF" ? "Ordering connection next" : "Not connected"}</b>
+                  </button>;
+                })}
+              </div>
+            ) : orderConfirmation ? (
               <div className="atd-order-success">
                 <strong>Supplier order placed</strong>
                 <span>Confirmation: {orderConfirmation}</span>
