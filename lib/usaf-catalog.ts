@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
+import { regionalUsafWarehouse } from "@/lib/usaf-warehouses";
 
 type UsaForceRow = {
   part_number: string;
@@ -51,7 +52,11 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
     const quotePrice = Math.max(Number(row.map_price || 0), Math.ceil(cost + Math.max(cost * markup / 100, minimumProfit)));
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
-    const warehouses = Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : [];
+    const warehouses = (Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : [])
+      .filter((warehouse) => warehouse.quantity > 0 && regionalUsafWarehouse(warehouse.warehouse))
+      .map((warehouse) => ({ ...warehouse, ...regionalUsafWarehouse(warehouse.warehouse)! }));
+    const regionalQuantity = warehouses.reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
+    if (!regionalQuantity) return null;
     return {
       id: `USAF-${row.part_number}`,
       supplier: "USAF",
@@ -83,8 +88,8 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
       installedPrice: estimatedTotals[1],
       estimatedTotals,
       ...(includeCost ? { cost, map: Number(row.map_price || 0), msrp: Number(row.retail_price || 0) } : {}),
-      availability: { local: 0, localPlus: Number(row.total_quantity || 0), nationwide: Number(row.total_quantity || 0) },
+      availability: { local: 0, localPlus: regionalQuantity, nationwide: regionalQuantity },
       warehouseInventory: warehouses,
     };
-  });
+  }).filter((product): product is NonNullable<typeof product> => product !== null);
 }

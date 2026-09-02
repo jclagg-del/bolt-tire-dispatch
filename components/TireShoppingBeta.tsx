@@ -36,7 +36,7 @@ type Product = {
   fitmentPosition: "front" | "rear" | "both";
   atdProductNumber: string;
   availability: { local: number; localPlus: number; nationwide: number };
-  warehouseInventory?: Array<{ warehouse: string; quantity: number }>;
+  warehouseInventory?: Array<{ warehouse: string; quantity: number; name?: string; address?: string }>;
 };
 type FitmentOption = {
   trim: string;
@@ -68,6 +68,7 @@ type OrderResult = {
 };
 type WarehouseDetail = {
   name: string;
+  address?: string;
   quantity: number;
   estimatedDelivery: string;
   shipMethod: string;
@@ -393,7 +394,8 @@ export default function TireShoppingBeta({
     setWarehouseDetails([]);
     if (tire.supplier === "USAF") {
       setWarehouseDetails((tire.warehouseInventory || []).filter((item) => item.quantity > 0).map((item) => ({
-        name: `U.S. AutoForce warehouse ${item.warehouse}`,
+        name: item.name || `U.S. AutoForce warehouse ${item.warehouse}`,
+        address: item.address,
         quantity: item.quantity,
         estimatedDelivery: "",
         shipMethod: "U.S. AutoForce truck",
@@ -1132,13 +1134,13 @@ export default function TireShoppingBeta({
                           aria-expanded={warehouseProductId === tire.id}
                           onClick={() => toggleWarehouseDetails(tire)}
                         >
-                          Nearby warehouse <strong>{tire.availability.localPlus}</strong>
+                          {tire.supplier === "USAF" ? "Regional warehouses" : "Nearby warehouse"} <strong>{tire.availability.localPlus}</strong>
                           <b>{warehouseProductId === tire.id ? "▲" : "▼"}</b>
                         </button>
-                        <span>
+                        {tire.supplier !== "USAF" ? <span>
                           Nationwide{" "}
                           <strong>{tire.availability.nationwide}</strong>
-                        </span>
+                        </span> : null}
                       </div>
                     )}
                     {internal && warehouseProductId === tire.id && (
@@ -1151,6 +1153,7 @@ export default function TireShoppingBeta({
                           warehouseDetails.map((detail, index) => (
                             <div key={`${detail.name}-${index}`}>
                               <strong>{detail.name}</strong>
+                              {detail.address ? <span>{detail.address}</span> : null}
                               <span>
                                 {detail.quantity || tire.availability.localPlus} tires
                                 {detail.estimatedDelivery
@@ -1159,7 +1162,7 @@ export default function TireShoppingBeta({
                                 {detail.shipMethod ? ` · ${detail.shipMethod}` : ""}
                               </span>
                               <a
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(detail.name)}`}
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(detail.address || detail.name)}`}
                                 target="_blank"
                                 rel="noreferrer"
                               >
