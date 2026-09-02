@@ -32,6 +32,7 @@ export default function NewQuotePage() {
   const [uploadingTier, setUploadingTier] = useState<string | null>(null);
   const [draggingTier, setDraggingTier] = useState<string | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(Boolean(editId));
+  const [splitFitment, setSplitFitment] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -61,6 +62,7 @@ export default function NewQuotePage() {
         service_call_fee: String(data.service_call_fee ?? 0), disposal_fee: String(data.disposal_fee ?? 0), ny_state_tire_fee: String(data.ny_state_tire_fee ?? 0),
         sales_tax_rate: String(data.sales_tax_rate ?? 0), tax_exempt: Boolean(data.tax_exempt), expires_at: data.expires_at || "",
       });
+      setSplitFitment(Boolean(data.rear_tire_size || data.rear_quantity));
       const saved = [...(data.quote_options || [])].sort((a, b) => a.sort_order - b.sort_order).map((option) => ({
         ...option, image_url: option.image_url || "", price_per_tire: String(option.price_per_tire ?? ""),
         warranty_miles: option.warranty_miles == null ? "" : String(option.warranty_miles), tire_type: option.tire_type || "",
@@ -81,6 +83,7 @@ export default function NewQuotePage() {
           const tiers: QuoteOption["tier"][] = ["good", "better", "best"];
           const front = chosen.find((tire) => tire.fitmentPosition === "front");
           const rear = chosen.find((tire) => tire.fitmentPosition === "rear");
+          setSplitFitment(Boolean(front && rear));
           setForm((current) => ({ ...current, tire_size: front?.size || selection.tireSize || current.tire_size, quantity: front && rear ? "2" : current.quantity, rear_tire_size: rear?.size || "", rear_quantity: rear ? "2" : "" }));
           setOptions(emptyQuoteOptions.map((option, index) => {
             if (front && rear) {
@@ -139,21 +142,22 @@ export default function NewQuotePage() {
     setUploadingTier(null);
   };
 
-  const totals = useMemo(() => options.map((option) => quoteOptionTotal(option, Number(form.quantity) || 0, {
+  const visibleOptions = splitFitment ? options.slice(0, 1) : options;
+  const totals = useMemo(() => visibleOptions.map((option) => quoteOptionTotal(option, Number(form.quantity) || 0, {
     installation: Number(form.installation_cost) || 0, serviceCall: Number(form.service_call_fee) || 0,
     disposal: Number(form.disposal_fee) || 0, stateFee: Number(form.ny_state_tire_fee) || 0,
     taxRate: Number(form.sales_tax_rate) || 0, taxExempt: form.tax_exempt,
-  }), Number(form.rear_quantity) || 0), [options, form]);
+  }), splitFitment ? Number(form.rear_quantity) || 0 : 0), [visibleOptions, form, splitFitment]);
 
   const saveQuote = async () => {
     if (!form.customer.trim()) return alert("Enter a customer name.");
-    const completedOptions = options.filter((option) => option.brand.trim() && option.model.trim());
+    const completedOptions = visibleOptions.filter((option) => option.brand.trim() && option.model.trim());
     if (!completedOptions.length) return alert("Add at least one tire option.");
     setSaving(true);
     const quoteValues = {
       customer: form.customer.trim(), contact_name: form.contact_name.trim() || null, phone: form.phone.trim() || null,
       email: form.email.trim() || null, vehicle: form.vehicle.trim() || null, tire_size: form.tire_size.trim() || null,
-      quantity: Number(form.quantity) || 1, rear_tire_size: form.rear_tire_size.trim() || null, rear_quantity: form.rear_tire_size.trim() ? Number(form.rear_quantity) || 1 : null, address: form.address.trim() || null, notes: form.notes.trim() || null,
+      quantity: Number(form.quantity) || 1, rear_tire_size: splitFitment ? form.rear_tire_size.trim() || null : null, rear_quantity: splitFitment ? Number(form.rear_quantity) || 1 : null, address: form.address.trim() || null, notes: form.notes.trim() || null,
       service_category: form.service_category, installation_cost: Number(form.installation_cost) || 0,
       service_call_fee: Number(form.service_call_fee) || 0, disposal_fee: Number(form.disposal_fee) || 0,
       ny_state_tire_fee: Number(form.ny_state_tire_fee) || 0, sales_tax_rate: Number(form.sales_tax_rate) || 0,
@@ -219,26 +223,27 @@ export default function NewQuotePage() {
         <QuoteField label="Vehicle" value={form.vehicle} onChange={(value) => setForm({ ...form, vehicle: value })} placeholder="Year, make, model or unit" />
         <QuoteField label="Front / primary tire size" value={form.tire_size} onChange={(value) => setForm({ ...form, tire_size: value })} placeholder="275/65R18" />
         <QuoteField label="Front / primary quantity" value={form.quantity} type="number" onChange={(value) => { const quantity = Number(value) || 0; setForm((current) => ({ ...current, quantity: value })); applyPricing(settings, form.service_category, quantity + (Number(form.rear_quantity) || 0)); }} />
-        <QuoteField label="Rear tire size (optional)" value={form.rear_tire_size} onChange={(value) => setForm({ ...form, rear_tire_size: value, rear_quantity: value && !form.rear_quantity ? "2" : form.rear_quantity })} placeholder="For staggered or drive tires" />
-        <QuoteField label="Rear quantity" value={form.rear_quantity} type="number" onChange={(value) => setForm({ ...form, rear_quantity: value })} />
+        <label className="quote-split-toggle"><input type="checkbox" checked={splitFitment} onChange={(event) => { const checked = event.target.checked; setSplitFitment(checked); setForm((current) => ({ ...current, rear_tire_size: checked ? current.rear_tire_size : "", rear_quantity: checked ? current.rear_quantity || "2" : "" })); }} /><span><strong>Staggered / split fitment</strong><small>Use separate front and rear tires on this quote</small></span></label>
+        {splitFitment ? <><QuoteField label="Rear tire size" value={form.rear_tire_size} onChange={(value) => setForm({ ...form, rear_tire_size: value })} placeholder="Rear or drive tire size" /><QuoteField label="Rear quantity" value={form.rear_quantity} type="number" onChange={(value) => setForm({ ...form, rear_quantity: value })} /></> : null}
         <label className="quote-field"><span>Pricing category</span><select value={form.service_category} onChange={(event) => applyPricing(settings, event.target.value as QuoteForm["service_category"], Number(form.quantity) || 0)}><option value="passenger">Passenger - mount & balance</option><option value="tires_only">Loose tires only - no installation</option><option value="off_road">Off-road / ATV installation</option><option value="trailer_atv">Trailer installation</option><option value="skid_steer">Skid-steer installation</option><option value="truck">Light / medium truck - mount & balance</option><option value="commercial">Heavy truck - mount & balance</option><option value="medium_dismount">Medium truck - mount & dismount</option></select></label>
         <QuoteField label="Address" value={form.address} onChange={(value) => setForm({ ...form, address: value })} />
         <QuoteField label="Expiration date" value={form.expires_at} type="date" onChange={(value) => setForm({ ...form, expires_at: value })} />
       </div></section>
 
       <section className="quote-option-grid">
-        {options.map((option, index) => <div className={`quote-option-card ${option.recommended ? "recommended" : ""}`} key={option.tier}>
+        {visibleOptions.map((option, index) => <div className={`quote-option-card ${option.recommended ? "recommended" : ""} ${splitFitment ? "split-option" : ""}`} key={option.tier}>
           <div className="quote-tier-row"><label><input type="radio" name="recommended" checked={option.recommended} onChange={() => setOptions((items) => items.map((item, itemIndex) => ({ ...item, recommended: itemIndex === index })))} /> Recommended</label></div>
           <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} tabIndex={0} onPaste={(event) => { const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (image) { event.preventDefault(); uploadPhoto(index, image); } }} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadPhoto(index, event.target.files?.[0]); event.target.value = ""; }} />
             {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Paste, drag, or tap to add a tire photo"}</div>}
             {option.image_url ? <span className="quote-photo-change">Paste, drop, or tap to replace photo</span> : <span className="quote-photo-paste-hint">Click this box, then press ⌘V</span>}
           </label>
+          {splitFitment ? <div className="quote-axle-label">Front / Steer tires · Qty {form.quantity}</div> : null}
           <QuoteField label="Brand" value={option.brand} onChange={(value) => updateOption(index, "brand", value)} />
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
           <details className="quote-image-url"><summary>Or use an image URL</summary><QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" /></details>
           <QuoteField label="Price per tire" value={option.price_per_tire} type="number" onChange={(value) => updateOption(index, "price_per_tire", value)} />
-          {form.rear_tire_size ? <div className="quote-rear-fields"><strong>Rear tire for this option</strong><QuoteField label="Rear brand" value={option.rear_brand || ""} onChange={(value) => updateOption(index, "rear_brand", value)} /><QuoteField label="Rear model" value={option.rear_model || ""} onChange={(value) => updateOption(index, "rear_model", value)} /><QuoteField label="Rear price per tire" value={option.rear_price_per_tire || ""} type="number" onChange={(value) => updateOption(index, "rear_price_per_tire", value)} /><QuoteField label="Rear image URL" value={option.rear_image_url || ""} onChange={(value) => updateOption(index, "rear_image_url", value)} /></div> : null}
+          {splitFitment ? <div className="quote-rear-fields"><div className="quote-axle-label">Rear / Drive tires · Qty {form.rear_quantity}</div>{option.rear_image_url ? <img className="quote-tire-image" src={option.rear_image_url} alt={`${option.rear_brand} ${option.rear_model}`} /> : <div className="quote-image-placeholder">Rear tire image</div>}<QuoteField label="Rear brand" value={option.rear_brand || ""} onChange={(value) => updateOption(index, "rear_brand", value)} /><QuoteField label="Rear model" value={option.rear_model || ""} onChange={(value) => updateOption(index, "rear_model", value)} /><QuoteField label="Rear price per tire" value={option.rear_price_per_tire || ""} type="number" onChange={(value) => updateOption(index, "rear_price_per_tire", value)} /><QuoteField label="Rear image URL" value={option.rear_image_url || ""} onChange={(value) => updateOption(index, "rear_image_url", value)} /></div> : null}
           <details className="quote-advanced">
             <summary>Optional tire details</summary>
             <div className="quote-advanced-fields">
