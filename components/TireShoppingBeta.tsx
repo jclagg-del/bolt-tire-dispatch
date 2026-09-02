@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Product = {
   id: string;
+  supplier?: "ATD" | "USAF";
   brand: string;
   model: string;
   description: string;
@@ -35,6 +36,7 @@ type Product = {
   fitmentPosition: "front" | "rear" | "both";
   atdProductNumber: string;
   availability: { local: number; localPlus: number; nationwide: number };
+  warehouseInventory?: Array<{ warehouse: string; quantity: number }>;
 };
 type FitmentOption = {
   trim: string;
@@ -389,6 +391,16 @@ export default function TireShoppingBeta({
     setWarehouseLoading(true);
     setWarehouseError("");
     setWarehouseDetails([]);
+    if (tire.supplier === "USAF") {
+      setWarehouseDetails((tire.warehouseInventory || []).filter((item) => item.quantity > 0).map((item) => ({
+        name: `U.S. AutoForce warehouse ${item.warehouse}`,
+        quantity: item.quantity,
+        estimatedDelivery: "",
+        shipMethod: "U.S. AutoForce truck",
+      })));
+      setWarehouseLoading(false);
+      return;
+    }
     try {
       const result = await atdApi({
         action: "preview-order",
@@ -1172,7 +1184,7 @@ export default function TireShoppingBeta({
                             ${(tire.quotePrice - (tire.cost || 0)).toFixed(2)}
                           </strong>
                         </span>
-                        <small>{tire.atdProductNumber}</small>
+                        <small>{tire.supplier || "ATD"} · {tire.atdProductNumber}</small>
                       </>
                     )}
                     <div className="tire-beta-customer-price">
@@ -1234,7 +1246,7 @@ export default function TireShoppingBeta({
                           ? `Choose ${tire.fitmentPosition}`
                           : "Customize & buy"}
                     </button>
-                    {internal ? (
+                    {internal && tire.supplier !== "USAF" ? (
                       <button
                         className="tire-beta-direct-order"
                         type="button"
@@ -1242,7 +1254,7 @@ export default function TireShoppingBeta({
                       >
                         Order from supplier
                       </button>
-                    ) : null}
+                    ) : internal ? <span className="tire-beta-direct-order-note">U.S. AutoForce ordering coming next</span> : null}
                   </div>
                 </article>
               );

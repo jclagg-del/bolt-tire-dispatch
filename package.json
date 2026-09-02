@@ -11,7 +11,9 @@
   "dependencies": {
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
+    "basic-ftp": "^6.2.1",
     "clsx": "latest",
+    "csv-parse": "^7.0.2",
     "lucide-react": "latest",
     "next": "latest",
     "react": "latest",

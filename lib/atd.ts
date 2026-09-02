@@ -106,6 +106,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
     const estimatedTotals = Object.fromEntries([1,2,3,4,5,6].map((quantity) => [quantity, customerPricing.quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     return {
       id: product.atdproductnumber,
+      supplier: "ATD",
       atdProductNumber: product.atdproductnumber,
       manufacturerProductNumber: product.mfgproductnumber || "",
       brand: product.brand || "Unknown brand",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdBySize } from "@/lib/atd";
+import { searchUsafBySize } from "@/lib/usaf-catalog";
 
 async function staffAuthorized(request: NextRequest) {
   return requireApiUser(request);
@@ -50,7 +51,14 @@ export async function POST(request: NextRequest) {
       }).eq("request_id", requestId);
       return NextResponse.json({ order, warning: recordError ? `The supplier accepted the order, but its app record needs attention: ${recordError.message}` : null });
     }
-    if (body.action === "size") return NextResponse.json({ products: await searchAtdBySize(String(body.query || ""), includeCost), sandbox: atdEnvironment !== "production" });
+    if (body.action === "size") {
+      const query = String(body.query || "");
+      const [atdProducts, usafProducts] = await Promise.all([
+        searchAtdBySize(query, includeCost),
+        includeCost ? searchUsafBySize(query, true) : Promise.resolve([]),
+      ]);
+      return NextResponse.json({ products: [...atdProducts, ...usafProducts], sandbox: atdEnvironment !== "production" });
+    }
     if (body.action === "fitment-products") return NextResponse.json({ products: await searchAtdByFitment(body.vehicle || {}, includeCost), sandbox: atdEnvironment !== "production" });
     if (["years", "makes", "models", "trims", "options"].includes(body.action)) return NextResponse.json(await fitmentList(body.action, body.selection || {}));
     return NextResponse.json({ error: "Invalid supplier action" }, { status: 400 });
