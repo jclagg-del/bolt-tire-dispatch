@@ -368,9 +368,10 @@ export default function TireShoppingBeta({
   }
   function supplierMatches(tire: Product) {
     const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const manufacturerNumber = normalize(tire.manufacturerProductNumber || "");
+    const identifiers = new Set([tire.manufacturerProductNumber, tire.atdProductNumber].map((value) => normalize(value || "")).filter(Boolean));
     return products.filter((candidate) => {
-      if (manufacturerNumber && normalize(candidate.manufacturerProductNumber || "") === manufacturerNumber) return true;
+      const candidateIdentifiers = [candidate.manufacturerProductNumber, candidate.atdProductNumber].map((value) => normalize(value || "")).filter(Boolean);
+      if (candidateIdentifiers.some((identifier) => identifiers.has(identifier))) return true;
       return normalize(candidate.brand) === normalize(tire.brand) && normalize(candidate.model) === normalize(tire.model) && normalize(candidate.size) === normalize(tire.size);
     });
   }
