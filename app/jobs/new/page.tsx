@@ -683,7 +683,7 @@ export default function NewJobPage() {
                 <option value="tires_only">Loose tires only - no installation</option>
                 <option value="trailer_atv">Trailer / ATV</option>
                 <option value="truck">Light / medium truck</option>
-                <option value="commercial">Heavy truck - mount & balance</option>
+                <option value="commercial">Heavy truck - mount & dismount</option>
                 <option value="medium_dismount">Medium truck - mount & dismount</option>
               </select>
             </Field>

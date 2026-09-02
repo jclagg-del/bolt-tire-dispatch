@@ -61,7 +61,7 @@ const pricingGroups: Array<{
     ],
   },
   {
-    title: "Heavy truck - on-site mount & balance",
+    title: "Heavy truck - on-site mount & dismount",
     description: "Service totals for heavy-truck installation and balancing.",
     fields: [
       { key: "heavy_truck_two_install", label: "1–2 tires", prefix: "$" },
