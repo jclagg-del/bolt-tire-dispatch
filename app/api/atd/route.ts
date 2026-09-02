@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdBySize } from "@/lib/atd";
 import { searchUsafBySize } from "@/lib/usaf-catalog";
+import { auditSupplierMatches } from "@/lib/inventory-match-audit";
 
 async function staffAuthorized(request: NextRequest) {
   return requireApiUser(request);
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
         searchAtdBySize(query, includeCost),
         includeCost ? searchUsafBySize(query, true) : Promise.resolve([]),
       ]);
+      if (includeCost) await auditSupplierMatches([...atdProducts, ...usafProducts]);
       return NextResponse.json({ products: [...atdProducts, ...usafProducts], sandbox: atdEnvironment !== "production" });
     }
     if (body.action === "fitment-products") return NextResponse.json({ products: await searchAtdByFitment(body.vehicle || {}, includeCost), sandbox: atdEnvironment !== "production" });

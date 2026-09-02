@@ -23,7 +23,9 @@ type Vehicle = {
   sort_order: number;
 };
 
-type Section = "pricing" | "team" | "vehicles" | "security" | "integrations";
+type Section = "pricing" | "team" | "vehicles" | "inventory" | "security" | "integrations";
+
+type InventoryHealth = { healthy:boolean; stale:boolean; productCount:number; matchedCount:number; reviewCount:number; lastImport?:{status:string;completed_at:string|null;row_count:number;product_count:number;error:string|null}; reviewItems:Array<{canonical_key:string;tire_size:string;brand:string;model:string;confidence:number;reason:string}> };
 
 const pricingGroups: Array<{
   title: string;
@@ -123,6 +125,7 @@ export default function SettingsPage() {
   const [passkeys, setPasskeys] = useState<Array<{ id: string; friendly_name?: string; created_at: string }>>([]);
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const [inventoryHealth, setInventoryHealth] = useState<InventoryHealth | null>(null);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -157,6 +160,15 @@ export default function SettingsPage() {
       setPasskeys(data || []);
     };
     loadPasskeys();
+  }, [section]);
+
+  useEffect(() => {
+    if (section !== "inventory") return;
+    supabase.auth.getSession().then(async ({ data }) => {
+      const response = await fetch("/api/inventory-health", { headers: { Authorization: `Bearer ${data.session?.access_token || ""}` }, cache: "no-store" });
+      if (response.ok) setInventoryHealth(await response.json());
+      else setMessage("Inventory health data could not be loaded.");
+    });
   }, [section]);
 
   const addPasskey = async () => {
@@ -273,6 +285,7 @@ export default function SettingsPage() {
               ["pricing", "Pricing & Fees"],
               ["team", "Technicians"],
               ["vehicles", "Service Vehicles"],
+              ["inventory", "Inventory Health"],
               ["security", "Security"],
               ["integrations", "Integrations"],
             ] as Array<[Section, string]>).map(([key, label]) => (
@@ -350,6 +363,16 @@ export default function SettingsPage() {
               </div>
             )) : null}
 
+            {!loading && section === "inventory" ? (
+              <>
+                {!inventoryHealth ? <div style={card}>Checking supplier inventory…</div> : <>
+                  <div style={card}><div style={integrationRow}><div><h2 style={cardTitle}>U.S. AutoForce feed</h2><p style={cardDescription}>{inventoryHealth.lastImport?.completed_at ? `Last completed ${new Date(inventoryHealth.lastImport.completed_at).toLocaleString()} · ${inventoryHealth.lastImport.product_count.toLocaleString()} products` : "No completed import recorded."}</p></div><span style={inventoryHealth.healthy ? connectedBadge : disconnectedBadge}>{inventoryHealth.healthy ? "Healthy" : inventoryHealth.stale ? "Stale" : inventoryHealth.lastImport?.status || "Needs attention"}</span></div>{inventoryHealth.lastImport?.error ? <p style={warningBox}>{inventoryHealth.lastImport.error}</p> : null}</div>
+                  <div style={fieldGrid}><div style={card}><span style={label}>USAF products</span><h2 style={healthNumber}>{inventoryHealth.productCount.toLocaleString()}</h2></div><div style={card}><span style={label}>Confirmed matches</span><h2 style={healthNumber}>{inventoryHealth.matchedCount.toLocaleString()}</h2></div><div style={card}><span style={label}>Needs review</span><h2 style={{...healthNumber,color:inventoryHealth.reviewCount?"#b45309":"#15803d"}}>{inventoryHealth.reviewCount.toLocaleString()}</h2></div></div>
+                  <div style={card}><h2 style={cardTitle}>Matching review queue</h2><p style={cardDescription}>Uncertain products remain separate until reviewed. New supplier searches automatically update this list.</p>{inventoryHealth.reviewItems.length ? inventoryHealth.reviewItems.map((item)=><div style={securityRow} key={item.canonical_key}><div><strong>{item.brand} {item.model}</strong><div style={deviceDate}>{item.tire_size} · {item.reason}</div></div><span style={disconnectedBadge}>{item.confidence}%</span></div>) : <p style={{...cardDescription,marginBottom:0}}>No uncertain matches have been encountered.</p>}</div>
+                </>}
+              </>
+            ) : null}
+
             {!loading && section === "security" ? (
               <>
                 <div style={card}>
@@ -421,3 +444,4 @@ const warningBox: React.CSSProperties = { background: "#fef3c7", border: "1px so
 const securityRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid #e2e8f0" };
 const deviceDate: React.CSSProperties = { color: "#64748b", fontSize: 13, marginTop: 3 };
 const dangerButton: React.CSSProperties = { border: "1px solid #fecaca", borderRadius: 9, padding: "8px 12px", background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" };
+const healthNumber: React.CSSProperties = { margin: "8px 0 0", color: "#0f172a", fontSize: 30 };
