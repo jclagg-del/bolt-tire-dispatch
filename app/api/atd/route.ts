@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdBySize } from "@/lib/atd";
-import { searchUsafBySize } from "@/lib/usaf-catalog";
+import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdByPartNumber, searchAtdBySize } from "@/lib/atd";
+import { searchUsafByPartNumber, searchUsafBySize } from "@/lib/usaf-catalog";
 import { auditSupplierMatches } from "@/lib/inventory-match-audit";
 
 async function staffAuthorized(request: NextRequest) {
@@ -58,6 +58,13 @@ export async function POST(request: NextRequest) {
         searchAtdBySize(query, includeCost),
         includeCost ? searchUsafBySize(query, true) : Promise.resolve([]),
       ]);
+      if (includeCost) await auditSupplierMatches([...atdProducts, ...usafProducts]);
+      return NextResponse.json({ products: [...atdProducts, ...usafProducts], sandbox: atdEnvironment !== "production" });
+    }
+    if (body.action === "part-number") {
+      if (!includeCost) return NextResponse.json({ error: "Staff access is required." }, { status: 401 });
+      const query = String(body.query || "");
+      const [atdProducts, usafProducts] = await Promise.all([searchAtdByPartNumber(query, true), searchUsafByPartNumber(query, true)]);
       if (includeCost) await auditSupplierMatches([...atdProducts, ...usafProducts]);
       return NextResponse.json({ products: [...atdProducts, ...usafProducts], sandbox: atdEnvironment !== "production" });
     }

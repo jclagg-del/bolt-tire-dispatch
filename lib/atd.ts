@@ -156,9 +156,8 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
 
 type PresentedProduct=ReturnType<typeof presentProducts>[number];
 
-export async function searchAtdBySize(query: string, includeCost: boolean):Promise<PresentedProduct[]> {
-  const keywords = query.replace(/[^0-9]/g, "");
-  const cacheKey=`${keywords}:${includeCost?"staff":"public"}`;
+async function searchAtdByKeyword(keywords: string, includeCost: boolean, searchType: "size" | "part"):Promise<PresentedProduct[]> {
+  const cacheKey=`${searchType}:${keywords}:${includeCost?"staff":"public"}`;
   try{
     const response = await atdRequest<{ products?: AtdProduct[] }>("product/product-by-keyword", {
       locationnumber: locationNumber,
@@ -183,6 +182,14 @@ export async function searchAtdBySize(query: string, includeCost: boolean):Promi
     if(Array.isArray(data?.products)&&data.products.length&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[];
     throw error;
   }
+}
+
+export async function searchAtdBySize(query: string, includeCost: boolean):Promise<PresentedProduct[]> {
+  return searchAtdByKeyword(query.replace(/[^0-9]/g, ""), includeCost, "size");
+}
+
+export async function searchAtdByPartNumber(query: string, includeCost: boolean):Promise<PresentedProduct[]> {
+  return searchAtdByKeyword(query.trim().replace(/[^a-zA-Z0-9-]/g, ""), includeCost, "part");
 }
 
 export async function fitmentList(action: string, selection: Record<string, string>) {

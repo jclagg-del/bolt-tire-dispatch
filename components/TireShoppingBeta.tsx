@@ -91,9 +91,10 @@ export default function TireShoppingBeta({
   const [sort, setSort] = useState(internal ? "margin" : "price");
   const [quantity, setQuantity] = useState(4);
   const [selected, setSelected] = useState<Product[]>([]);
-  const [mode, setMode] = useState<"size" | "vehicle">(
+  const [mode, setMode] = useState<"size" | "vehicle" | "part">(
     internal ? "size" : "vehicle",
   );
+  const [partNumber, setPartNumber] = useState("");
   const [vehicle, setVehicle] = useState({
     year: "",
     make: "",
@@ -195,6 +196,15 @@ export default function TireShoppingBeta({
     } finally {
       setLoading(false);
     }
+  }
+  async function searchPartNumber() {
+    setLoading(true); setError(""); setSearched(true);
+    try {
+      const payload = await atdApi({ action: "part-number", query: partNumber });
+      setProducts(payload.products || []); setSelected([]);
+    } catch (reason) {
+      setProducts([]); setError(reason instanceof Error ? reason.message : "Part-number search failed");
+    } finally { setLoading(false); }
   }
   async function searchVehicle() {
     const option = fitmentOptions.find(
@@ -569,12 +579,23 @@ export default function TireShoppingBeta({
             </button>
           )}
           {internal && (
+            <button className={mode === "part" ? "active" : ""} type="button" onClick={() => setMode("part")}>
+              Part number
+            </button>
+          )}
+          {internal && (
             <button type="button" disabled>
               VIN / plate · coming next
             </button>
           )}
         </div>
-        {mode === "size" ? (
+        {mode === "part" ? (
+          <label className="tire-beta-search">
+            <span>Enter supplier part number, manufacturer part number, or UPC</span>
+            <div><input value={partNumber} onChange={(event) => setPartNumber(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") searchPartNumber(); }} placeholder="04493730000" /><button type="button" onClick={searchPartNumber} disabled={loading || !partNumber.trim()}>{loading ? "Searching…" : "Search part number"}</button></div>
+            <small>Matches connected ATD and U.S. AutoForce inventory.</small>
+          </label>
+        ) : mode === "size" ? (
           <label className="tire-beta-search">
             <span>Enter tire size using digits only</span>
             <div>
