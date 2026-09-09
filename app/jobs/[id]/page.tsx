@@ -669,7 +669,9 @@ export default function EditJobPage() {
                 <option value="repair">Repair</option>
                 <option value="swap">Swap</option>
                 <option value="roadside">Roadside</option>
-                <option value="delivery">Delivery</option>
+                <option value="Installation">Installation</option>
+                <option value="Delivery">Delivery</option>
+                <option value="Pickup">Pickup</option>
                 <option value="inspection">Inspection</option>
               </select>
             </Field>
