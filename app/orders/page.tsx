@@ -352,7 +352,14 @@ export default function OrdersPage() {
         submitted_by_customer: true,
         customer_order_status: "approved",
         vehicle_id: "stepvan",
-        service_type: order.service_method === "pickup" ? "Pickup" : order.service_method === "delivery" || order.service_method === "delivery_pickup" ? "Delivery" : "Installation",
+        service_type:
+          order.service_method === "pickup"
+            ? "Pickup"
+            : ["delivery", "delivered", "delivery_pickup"].includes(
+                  String(order.service_method || "").toLowerCase()
+                )
+              ? "Delivery"
+              : "Installation",
         payment_status: "unpaid",
         job_status: "scheduled",
         complete: false,
