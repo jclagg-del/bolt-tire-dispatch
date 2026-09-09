@@ -25,7 +25,13 @@ export async function PATCH(request: Request, { params }: Context) {
     return NextResponse.json({ cancelled: true });
   }
 
-  const serviceMethod = ["delivery", "pickup", "delivery_pickup"].includes(body.service_method) ? body.service_method : "installed";
+  const requestedServiceMethod = String(body.service_method || "").toLowerCase();
+  const serviceMethod =
+    requestedServiceMethod === "delivered"
+      ? "delivery"
+      : ["delivery", "pickup", "delivery_pickup"].includes(requestedServiceMethod)
+        ? requestedServiceMethod
+        : "installed";
   const customer = body.customer === "HPR" ? "HPR" : "Kingdom Support Services";
   const qty = Number(body.qty);
   const requestedDate = String(body.requested_date || "").trim();
