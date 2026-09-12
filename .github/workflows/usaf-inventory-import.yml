@@ -15,6 +15,10 @@ jobs:
           IMPORT_SECRET: ${{ secrets.USAF_IMPORT_CRON_SECRET }}
         run: |
           curl --fail-with-body --show-error --silent \
-            --max-time 540 \
+            --max-time 120 \
+            --retry 3 \
+            --retry-delay 20 \
+            --retry-max-time 500 \
+            --retry-all-errors \
             -H "Authorization: Bearer ${IMPORT_SECRET}" \
             https://app.bolttire.com/api/usaf/import
