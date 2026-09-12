@@ -39,6 +39,15 @@ type Vehicle = {
 };
 
 const NY_TIMEZONE = "America/New_York";
+const TASK_TYPES = new Set([
+  "Brake Service",
+  "Oil Change",
+  "Air Filter Service",
+  "Parts Replacement",
+  "Axle / Driveline",
+  "Diagnostics",
+  "General Service",
+]);
 
 const fallbackVehicles: Vehicle[] = [
   { id: "stepvan", name: "Stepvan", color: "#2563eb", active: true, sort_order: 1 },
@@ -234,7 +243,7 @@ function JobsPageContent() {
       return;
     }
 
-    setJobs((data as Job[]) || []);
+    setJobs(((data as Job[]) || []).filter((job) => !TASK_TYPES.has(job.service_type || "")));
     setLoading(false);
   };
 
