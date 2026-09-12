@@ -365,10 +365,10 @@ export default function NewJobPage() {
     router.refresh();
   };
 
-  const startServiceUpJob = () => {
+  const startServiceJob = () => {
     setForm((current) => ({
       ...current,
-      customer: "ServiceUp",
+      customer: "",
       service_type: "General Service",
       vehicle_id: vehicles.find((vehicle) => vehicle.id === "service")?.id || current.vehicle_id,
       tires: "",
@@ -401,8 +401,8 @@ export default function NewJobPage() {
                 Create a new job and auto-fill repeat customer contact info.
               </p>
             </div>
-            <button type="button" onClick={startServiceUpJob} style={serviceUpButton}>
-              + ServiceUp Job
+            <button type="button" onClick={startServiceJob} style={serviceJobButton}>
+              + Service Job
             </button>
           </div>
         </div>
@@ -1084,7 +1084,7 @@ const checkboxLabel: React.CSSProperties = { display: "flex", alignItems: "flex-
 const checkbox: React.CSSProperties = { width: 22, height: 22, marginTop: 1 };
 const checkboxHelp: React.CSSProperties = { display: "block", marginTop: 3, color: "#6b7280", fontSize: 13, fontWeight: 400 };
 
-const serviceUpButton: React.CSSProperties = {
+const serviceJobButton: React.CSSProperties = {
   padding: "11px 15px",
   border: "none",
   borderRadius: 10,
