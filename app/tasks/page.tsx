@@ -54,6 +54,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("open");
+  const [approvalView, setApprovalView] = useState("all");
   const [workingId, setWorkingId] = useState<string | number | null>(null);
 
   useEffect(() => {
@@ -76,10 +77,29 @@ export default function TasksPage() {
       const taskStatus = task.job_status || (task.complete ? "completed" : "scheduled");
       if (status === "open" && (task.complete || ["completed", "billed", "paid"].includes(taskStatus))) return false;
       if (status === "completed" && !task.complete && !["completed", "billed", "paid"].includes(taskStatus)) return false;
+      const approval = task.customer_order_status || "Request Received";
+      if (approvalView === "needs_submission" && !["Request Received", "Needs Info to Submit", "Ready to Submit"].includes(approval)) return false;
+      if (approvalView === "pending" && approval !== "Awaiting Approval") return false;
+      if (approvalView === "approved" && approval !== "Approved") return false;
       if (query && ![task.customer, task.vehicle, task.unit_number, task.service_type, task.po_number, task.notes].filter(Boolean).join(" ").toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [tasks, search, status]);
+  }, [tasks, search, status, approvalView]);
+
+  const approvalCounts = useMemo(() => ({
+    needsSubmission: tasks.filter((task) => !task.complete && ["Request Received", "Needs Info to Submit", "Ready to Submit"].includes(task.customer_order_status || "Request Received")).length,
+    pending: tasks.filter((task) => !task.complete && task.customer_order_status === "Awaiting Approval").length,
+    approved: tasks.filter((task) => !task.complete && task.customer_order_status === "Approved").length,
+  }), [tasks]);
+
+  const approvalTone = (task: Task) => {
+    const approval = task.customer_order_status || "Request Received";
+    if (["Request Received", "Needs Info to Submit", "Ready to Submit"].includes(approval)) return { color: "#b45309", background: "#fef3c7", border: "#f59e0b" };
+    if (approval === "Awaiting Approval") return { color: "#1d4ed8", background: "#dbeafe", border: "#3b82f6" };
+    if (approval === "Approved") return { color: "#166534", background: "#dcfce7", border: "#22c55e" };
+    if (["Declined", "Cancelled"].includes(approval)) return { color: "#991b1b", background: "#fee2e2", border: "#ef4444" };
+    return { color: "#475569", background: "#e2e8f0", border: "#94a3b8" };
+  };
 
   const markCompleted = async (task: Task) => {
     if (workingId !== null) return;
@@ -136,6 +156,18 @@ export default function TasksPage() {
           </select>
         </section>
 
+        <section style={approvalSummary}>
+          <button type="button" onClick={() => setApprovalView(approvalView === "needs_submission" ? "all" : "needs_submission")} style={{ ...summaryButton, ...needsSummary, ...(approvalView === "needs_submission" ? activeSummary : {}) }}>
+            <strong>{approvalCounts.needsSubmission}</strong><span>Needs Submission</span>
+          </button>
+          <button type="button" onClick={() => setApprovalView(approvalView === "pending" ? "all" : "pending")} style={{ ...summaryButton, ...pendingSummary, ...(approvalView === "pending" ? activeSummary : {}) }}>
+            <strong>{approvalCounts.pending}</strong><span>Pending Approval</span>
+          </button>
+          <button type="button" onClick={() => setApprovalView(approvalView === "approved" ? "all" : "approved")} style={{ ...summaryButton, ...approvedSummary, ...(approvalView === "approved" ? activeSummary : {}) }}>
+            <strong>{approvalCounts.approved}</strong><span>Approved</span>
+          </button>
+        </section>
+
         {loading ? <div style={empty}>Loading tasks...</div> : visibleTasks.length === 0 ? (
           <div style={empty}>No tasks match this view.</div>
         ) : (
@@ -143,7 +175,7 @@ export default function TasksPage() {
             {visibleTasks.map((task) => (
               <article
                 key={task.id}
-                style={card}
+                style={{ ...card, borderLeft: `6px solid ${approvalTone(task).border}` }}
                 onClick={() => router.push(`/jobs/${task.id}`)}
                 role="button"
                 tabIndex={0}
@@ -156,7 +188,9 @@ export default function TasksPage() {
                     <span style={typeBadge}>{task.service_type}</span>
                     <h2 style={customer}>{task.customer || "Task"}</h2>
                   </div>
-                  <span style={statusBadge}>{task.complete ? "Completed" : task.job_status || "Scheduled"}</span>
+                  <span style={{ ...statusBadge, color: approvalTone(task).color, background: approvalTone(task).background }}>
+                    {task.customer_order_status || "Request Received"}
+                  </span>
                 </div>
                 <strong style={appointment}>{formatAppointment(task.scheduled)}</strong>
                 <div style={details}>
@@ -220,6 +254,12 @@ const title: React.CSSProperties = { margin: "4px 0", color: "#0f172a", fontSize
 const subtitle: React.CSSProperties = { margin: 0, color: "#64748b" };
 const primaryButton: React.CSSProperties = { padding: "12px 16px", border: 0, borderRadius: 10, background: "#2563eb", color: "white", fontWeight: 800, cursor: "pointer" };
 const filters: React.CSSProperties = { display: "grid", gridTemplateColumns: "minmax(0,1fr) 180px", gap: 10, margin: "18px 0" };
+const approvalSummary: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 18 };
+const summaryButton: React.CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, cursor: "pointer", textAlign: "left", fontSize: 14, fontWeight: 800 };
+const needsSummary: React.CSSProperties = { border: "1px solid #f59e0b", background: "#fffbeb", color: "#92400e" };
+const pendingSummary: React.CSSProperties = { border: "1px solid #3b82f6", background: "#eff6ff", color: "#1e40af" };
+const approvedSummary: React.CSSProperties = { border: "1px solid #22c55e", background: "#f0fdf4", color: "#166534" };
+const activeSummary: React.CSSProperties = { boxShadow: "0 0 0 3px rgba(37,99,235,.18)", transform: "translateY(-1px)" };
 const input: React.CSSProperties = { padding: 12, border: "1px solid #cbd5e1", borderRadius: 10, fontSize: 15 };
 const select: React.CSSProperties = { ...input, background: "white" };
 const grid: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,350px),1fr))", gap: 14 };
