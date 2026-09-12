@@ -365,6 +365,28 @@ export default function NewJobPage() {
     router.refresh();
   };
 
+  const startServiceUpJob = () => {
+    setForm((current) => ({
+      ...current,
+      customer: "ServiceUp",
+      service_type: "General Service",
+      vehicle_id: vehicles.find((vehicle) => vehicle.id === "service")?.id || current.vehicle_id,
+      tires: "",
+      size: "",
+      qty: "",
+      price_tires: "",
+      tire_product_number: "",
+      tires_ordered: false,
+      tire_supplier: "",
+      estimated_delivery_date: "",
+      tires_received: false,
+      installation_cost: "",
+      tire_disposal_fee: "0",
+      ny_state_tire_fee: "0",
+    }));
+    setPricingCategory("tires_only");
+  };
+
   return (
     <div style={shell}>
       <AppHeader />
@@ -379,6 +401,9 @@ export default function NewJobPage() {
                 Create a new job and auto-fill repeat customer contact info.
               </p>
             </div>
+            <button type="button" onClick={startServiceUpJob} style={serviceUpButton}>
+              + ServiceUp Job
+            </button>
           </div>
         </div>
 
@@ -554,6 +579,13 @@ export default function NewJobPage() {
                 <option value="Delivery">Delivery</option>
                 <option value="Pickup">Pickup</option>
                 <option value="inspection">Inspection</option>
+                <option value="Brake Service">Brake Service</option>
+                <option value="Oil Change">Oil Change</option>
+                <option value="Air Filter Service">Air Filter Service</option>
+                <option value="Parts Replacement">Parts Replacement</option>
+                <option value="Axle / Driveline">Axle / Driveline</option>
+                <option value="Diagnostics">Diagnostics</option>
+                <option value="General Service">General Service</option>
               </select>
             </Field>
 
@@ -573,7 +605,7 @@ export default function NewJobPage() {
             </Field>
           </div>
 
-          <div style={sectionTitle}>Service and Tire Information</div>
+          <div style={sectionTitle}>Work and Tire Information</div>
 
           <div style={twoColumnGrid}>
             <Field>
@@ -856,11 +888,11 @@ export default function NewJobPage() {
             </Field>
           </div>
 
-          <div style={sectionTitle}>Notes</div>
+          <div style={sectionTitle}>Work Requested and Notes</div>
 
           <textarea
             name="notes"
-            placeholder="Notes"
+            placeholder="Describe the requested work, parts needed, approval details, or technician notes"
             value={form.notes}
             onChange={handleChange}
             style={textarea}
@@ -1051,6 +1083,17 @@ const awaitingStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid
 const checkboxLabel: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", color: "#111827" };
 const checkbox: React.CSSProperties = { width: 22, height: 22, marginTop: 1 };
 const checkboxHelp: React.CSSProperties = { display: "block", marginTop: 3, color: "#6b7280", fontSize: 13, fontWeight: 400 };
+
+const serviceUpButton: React.CSSProperties = {
+  padding: "11px 15px",
+  border: "none",
+  borderRadius: 10,
+  background: "#0f172a",
+  color: "white",
+  fontSize: 14,
+  fontWeight: 800,
+  cursor: "pointer",
+};
 
 const button: React.CSSProperties = {
   marginTop: 16,
