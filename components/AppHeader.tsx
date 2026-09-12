@@ -29,6 +29,13 @@ export default function AppHeader() {
     router.replace("/login");
   };
 
+  const currentPath =
+    navItems.find(
+      (item) =>
+        pathname === item.path ||
+        (item.path !== "/" && pathname.startsWith(`${item.path}/`)),
+    )?.path ?? "/";
+
   return (
     <div style={wrap}>
       <div style={inner}>
@@ -51,28 +58,21 @@ export default function AppHeader() {
         </div>
 
         <div style={rightSide}>
-          <div style={nav}>
-            {navItems.map((item) => {
-              const active =
-                pathname === item.path ||
-                (item.path !== "/" &&
-                  pathname.startsWith(`${item.path}/`));
-
-              return (
-                <button
-                  key={item.path}
-                  type="button"
-                  onClick={() => router.push(item.path)}
-                  style={{
-                    ...navBtn,
-                    ...(active ? navBtnActive : {}),
-                  }}
-                >
+          <label style={menuLabel}>
+            <span style={menuLabelText}>Navigate</span>
+            <select
+              aria-label="Navigate to another page"
+              value={currentPath}
+              onChange={(event) => router.push(event.target.value)}
+              style={menuSelect}
+            >
+              {navItems.map((item) => (
+                <option key={item.path} value={item.path}>
                   {item.label}
-                </button>
-              );
-            })}
-          </div>
+                </option>
+              ))}
+            </select>
+          </label>
 
           <button
             type="button"
@@ -124,26 +124,30 @@ const rightSide: React.CSSProperties = {
   justifyContent: "flex-end",
 };
 
-const nav: React.CSSProperties = {
+const menuLabel: React.CSSProperties = {
   display: "flex",
+  alignItems: "center",
   gap: 8,
-  flexWrap: "wrap",
 };
 
-const navBtn: React.CSSProperties = {
-  padding: "8px 12px",
+const menuLabelText: React.CSSProperties = {
+  color: "#64748b",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+};
+
+const menuSelect: React.CSSProperties = {
+  minWidth: 190,
+  padding: "9px 38px 9px 12px",
   borderRadius: 8,
-  border: "none",
-  background: "#e5e7eb",
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
   color: "#111827",
   cursor: "pointer",
-  fontWeight: 600,
-};
-
-const navBtnActive: React.CSSProperties = {
-  background: "#111827",
-  color: "white",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+  fontSize: 15,
+  fontWeight: 700,
 };
 
 const logoutBtn: React.CSSProperties = {
