@@ -21,6 +21,7 @@ type Task = {
   submitted_by: string | null;
   estimated_delivery_date: string | null;
   complete: boolean | null;
+  archived: boolean | null;
 };
 
 export const TASK_TYPES = [
@@ -61,8 +62,7 @@ export default function TasksPage() {
     const load = async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,customer,vehicle,unit_number,vehicle_id,scheduled,service_type,po_number,notes,job_status,customer_order_status,payment_status,submitted_by,estimated_delivery_date,complete")
-        .eq("archived", false)
+        .select("id,customer,vehicle,unit_number,vehicle_id,scheduled,service_type,po_number,notes,job_status,customer_order_status,payment_status,submitted_by,estimated_delivery_date,complete,archived")
         .in("service_type", TASK_TYPES)
         .order("scheduled", { ascending: true, nullsFirst: false });
       if (!error) setTasks((data as Task[]) || []);
@@ -75,6 +75,8 @@ export default function TasksPage() {
     const query = search.trim().toLowerCase();
     return tasks.filter((task) => {
       const taskStatus = task.job_status || (task.complete ? "completed" : "scheduled");
+      if (status === "archived" && !task.archived) return false;
+      if (status !== "archived" && task.archived) return false;
       if (status === "open" && (task.complete || ["completed", "billed", "paid"].includes(taskStatus))) return false;
       if (status === "completed" && !task.complete && !["completed", "billed", "paid"].includes(taskStatus)) return false;
       const approval = task.customer_order_status || "Request Received";
@@ -87,9 +89,9 @@ export default function TasksPage() {
   }, [tasks, search, status, approvalView]);
 
   const approvalCounts = useMemo(() => ({
-    needsSubmission: tasks.filter((task) => !task.complete && ["Request Received", "Needs Info to Submit", "Ready to Submit"].includes(task.customer_order_status || "Request Received")).length,
-    pending: tasks.filter((task) => !task.complete && task.customer_order_status === "Awaiting Approval").length,
-    approved: tasks.filter((task) => !task.complete && task.customer_order_status === "Approved").length,
+    needsSubmission: tasks.filter((task) => !task.archived && !task.complete && ["Request Received", "Needs Info to Submit", "Ready to Submit"].includes(task.customer_order_status || "Request Received")).length,
+    pending: tasks.filter((task) => !task.archived && !task.complete && task.customer_order_status === "Awaiting Approval").length,
+    approved: tasks.filter((task) => !task.archived && !task.complete && task.customer_order_status === "Approved").length,
   }), [tasks]);
 
   const approvalTone = (task: Task) => {
@@ -134,6 +136,16 @@ export default function TasksPage() {
     updateTask(task, { notes });
   };
 
+  const cancelTask = async (task: Task) => {
+    if (!window.confirm("Cancel this task? It will remain visible until archived.")) return;
+    await updateTask(task, { customer_order_status: "Cancelled", job_status: "cancelled" });
+  };
+
+  const setArchived = async (task: Task, archived: boolean) => {
+    if (archived && !window.confirm("Archive this task? You can restore it from Archived Tasks.")) return;
+    await updateTask(task, { archived });
+  };
+
   return (
     <div style={shell}>
       <AppHeader />
@@ -152,6 +164,7 @@ export default function TasksPage() {
           <select style={select} value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="open">Open tasks</option>
             <option value="completed">Completed tasks</option>
+            <option value="archived">Archived tasks</option>
             <option value="all">All tasks</option>
           </select>
         </section>
@@ -237,6 +250,14 @@ export default function TasksPage() {
                     {workingId === task.id ? "Completing..." : "✓ Mark Completed"}
                   </button>
                 ) : null}
+                <div style={taskActions} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                  {!task.archived && task.customer_order_status !== "Cancelled" && !task.complete ? (
+                    <button type="button" style={cancelButton} disabled={workingId === task.id} onClick={() => cancelTask(task)}>Cancel Task</button>
+                  ) : null}
+                  <button type="button" style={archiveButton} disabled={workingId === task.id} onClick={() => setArchived(task, !task.archived)}>
+                    {task.archived ? "Restore Task" : "Archive Task"}
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -276,4 +297,7 @@ const workflowField: React.CSSProperties = { display: "flex", flexDirection: "co
 const workflowInput: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: 8, border: "1px solid #cbd5e1", borderRadius: 8, background: "white", color: "#0f172a", fontSize: 13, textTransform: "none" };
 const checkRow: React.CSSProperties = { display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12, color: "#334155", fontSize: 13, fontWeight: 700 };
 const completeButton: React.CSSProperties = { width: "100%", marginTop: 14, padding: 11, border: 0, borderRadius: 9, background: "#16a34a", color: "white", fontWeight: 800, cursor: "pointer" };
+const taskActions: React.CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 };
+const cancelButton: React.CSSProperties = { flex: 1, padding: 9, border: "1px solid #fca5a5", borderRadius: 8, background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" };
+const archiveButton: React.CSSProperties = { flex: 1, padding: 9, border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#334155", fontWeight: 800, cursor: "pointer" };
 const empty: React.CSSProperties = { padding: 40, border: "1px dashed #cbd5e1", borderRadius: 14, background: "white", color: "#64748b", textAlign: "center" };
