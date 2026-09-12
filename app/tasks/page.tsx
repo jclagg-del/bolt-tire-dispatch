@@ -9,6 +9,7 @@ type Task = {
   id: number;
   customer: string | null;
   vehicle: string | null;
+  unit_number: string | null;
   vehicle_id: string | null;
   scheduled: string | null;
   service_type: string | null;
@@ -53,7 +54,7 @@ export default function TasksPage() {
     const load = async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,customer,vehicle,vehicle_id,scheduled,service_type,po_number,notes,job_status,complete")
+        .select("id,customer,vehicle,unit_number,vehicle_id,scheduled,service_type,po_number,notes,job_status,complete")
         .eq("archived", false)
         .in("service_type", TASK_TYPES)
         .order("scheduled", { ascending: true, nullsFirst: false });
@@ -69,7 +70,7 @@ export default function TasksPage() {
       const taskStatus = task.job_status || (task.complete ? "completed" : "scheduled");
       if (status === "open" && (task.complete || ["completed", "billed", "paid"].includes(taskStatus))) return false;
       if (status === "completed" && !task.complete && !["completed", "billed", "paid"].includes(taskStatus)) return false;
-      if (query && ![task.customer, task.vehicle, task.service_type, task.po_number, task.notes].filter(Boolean).join(" ").toLowerCase().includes(query)) return false;
+      if (query && ![task.customer, task.vehicle, task.unit_number, task.service_type, task.po_number, task.notes].filter(Boolean).join(" ").toLowerCase().includes(query)) return false;
       return true;
     });
   }, [tasks, search, status]);
@@ -111,9 +112,9 @@ export default function TasksPage() {
                 </div>
                 <strong style={appointment}>{formatAppointment(task.scheduled)}</strong>
                 <div style={details}>
-                  <span><small>VEHICLE</small>{task.vehicle || "—"}</span>
+                  <span><small>VEHICLE NUMBER</small>{task.unit_number || "—"}</span>
+                  <span><small>YEAR / MAKE / MODEL</small>{task.vehicle || "—"}</span>
                   <span><small>RO / PO</small>{task.po_number || "—"}</span>
-                  <span><small>ASSIGNED VEHICLE</small>{task.vehicle_id || "—"}</span>
                 </div>
                 {task.notes ? <p style={notes}>{task.notes}</p> : null}
               </button>
