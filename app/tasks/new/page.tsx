@@ -14,7 +14,7 @@ export default function NewTaskPage() {
   const [saving, setSaving] = useState(false);
   const [customerChoice, setCustomerChoice] = useState("");
   const [form, setForm] = useState({
-    customer: "", vehicle: "", vehicle_mileage: "", address: "", scheduled: "",
+    customer: "", vehicle_number: "", vehicle_description: "", vehicle_mileage: "", address: "", scheduled: "",
     vehicle_id: "service", service_type: "General Service", po_number: "",
     parts: "", notes: "", job_status: "scheduled",
   });
@@ -38,7 +38,8 @@ export default function NewTaskPage() {
     ].filter(Boolean).join("\n");
     const { data, error } = await supabase.from("jobs").insert({
       customer: form.customer.trim(),
-      vehicle: form.vehicle.trim() || null,
+      vehicle: form.vehicle_description.trim() || null,
+      unit_number: form.vehicle_number.trim() || null,
       vehicle_mileage: form.vehicle_mileage.trim() || null,
       address: form.address.trim() || null,
       scheduled: `${form.scheduled}:00`,
@@ -91,7 +92,6 @@ export default function NewTaskPage() {
                 <input style={input} value={form.customer} onChange={(e) => change("customer", e.target.value)} />
               </Field>
             ) : null}
-            <Field label="Mileage"><input style={input} inputMode="numeric" value={form.vehicle_mileage} onChange={(e) => change("vehicle_mileage", e.target.value)} /></Field>
             <Field label="Service Address"><input style={input} value={form.address} onChange={(e) => change("address", e.target.value)} /></Field>
           </div>
           <h2 style={sectionTitle}>Scheduling</h2>
@@ -104,7 +104,13 @@ export default function NewTaskPage() {
           </div>
           <h2 style={sectionTitle}>Work Details</h2>
           <Field label="Vehicle Number">
-            <input style={input} placeholder="Vehicle or unit number" value={form.vehicle} onChange={(e) => change("vehicle", e.target.value)} />
+            <input style={input} placeholder="Vehicle or unit number" value={form.vehicle_number} onChange={(e) => change("vehicle_number", e.target.value)} />
+          </Field>
+          <Field label="Year, Make and Model">
+            <input style={input} placeholder="Example: 2022 Ford Transit" value={form.vehicle_description} onChange={(e) => change("vehicle_description", e.target.value)} />
+          </Field>
+          <Field label="Mileage">
+            <input style={input} inputMode="numeric" value={form.vehicle_mileage} onChange={(e) => change("vehicle_mileage", e.target.value)} />
           </Field>
           <Field label="Summary of Work to Be Performed">
             <textarea style={textarea} placeholder="Describe the requested service or repair" value={form.notes} onChange={(e) => change("notes", e.target.value)} />
