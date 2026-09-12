@@ -33,8 +33,8 @@ export default function NewTaskPage() {
     if (!form.scheduled) return alert("Please choose a scheduled date and time.");
     setSaving(true);
     const combinedNotes = [
+      form.notes.trim() ? `Work summary: ${form.notes.trim()}` : "",
       form.parts.trim() ? `Parts needed: ${form.parts.trim()}` : "",
-      form.notes.trim(),
     ].filter(Boolean).join("\n");
     const { data, error } = await supabase.from("jobs").insert({
       customer: form.customer.trim(),
@@ -68,7 +68,7 @@ export default function NewTaskPage() {
           <button type="button" style={secondaryButton} onClick={() => router.push("/tasks")}>Back to Tasks</button>
         </section>
         <form style={card} onSubmit={save}>
-          <h2 style={sectionTitle}>Customer and Vehicle</h2>
+          <h2 style={sectionTitle}>Customer and Location</h2>
           <div style={grid}>
             <Field label="Customer *">
               <select
@@ -91,7 +91,6 @@ export default function NewTaskPage() {
                 <input style={input} value={form.customer} onChange={(e) => change("customer", e.target.value)} />
               </Field>
             ) : null}
-            <Field label="Customer Vehicle"><input style={input} placeholder="Year, make, model or unit" value={form.vehicle} onChange={(e) => change("vehicle", e.target.value)} /></Field>
             <Field label="Mileage"><input style={input} inputMode="numeric" value={form.vehicle_mileage} onChange={(e) => change("vehicle_mileage", e.target.value)} /></Field>
             <Field label="Service Address"><input style={input} value={form.address} onChange={(e) => change("address", e.target.value)} /></Field>
           </div>
@@ -104,8 +103,13 @@ export default function NewTaskPage() {
             <Field label="Status"><select style={input} value={form.job_status} onChange={(e) => change("job_status", e.target.value)}><option value="scheduled">Scheduled</option><option value="approved">Approved</option><option value="waiting_parts">Waiting for Parts</option><option value="in_progress">In Progress</option></select></Field>
           </div>
           <h2 style={sectionTitle}>Work Details</h2>
+          <Field label="Vehicle Number">
+            <input style={input} placeholder="Vehicle or unit number" value={form.vehicle} onChange={(e) => change("vehicle", e.target.value)} />
+          </Field>
+          <Field label="Summary of Work to Be Performed">
+            <textarea style={textarea} placeholder="Describe the requested service or repair" value={form.notes} onChange={(e) => change("notes", e.target.value)} />
+          </Field>
           <Field label="Parts Needed"><textarea style={textarea} value={form.parts} onChange={(e) => change("parts", e.target.value)} /></Field>
-          <Field label="Work Requested and Notes"><textarea style={textarea} value={form.notes} onChange={(e) => change("notes", e.target.value)} /></Field>
           <button type="submit" style={primaryButton} disabled={saving}>{saving ? "Saving..." : "Save Task"}</button>
         </form>
       </main>
