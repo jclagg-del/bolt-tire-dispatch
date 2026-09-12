@@ -136,11 +136,6 @@ export default function TasksPage() {
     updateTask(task, { notes });
   };
 
-  const cancelTask = async (task: Task) => {
-    if (!window.confirm("Cancel this task? It will remain visible until archived.")) return;
-    await updateTask(task, { customer_order_status: "Cancelled", job_status: "cancelled" });
-  };
-
   const setArchived = async (task: Task, archived: boolean) => {
     if (archived && !window.confirm("Archive this task? You can restore it from Archived Tasks.")) return;
     await updateTask(task, { archived });
@@ -251,9 +246,6 @@ export default function TasksPage() {
                   </button>
                 ) : null}
                 <div style={taskActions} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                  {!task.archived && task.customer_order_status !== "Cancelled" && !task.complete ? (
-                    <button type="button" style={cancelButton} disabled={workingId === task.id} onClick={() => cancelTask(task)}>Cancel Task</button>
-                  ) : null}
                   <button type="button" style={archiveButton} disabled={workingId === task.id} onClick={() => setArchived(task, !task.archived)}>
                     {task.archived ? "Restore Task" : "Archive Task"}
                   </button>
@@ -298,6 +290,5 @@ const workflowInput: React.CSSProperties = { width: "100%", boxSizing: "border-b
 const checkRow: React.CSSProperties = { display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12, color: "#334155", fontSize: 13, fontWeight: 700 };
 const completeButton: React.CSSProperties = { width: "100%", marginTop: 14, padding: 11, border: 0, borderRadius: 9, background: "#16a34a", color: "white", fontWeight: 800, cursor: "pointer" };
 const taskActions: React.CSSProperties = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 };
-const cancelButton: React.CSSProperties = { flex: 1, padding: 9, border: "1px solid #fca5a5", borderRadius: 8, background: "#fff", color: "#b91c1c", fontWeight: 800, cursor: "pointer" };
 const archiveButton: React.CSSProperties = { flex: 1, padding: 9, border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", color: "#334155", fontWeight: 800, cursor: "pointer" };
 const empty: React.CSSProperties = { padding: 40, border: "1px dashed #cbd5e1", borderRadius: 14, background: "white", color: "#64748b", textAlign: "center" };
