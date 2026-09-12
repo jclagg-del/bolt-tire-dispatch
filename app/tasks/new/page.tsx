@@ -12,6 +12,7 @@ export default function NewTaskPage() {
   const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [saving, setSaving] = useState(false);
+  const [customerChoice, setCustomerChoice] = useState("");
   const [form, setForm] = useState({
     customer: "", vehicle: "", vehicle_mileage: "", address: "", scheduled: "",
     vehicle_id: "service", service_type: "General Service", po_number: "",
@@ -69,7 +70,27 @@ export default function NewTaskPage() {
         <form style={card} onSubmit={save}>
           <h2 style={sectionTitle}>Customer and Vehicle</h2>
           <div style={grid}>
-            <Field label="Customer *"><input style={input} value={form.customer} onChange={(e) => change("customer", e.target.value)} /></Field>
+            <Field label="Customer *">
+              <select
+                style={input}
+                value={customerChoice}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setCustomerChoice(value);
+                  change("customer", value === "other" ? "" : value);
+                }}
+              >
+                <option value="">Select customer</option>
+                <option value="Amazon">Amazon</option>
+                <option value="FedEx">FedEx</option>
+                <option value="other">Other customer</option>
+              </select>
+            </Field>
+            {customerChoice === "other" ? (
+              <Field label="Other Customer Name *">
+                <input style={input} value={form.customer} onChange={(e) => change("customer", e.target.value)} />
+              </Field>
+            ) : null}
             <Field label="Customer Vehicle"><input style={input} placeholder="Year, make, model or unit" value={form.vehicle} onChange={(e) => change("vehicle", e.target.value)} /></Field>
             <Field label="Mileage"><input style={input} inputMode="numeric" value={form.vehicle_mileage} onChange={(e) => change("vehicle_mileage", e.target.value)} /></Field>
             <Field label="Service Address"><input style={input} value={form.address} onChange={(e) => change("address", e.target.value)} /></Field>
