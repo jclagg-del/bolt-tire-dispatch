@@ -49,6 +49,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("open");
+  const [workingId, setWorkingId] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -74,6 +75,22 @@ export default function TasksPage() {
       return true;
     });
   }, [tasks, search, status]);
+
+  const markCompleted = async (task: Task) => {
+    if (workingId !== null) return;
+    if (!window.confirm(`Mark ${task.customer || "this task"} as completed?`)) return;
+    setWorkingId(task.id);
+    const completedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("jobs")
+      .update({ complete: true, job_status: "completed", completed_at: completedAt })
+      .eq("id", task.id);
+    setWorkingId(null);
+    if (error) return window.alert(`Unable to complete task: ${error.message}`);
+    setTasks((current) => current.map((item) => item.id === task.id
+      ? { ...item, complete: true, job_status: "completed" }
+      : item));
+  };
 
   return (
     <div style={shell}>
@@ -102,7 +119,16 @@ export default function TasksPage() {
         ) : (
           <div style={grid}>
             {visibleTasks.map((task) => (
-              <button key={task.id} type="button" style={card} onClick={() => router.push(`/jobs/${task.id}`)}>
+              <article
+                key={task.id}
+                style={card}
+                onClick={() => router.push(`/jobs/${task.id}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") router.push(`/jobs/${task.id}`);
+                }}
+              >
                 <div style={cardTop}>
                   <div>
                     <span style={typeBadge}>{task.service_type}</span>
@@ -117,7 +143,21 @@ export default function TasksPage() {
                   <span><small>RO / PO</small>{task.po_number || "—"}</span>
                 </div>
                 {task.notes ? <p style={notes}>{task.notes}</p> : null}
-              </button>
+                {!task.complete && !["completed", "billed", "paid"].includes(task.job_status || "") ? (
+                  <button
+                    type="button"
+                    style={completeButton}
+                    disabled={workingId === task.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      markCompleted(task);
+                    }}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    {workingId === task.id ? "Completing..." : "✓ Mark Completed"}
+                  </button>
+                ) : null}
+              </article>
             ))}
           </div>
         )}
@@ -145,4 +185,5 @@ const statusBadge: React.CSSProperties = { padding: "5px 8px", borderRadius: 999
 const appointment: React.CSSProperties = { display: "block", padding: 11, borderRadius: 9, background: "#eff6ff", color: "#1e3a8a" };
 const details: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8, marginTop: 12 };
 const notes: React.CSSProperties = { margin: "12px 0 0", color: "#475569", whiteSpace: "pre-wrap" };
+const completeButton: React.CSSProperties = { width: "100%", marginTop: 14, padding: 11, border: 0, borderRadius: 9, background: "#16a34a", color: "white", fontWeight: 800, cursor: "pointer" };
 const empty: React.CSSProperties = { padding: 40, border: "1px dashed #cbd5e1", borderRadius: 14, background: "white", color: "#64748b", textAlign: "center" };
