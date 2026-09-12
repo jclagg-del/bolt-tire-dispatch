@@ -6,7 +6,7 @@ import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 
 type Task = {
-  id: number;
+  id: string | number;
   customer: string | null;
   vehicle: string | null;
   unit_number: string | null;
@@ -16,6 +16,10 @@ type Task = {
   po_number: string | null;
   notes: string | null;
   job_status: string | null;
+  customer_order_status: string | null;
+  payment_status: string | null;
+  submitted_by: string | null;
+  estimated_delivery_date: string | null;
   complete: boolean | null;
 };
 
@@ -28,6 +32,7 @@ export const TASK_TYPES = [
   "Diagnostics",
   "General Service",
 ];
+const APPROVAL_STATUSES = ["Request Received", "Needs Info to Submit", "Ready to Submit", "Awaiting Approval", "Approved", "Work Completed", "Declined", "Cancelled"];
 
 function formatAppointment(value: string | null) {
   if (!value) return "Not scheduled";
@@ -49,13 +54,13 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("open");
-  const [workingId, setWorkingId] = useState<number | null>(null);
+  const [workingId, setWorkingId] = useState<string | number | null>(null);
 
   useEffect(() => {
     const load = async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,customer,vehicle,unit_number,vehicle_id,scheduled,service_type,po_number,notes,job_status,complete")
+        .select("id,customer,vehicle,unit_number,vehicle_id,scheduled,service_type,po_number,notes,job_status,customer_order_status,payment_status,submitted_by,estimated_delivery_date,complete")
         .eq("archived", false)
         .in("service_type", TASK_TYPES)
         .order("scheduled", { ascending: true, nullsFirst: false });
@@ -83,13 +88,30 @@ export default function TasksPage() {
     const completedAt = new Date().toISOString();
     const { error } = await supabase
       .from("jobs")
-      .update({ complete: true, job_status: "completed", completed_at: completedAt })
+      .update({ complete: true, job_status: "completed", customer_order_status: "Work Completed", completed_at: completedAt })
       .eq("id", task.id);
     setWorkingId(null);
     if (error) return window.alert(`Unable to complete task: ${error.message}`);
     setTasks((current) => current.map((item) => item.id === task.id
-      ? { ...item, complete: true, job_status: "completed" }
+      ? { ...item, complete: true, job_status: "completed", customer_order_status: "Work Completed" }
       : item));
+  };
+
+  const updateTask = async (task: Task, updates: Partial<Task>) => {
+    if (workingId !== null) return;
+    setWorkingId(task.id);
+    const { error } = await supabase.from("jobs").update(updates).eq("id", task.id);
+    setWorkingId(null);
+    if (error) return window.alert(`Unable to update task: ${error.message}`);
+    setTasks((current) => current.map((item) => item.id === task.id ? { ...item, ...updates } : item));
+  };
+
+  const invoiceEmailed = (task: Task) => /(?:^|\n)Invoice emailed: Yes(?:\n|$)/i.test(task.notes || "");
+  const visibleNotes = (task: Task) => (task.notes || "").replace(/(?:^|\n)Invoice emailed: Yes(?=\n|$)/gi, "").trim();
+  const setInvoiceEmailed = (task: Task, checked: boolean) => {
+    const cleaned = (task.notes || "").replace(/(?:^|\n)Invoice emailed: Yes(?=\n|$)/gi, "").trim();
+    const notes = [cleaned, checked ? "Invoice emailed: Yes" : ""].filter(Boolean).join("\n");
+    updateTask(task, { notes });
   };
 
   return (
@@ -142,7 +164,31 @@ export default function TasksPage() {
                   <span><small>YEAR / MAKE / MODEL</small>{task.vehicle || "—"}</span>
                   <span><small>RO / PO</small>{task.po_number || "—"}</span>
                 </div>
-                {task.notes ? <p style={notes}>{task.notes}</p> : null}
+                <div style={workflowGrid} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                  <label style={workflowField}>Approval Status
+                    <select style={workflowInput} value={task.customer_order_status || "Request Received"} disabled={workingId === task.id} onChange={(event) => updateTask(task, { customer_order_status: event.target.value })}>
+                      {APPROVAL_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label style={workflowField}>Billing Customer
+                    <select style={workflowInput} value={task.submitted_by || ""} disabled={workingId === task.id} onChange={(event) => updateTask(task, { submitted_by: event.target.value })}>
+                      <option value="">Select</option><option>Element</option><option>LeasePlan</option><option>Merchant</option><option>Other</option>
+                    </select>
+                  </label>
+                  <label style={workflowField}>Expected Completion
+                    <input type="date" style={workflowInput} value={task.estimated_delivery_date || ""} disabled={workingId === task.id} onChange={(event) => updateTask(task, { estimated_delivery_date: event.target.value })} />
+                  </label>
+                  <label style={workflowField}>Billing Status
+                    <select style={workflowInput} value={task.payment_status || "not_yet_billed"} disabled={workingId === task.id} onChange={(event) => updateTask(task, { payment_status: event.target.value })}>
+                      <option value="not_yet_billed">Not Yet Billed</option><option value="estimate_sent">Estimate Sent</option><option value="billed">Billed</option><option value="canceled">Cancelled</option><option value="paid">Paid</option>
+                    </select>
+                  </label>
+                </div>
+                <div style={checkRow} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                  <label><input type="checkbox" checked={task.payment_status === "paid"} disabled={workingId === task.id} onChange={(event) => updateTask(task, { payment_status: event.target.checked ? "paid" : "billed" })} /> Paid</label>
+                  <label><input type="checkbox" checked={invoiceEmailed(task)} disabled={workingId === task.id} onChange={(event) => setInvoiceEmailed(task, event.target.checked)} /> Invoice Emailed</label>
+                </div>
+                {visibleNotes(task) ? <p style={notes}>{visibleNotes(task)}</p> : null}
                 {!task.complete && !["completed", "billed", "paid"].includes(task.job_status || "") ? (
                   <button
                     type="button"
@@ -185,5 +231,9 @@ const statusBadge: React.CSSProperties = { padding: "5px 8px", borderRadius: 999
 const appointment: React.CSSProperties = { display: "block", padding: 11, borderRadius: 9, background: "#eff6ff", color: "#1e3a8a" };
 const details: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8, marginTop: 12 };
 const notes: React.CSSProperties = { margin: "12px 0 0", color: "#475569", whiteSpace: "pre-wrap" };
+const workflowGrid: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 9, marginTop: 14, padding: 12, borderRadius: 10, background: "#f8fafc" };
+const workflowField: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 5, color: "#64748b", fontSize: 11, fontWeight: 800, textTransform: "uppercase" };
+const workflowInput: React.CSSProperties = { width: "100%", boxSizing: "border-box", padding: 8, border: "1px solid #cbd5e1", borderRadius: 8, background: "white", color: "#0f172a", fontSize: 13, textTransform: "none" };
+const checkRow: React.CSSProperties = { display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12, color: "#334155", fontSize: 13, fontWeight: 700 };
 const completeButton: React.CSSProperties = { width: "100%", marginTop: 14, padding: 11, border: 0, borderRadius: 9, background: "#16a34a", color: "white", fontWeight: 800, cursor: "pointer" };
 const empty: React.CSSProperties = { padding: 40, border: "1px dashed #cbd5e1", borderRadius: 14, background: "white", color: "#64748b", textAlign: "center" };
