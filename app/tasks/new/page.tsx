@@ -6,6 +6,8 @@ import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 
 const TASK_TYPES = ["Brake Service", "Oil Change", "Air Filter Service", "Parts Replacement", "Axle / Driveline", "Diagnostics", "General Service"];
+const APPROVAL_STATUSES = ["Request Received", "Needs Info to Submit", "Ready to Submit", "Awaiting Approval", "Approved", "Declined", "Cancelled"];
+const BILLING_CUSTOMERS = ["Element", "LeasePlan", "Merchant", "Other"];
 type Vehicle = { id: string; name: string };
 
 export default function NewTaskPage() {
@@ -16,7 +18,8 @@ export default function NewTaskPage() {
   const [form, setForm] = useState({
     customer: "", vehicle_number: "", vehicle_description: "", vehicle_mileage: "", address: "", scheduled: "",
     vehicle_id: "service", service_type: "General Service", po_number: "",
-    parts: "", notes: "", job_status: "scheduled",
+    parts: "", notes: "", job_status: "scheduled", approval_status: "Request Received",
+    billing_customer: "", estimated_completion_date: "", billing_status: "not_yet_billed",
   });
 
   useEffect(() => {
@@ -46,9 +49,12 @@ export default function NewTaskPage() {
       vehicle_id: form.vehicle_id,
       service_type: form.service_type,
       po_number: form.po_number.trim() || null,
+      submitted_by: form.billing_customer || null,
+      estimated_delivery_date: form.estimated_completion_date || null,
+      customer_order_status: form.approval_status,
       notes: combinedNotes || null,
       job_status: form.job_status,
-      payment_status: "unpaid",
+      payment_status: form.billing_status,
       complete: false,
       archived: false,
       tire_disposal_fee: 0,
@@ -100,6 +106,8 @@ export default function NewTaskPage() {
             <Field label="Assigned Service Vehicle"><select style={input} value={form.vehicle_id} onChange={(e) => change("vehicle_id", e.target.value)}>{vehicles.length ? vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>) : <option value="service">Service Truck</option>}</select></Field>
             <Field label="Task Type"><select style={input} value={form.service_type} onChange={(e) => change("service_type", e.target.value)}>{TASK_TYPES.map((type) => <option key={type}>{type}</option>)}</select></Field>
             <Field label="RO / PO Number"><input style={input} value={form.po_number} onChange={(e) => change("po_number", e.target.value)} /></Field>
+            <Field label="Expected Completion Date"><input type="date" style={input} value={form.estimated_completion_date} onChange={(e) => change("estimated_completion_date", e.target.value)} /></Field>
+            <Field label="Approval Status"><select style={input} value={form.approval_status} onChange={(e) => change("approval_status", e.target.value)}>{APPROVAL_STATUSES.map((item) => <option key={item}>{item}</option>)}</select></Field>
             <Field label="Status"><select style={input} value={form.job_status} onChange={(e) => change("job_status", e.target.value)}><option value="scheduled">Scheduled</option><option value="approved">Approved</option><option value="waiting_parts">Waiting for Parts</option><option value="in_progress">In Progress</option></select></Field>
           </div>
           <h2 style={sectionTitle}>Work Details</h2>
@@ -116,6 +124,11 @@ export default function NewTaskPage() {
             <textarea style={textarea} placeholder="Describe the requested service or repair" value={form.notes} onChange={(e) => change("notes", e.target.value)} />
           </Field>
           <Field label="Parts Needed"><textarea style={textarea} value={form.parts} onChange={(e) => change("parts", e.target.value)} /></Field>
+          <h2 style={sectionTitle}>Billing Tracking</h2>
+          <div style={grid}>
+            <Field label="Billing Customer"><select style={input} value={form.billing_customer} onChange={(e) => change("billing_customer", e.target.value)}><option value="">Select billing customer</option>{BILLING_CUSTOMERS.map((item) => <option key={item}>{item}</option>)}</select></Field>
+            <Field label="Billing Status"><select style={input} value={form.billing_status} onChange={(e) => change("billing_status", e.target.value)}><option value="not_yet_billed">Not Yet Billed</option><option value="estimate_sent">Estimate Sent</option><option value="billed">Billed</option><option value="canceled">Cancelled</option></select></Field>
+          </div>
           <button type="submit" style={primaryButton} disabled={saving}>{saving ? "Saving..." : "Save Task"}</button>
         </form>
       </main>
