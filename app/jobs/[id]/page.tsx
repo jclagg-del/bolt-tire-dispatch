@@ -673,6 +673,13 @@ export default function EditJobPage() {
                 <option value="Delivery">Delivery</option>
                 <option value="Pickup">Pickup</option>
                 <option value="inspection">Inspection</option>
+                <option value="Brake Service">Brake Service</option>
+                <option value="Oil Change">Oil Change</option>
+                <option value="Air Filter Service">Air Filter Service</option>
+                <option value="Parts Replacement">Parts Replacement</option>
+                <option value="Axle / Driveline">Axle / Driveline</option>
+                <option value="Diagnostics">Diagnostics</option>
+                <option value="General Service">General Service</option>
               </select>
             </Field>
 
