@@ -12,6 +12,7 @@ export default function AppHeader() {
     { label: "Schedule", path: "/schedule" },
     { label: "Route", path: "/route" },
     { label: "Jobs", path: "/jobs" },
+    { label: "Tasks", path: "/tasks" },
     { label: "Quotes", path: "/quotes" },
     { label: "Tire Shop", path: "/tire-shop" },
     { label: "Supplier Orders", path: "/supplier-orders" },
