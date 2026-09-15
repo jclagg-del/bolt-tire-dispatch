@@ -46,6 +46,58 @@ type Quote = {
   requested_time: string | null;
   quote_options: Option[];
 };
+const hasSplitFitment = (q: Quote, o: Option) =>
+  Boolean(q.rear_tire_size || q.rear_quantity || o.rear_model);
+
+function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
+  const split = hasSplitFitment(q, option);
+  return (
+    <div className={`quote-public-tires ${split ? "split" : ""}`}>
+      <div className="quote-public-tire">
+        {split ? <div className="quote-public-position">Front / Steer</div> : null}
+        {option.image_url ? (
+          <img
+            className="quote-tire-image"
+            src={option.image_url}
+            alt={`${option.brand} ${option.model}`}
+          />
+        ) : (
+          <div className="quote-image-placeholder">Tire image</div>
+        )}
+        <h2>{option.brand}</h2>
+        <h3>{option.model}</h3>
+        <p className="quote-public-fitment">
+          {q.tire_size || "Size TBD"} · Qty {q.quantity}
+        </p>
+        <div className="quote-price-each">
+          ${Number(option.price_per_tire).toFixed(2)} <span>per tire</span>
+        </div>
+      </div>
+      {split ? (
+        <div className="quote-public-tire rear">
+          <div className="quote-public-position">Rear / Drive</div>
+          {option.rear_image_url ? (
+            <img
+              className="quote-tire-image"
+              src={option.rear_image_url}
+              alt={`${option.rear_brand || option.brand} ${option.rear_model || "Rear tire"}`}
+            />
+          ) : (
+            <div className="quote-image-placeholder">Rear tire image</div>
+          )}
+          <h2>{option.rear_brand || option.brand || "Rear tire"}</h2>
+          <h3>{option.rear_model || "Model not specified"}</h3>
+          <p className="quote-public-fitment">
+            {q.rear_tire_size || "Size TBD"} · Qty {q.rear_quantity || 0}
+          </p>
+          <div className="quote-price-each">
+            ${Number(option.rear_price_per_tire || 0).toFixed(2)} <span>per tire</span>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 const tireSummary = (q: Quote) =>
   [
     `${q.quantity} front/primary · ${q.tire_size || "size TBD"}`,
@@ -167,21 +219,7 @@ export default function PublicQuote() {
         ) : (
           <div className="direct-checkout-layout">
             <aside className="direct-order-summary">
-              {chosen?.image_url ? (
-                <img
-                  src={chosen.image_url}
-                  alt={`${chosen.brand} ${chosen.model}`}
-                />
-              ) : null}
-              <div>
-                <span>{chosen?.brand}</span>
-                <h2>{chosen?.model}</h2>
-                <p>
-                  {q.quantity} tires · $
-                  {Number(chosen?.price_per_tire || 0).toFixed(2)} each
-                </p>
-                {chosen?.rear_model ? <p>{q.rear_quantity} rear tires · {chosen.rear_brand || chosen.brand} {chosen.rear_model} · ${Number(chosen.rear_price_per_tire || 0).toFixed(2)} each</p> : null}
-              </div>
+              {chosen ? <QuoteTirePanels q={q} option={chosen} /> : null}
               <dl>
                 <div>
                   <dt>Tires</dt>
@@ -280,21 +318,7 @@ export default function PublicQuote() {
                 <span className="quote-recommended">Bolt recommends</span>
               </div>
             ) : null}
-            {o.image_url ? (
-              <img
-                className="quote-tire-image"
-                src={o.image_url}
-                alt={`${o.brand} ${o.model}`}
-              />
-            ) : (
-              <div className="quote-image-placeholder">Tire image</div>
-            )}
-            <h2>{o.brand}</h2>
-            <h3>{o.model}</h3>
-            <div className="quote-price-each">
-              ${Number(o.price_per_tire).toFixed(2)} <span>per tire</span>
-            </div>
-            {o.rear_model ? <div className="quote-split-tire"><strong>Rear: {o.rear_brand || o.brand} {o.rear_model}</strong><span>{q.rear_tire_size} · ${Number(o.rear_price_per_tire || 0).toFixed(2)} each · qty {q.rear_quantity}</span></div> : null}
+            <QuoteTirePanels q={q} option={o} />
             <dl className="quote-specs">
               <div>
                 <dt>Warranty</dt>
