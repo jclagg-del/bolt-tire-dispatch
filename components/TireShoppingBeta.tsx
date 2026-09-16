@@ -36,7 +36,7 @@ type Product = {
   fitmentPosition: "front" | "rear" | "both";
   atdProductNumber: string;
   availability: { local: number; localPlus: number; nationwide: number };
-  warehouseInventory?: Array<{ warehouse: string; quantity: number; name?: string; address?: string }>;
+  warehouseInventory?: Array<{ warehouse: string; quantity: number; name?: string; address?: string; local?: boolean }>;
   tireLibraryId?: number;
   tireLibraryMatched?: boolean;
   tireLibraryDetailsLoaded?: boolean;
@@ -95,6 +95,7 @@ type WarehouseDetail = {
   quantity: number;
   estimatedDelivery: string;
   shipMethod: string;
+  local?: boolean;
 };
 
 function tireImageUrl(value: string | null | undefined) {
@@ -462,6 +463,7 @@ export default function TireShoppingBeta({
         quantity: item.quantity,
         estimatedDelivery: "",
         shipMethod: "U.S. AutoForce truck",
+        local: item.local,
       })));
       setWarehouseLoading(false);
       return;
@@ -474,12 +476,17 @@ export default function TireShoppingBeta({
       });
       const details: WarehouseDetail[] = (result.preview?.order?.orderlines || [])
         .flatMap((line: OrderLine) => line.fulfillments || [])
-        .map((fulfillment: OrderFulfillment) => ({
-          name: fulfillment.sourcedcname || "Nearby supplier warehouse",
-          quantity: Number(fulfillment.quantity || 0),
-          estimatedDelivery: fulfillment.estimateddelivery || "",
-          shipMethod: fulfillment.shipmethod || "",
-        }));
+        .map((fulfillment: OrderFulfillment) => {
+          const name = fulfillment.sourcedcname || "Nearby supplier warehouse";
+          return {
+            name,
+            quantity: Number(fulfillment.quantity || 0),
+            estimatedDelivery: fulfillment.estimateddelivery || "",
+            shipMethod: fulfillment.shipmethod || "",
+            local: /totowa/i.test(name),
+          };
+        })
+        .sort((a: WarehouseDetail, b: WarehouseDetail) => Number(Boolean(b.local)) - Number(Boolean(a.local)));
       setWarehouseDetails(details);
       if (!details.length) setWarehouseError("The supplier did not provide a warehouse breakdown for this tire.");
     } catch (reason) {
@@ -1292,7 +1299,7 @@ export default function TireShoppingBeta({
                     {internal && (
                       <div className="tire-beta-stock">
                         <span>
-                          Local <strong>{tire.availability.local}</strong>
+                          Local ({tire.supplier === "USAF" ? "Croton" : "Totowa"}) <strong>{tire.availability.local}</strong>
                         </span>
                         <button
                           type="button"
@@ -1300,7 +1307,7 @@ export default function TireShoppingBeta({
                           aria-expanded={warehouseProductId === tire.id}
                           onClick={() => toggleWarehouseDetails(tire)}
                         >
-                          {tire.supplier === "USAF" ? "Regional warehouses" : "Nearby warehouse"} <strong>{tire.availability.localPlus}</strong>
+                          {tire.supplier === "USAF" ? "Nearby warehouses" : "Nearby warehouse"} <strong>{tire.availability.localPlus}</strong>
                           <b>{warehouseProductId === tire.id ? "▲" : "▼"}</b>
                         </button>
                         {tire.supplier !== "USAF" ? <span>
@@ -1318,7 +1325,7 @@ export default function TireShoppingBeta({
                         ) : (
                           warehouseDetails.map((detail, index) => (
                             <div key={`${detail.name}-${index}`}>
-                              <strong>{detail.name}</strong>
+                              <strong>{detail.name}{detail.local ? " · Local warehouse" : ""}</strong>
                               {detail.address ? <span>{detail.address}</span> : null}
                               <span>
                                 {detail.quantity || tire.availability.localPlus} tires
