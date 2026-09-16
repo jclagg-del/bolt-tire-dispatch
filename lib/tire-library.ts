@@ -217,7 +217,10 @@ async function searchBySize(size: string) {
   });
   const first = await tireLibraryRequest<TireLibraryPage>(`tires/search?${params}`);
   const results = [...(first.data || [])];
-  const pages = Math.min(Number(first.last_page || 1), 5);
+  // A common truck size can contain well over 500 catalog entries. Stopping
+  // after five pages leaves otherwise valid supplier products unmatched, so
+  // walk the complete size result set. The API caps each page at 100.
+  const pages = Number(first.last_page || 1);
   for (let page = 2; page <= pages; page += 1) {
     params.set("page", String(page));
     const next = await tireLibraryRequest<TireLibraryPage>(`tires/search?${params}`);
