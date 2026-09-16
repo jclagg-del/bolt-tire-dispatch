@@ -303,6 +303,13 @@ async function tireLibraryPatternImage(id: number, name?: string | null) {
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
   if (!apiKey() || !products.length) return products;
   try {
+    const supplierImageByPattern = new Map<string, string>();
+    for (const product of products) {
+      const image = safeUrl(product.imageUrl);
+      if (!image) continue;
+      const key = `${normalizeBrand(product.brand)}:${normalizeModel(basePatternName(product.model), product.brand)}`;
+      if (!supplierImageByPattern.has(key)) supplierImageByPattern.set(key, image);
+    }
     const sizes = Array.from(new Set(products.map((product) => product.size).filter(Boolean))).slice(0, 4);
     const [catalogs, rebatesByPattern] = await Promise.all([
       Promise.all(sizes.map(searchBySize)).then((groups) => groups.flat()),
@@ -348,6 +355,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const match = matches[index];
       if (!match) return product;
       const detail = detailsByModel.get(Number(match.tire_model_id || match.id));
+      const supplierPatternImage = supplierImageByPattern.get(`${normalizeBrand(product.brand)}:${normalizeModel(basePatternName(product.model), product.brand)}`) || "";
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
       const rebates: Array<{ code: string; description: string; url?: string }> = [...(product.rebates || [])];
       for (const rebate of libraryRebates) if (!rebates.some((candidate) => candidate.code === rebate.code)) rebates.push(rebate);
@@ -356,7 +364,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         brand: detail?.brand || match.make_name || product.brand,
         model: detail?.model || match.model_name || product.model,
         description: detail?.description || product.description,
-        imageUrl: detail?.imageUrl || safeUrl(match.thumbnail_image) || imageByModel.get(Number(match.tire_model_id || match.id)) || product.imageUrl || null,
+        imageUrl: safeUrl(product.imageUrl) || supplierPatternImage || detail?.imageUrl || safeUrl(match.thumbnail_image) || imageByModel.get(Number(match.tire_model_id || match.id)) || null,
         category: detail?.terrain || detail?.season || detail?.category || match.terrain || match.season || match.category || product.category,
         loadSpeed: detail?.loadSpeed || [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
         warranty: detail?.warranty || match.warranty || product.warranty,
