@@ -1,6 +1,10 @@
 import "server-only";
 
-const baseUrl = (process.env.TIRE_LIBRARY_BASE_URL || "https://api.tireweblibrary.com/api/v1").replace(/\/$/, "");
+const baseUrls = Array.from(new Set([
+  process.env.TIRE_LIBRARY_BASE_URL?.trim(),
+  "https://api.tireweblibrary.com/api/v1",
+  "https://app.tireweblibrary.com/api/v1",
+].filter((value): value is string => Boolean(value)).map((value) => value.replace(/\/$/, ""))));
 
 type TireLibrarySearchResult = {
   id: number;
@@ -57,12 +61,20 @@ function apiKey() {
 async function tireLibraryRequest<T>(path: string): Promise<T> {
   const key = apiKey();
   if (!key) throw new Error("Tire Library API key is not configured");
-  const response = await fetch(`${baseUrl}/${path.replace(/^\//, "")}`, {
-    headers: { "x-api-key": key, Accept: "application/json" },
-    next: { revalidate: 60 * 60 * 12 },
-  });
-  if (!response.ok) throw new Error(`Tire Library request failed (${response.status})`);
-  return response.json() as Promise<T>;
+  let lastError = "Tire Library request failed";
+  for (const baseUrl of baseUrls) {
+    try {
+      const response = await fetch(`${baseUrl}/${path.replace(/^\//, "")}`, {
+        headers: { "x-api-key": key, Accept: "application/json" },
+        next: { revalidate: 60 * 60 * 12 },
+      });
+      if (response.ok) return response.json() as Promise<T>;
+      lastError = `Tire Library request failed (${response.status})`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Tire Library connection failed";
+    }
+  }
+  throw new Error(lastError);
 }
 
 function sizeParts(value: string) {
