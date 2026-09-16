@@ -105,11 +105,14 @@ type TireLibraryPage<T = TireLibrarySearchResult> = {
 };
 
 export type EnrichableTire = {
+  id: string;
+  supplier?: string;
   brand: string;
   model: string;
   size: string;
   manufacturerProductNumber?: string;
   atdProductNumber?: string;
+  cost?: number;
   imageUrl?: string | null;
   category?: string;
   loadSpeed?: string;
@@ -120,7 +123,7 @@ export type EnrichableTire = {
   utqg?: string;
   runFlat?: boolean;
   hasRebate?: boolean;
-  rebates?: Array<{ code: string; description: string; url: string }>;
+  rebates?: Array<{ code: string; description: string; url?: string }>;
 };
 
 function apiKey() {
@@ -242,7 +245,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const match = findMatch(product, catalogs);
       if (!match) return product;
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
-      const rebates = [...(product.rebates || [])];
+      const rebates: Array<{ code: string; description: string; url?: string }> = [...(product.rebates || [])];
       for (const rebate of libraryRebates) if (!rebates.some((candidate) => candidate.code === rebate.code)) rebates.push(rebate);
       return {
         ...product,
