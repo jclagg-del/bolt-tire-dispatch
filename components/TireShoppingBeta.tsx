@@ -37,6 +37,21 @@ type Product = {
   atdProductNumber: string;
   availability: { local: number; localPlus: number; nationwide: number };
   warehouseInventory?: Array<{ warehouse: string; quantity: number; name?: string; address?: string }>;
+  tireLibraryId?: number;
+  tireLibraryMatched?: boolean;
+  tireLibraryDetailsLoaded?: boolean;
+  libraryDescription?: string;
+  features?: string;
+  benefits?: string;
+  maxLoadDual?: string;
+  maxPressure?: string;
+  revolutionsPerMile?: string;
+  diameter?: string;
+  sectionWidth?: string;
+  weight?: string;
+  image360Url?: string;
+  videoUrl?: string;
+  manufacturerUrl?: string;
 };
 type FitmentOption = {
   trim: string;
@@ -47,6 +62,14 @@ type FitmentOption = {
     front?: { trimspecs?: { Size?: string } };
     rear?: { trimspecs?: { Size?: string } };
     both?: { trimspecs?: { Size?: string } };
+  }>;
+  fitments?: Array<{
+    position: "front" | "rear" | "both";
+    width: string;
+    aspect_ratio: string;
+    rim_size: string;
+    load_rating?: string;
+    speed_rating?: string;
   }>;
 };
 type OrderFulfillment = {
@@ -132,6 +155,7 @@ export default function TireShoppingBeta({
   const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [warehouseError, setWarehouseError] = useState("");
   const [warehouseDetails, setWarehouseDetails] = useState<WarehouseDetail[]>([]);
+  const [detailLoading, setDetailLoading] = useState("");
   useEffect(() => {
     if (!internal && !years.length) loadFitment("years");
   }, [internal]);
@@ -223,6 +247,7 @@ export default function TireShoppingBeta({
           model: vehicle.model,
           trim: vehicle.trim,
           trimoption: option.trimoption,
+          fitments: option.fitments || [],
         },
       });
       setProducts(payload.products || []);
@@ -454,6 +479,37 @@ export default function TireShoppingBeta({
       setWarehouseError(reason instanceof Error ? reason.message : "Warehouse details could not be loaded.");
     } finally {
       setWarehouseLoading(false);
+    }
+  }
+  async function loadTireDetails(tire: Product) {
+    if (!tire.tireLibraryId || tire.tireLibraryDetailsLoaded || detailLoading === tire.id) return;
+    setDetailLoading(tire.id);
+    try {
+      const result = await atdApi({ action: "tire-details", tireLibraryId: tire.tireLibraryId });
+      const details = result.details || {};
+      setProducts((items) => items.map((item) => item.id === tire.id ? {
+        ...item,
+        imageUrl: details.imageUrl || item.imageUrl,
+        libraryDescription: details.description || "",
+        features: details.features || "",
+        benefits: details.benefits || "",
+        maxLoad: details.maxLoad || item.maxLoad,
+        maxLoadDual: details.maxLoadDual || "",
+        maxPressure: details.maxPressure || "",
+        revolutionsPerMile: details.revolutionsPerMile || "",
+        diameter: details.diameter || "",
+        sectionWidth: details.sectionWidth || "",
+        weight: details.weight || "",
+        sidewall: details.sidewall || item.sidewall,
+        image360Url: details.image360Url || "",
+        videoUrl: details.videoUrl || "",
+        manufacturerUrl: details.manufacturerUrl || "",
+        tireLibraryDetailsLoaded: true,
+      } : item));
+    } catch {
+      setProducts((items) => items.map((item) => item.id === tire.id ? { ...item, tireLibraryDetailsLoaded: true } : item));
+    } finally {
+      setDetailLoading("");
     }
   }
   async function placeOrder() {
@@ -1089,8 +1145,10 @@ export default function TireShoppingBeta({
                         ))}
                       </div>
                     ) : null}
-                    <details className="tire-beta-details">
-                      <summary>Tire details</summary>
+                    <details className="tire-beta-details" onToggle={(event) => {
+                      if (event.currentTarget.open) loadTireDetails(tire);
+                    }}>
+                      <summary>{detailLoading === tire.id ? "Loading tire details…" : "Tire details"}</summary>
                       <div>
                         {tire.manufacturerProductNumber && (
                           <span>
@@ -1140,6 +1198,42 @@ export default function TireShoppingBeta({
                             <strong>{tire.maxLoad}</strong>
                           </span>
                         )}
+                        {tire.maxLoadDual && (
+                          <span>
+                            <small>Maximum dual load</small>
+                            <strong>{tire.maxLoadDual} lbs</strong>
+                          </span>
+                        )}
+                        {tire.maxPressure && (
+                          <span>
+                            <small>Maximum pressure</small>
+                            <strong>{tire.maxPressure} PSI</strong>
+                          </span>
+                        )}
+                        {tire.diameter && (
+                          <span>
+                            <small>Overall diameter</small>
+                            <strong>{tire.diameter} in</strong>
+                          </span>
+                        )}
+                        {tire.sectionWidth && (
+                          <span>
+                            <small>Section width</small>
+                            <strong>{tire.sectionWidth} in</strong>
+                          </span>
+                        )}
+                        {tire.revolutionsPerMile && (
+                          <span>
+                            <small>Revolutions per mile</small>
+                            <strong>{tire.revolutionsPerMile}</strong>
+                          </span>
+                        )}
+                        {tire.weight && (
+                          <span>
+                            <small>Tire weight</small>
+                            <strong>{tire.weight} lbs</strong>
+                          </span>
+                        )}
                         {tire.rimRange && (
                           <span>
                             <small>Approved rim range</small>
@@ -1153,6 +1247,16 @@ export default function TireShoppingBeta({
                           </span>
                         )}
                       </div>
+                      {tire.libraryDescription ? <p>{tire.libraryDescription}</p> : null}
+                      {tire.features ? <p><strong>Features:</strong> {tire.features}</p> : null}
+                      {tire.benefits ? <p><strong>Benefits:</strong> {tire.benefits}</p> : null}
+                      {tire.image360Url || tire.videoUrl || tire.manufacturerUrl ? (
+                        <nav aria-label="Additional tire information">
+                          {tire.image360Url ? <a href={tire.image360Url} target="_blank" rel="noreferrer">360° tire view</a> : null}
+                          {tire.videoUrl ? <a href={tire.videoUrl} target="_blank" rel="noreferrer">Product video</a> : null}
+                          {tire.manufacturerUrl ? <a href={tire.manufacturerUrl} target="_blank" rel="noreferrer">Manufacturer details</a> : null}
+                        </nav>
+                      ) : null}
                     </details>
                     <p>
                       {tire.availability.local
