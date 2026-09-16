@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdByPartNumber, searchAtdBySize } from "@/lib/atd";
 import { searchUsafByPartNumber, searchUsafBySize } from "@/lib/usaf-catalog";
 import { auditSupplierMatches } from "@/lib/inventory-match-audit";
+import { enrichWithTireLibrary, tireLibraryStatus } from "@/lib/tire-library";
 
 async function staffAuthorized(request: NextRequest) {
   return requireApiUser(request);
@@ -52,23 +53,29 @@ export async function POST(request: NextRequest) {
       }).eq("request_id", requestId);
       return NextResponse.json({ order, warning: recordError ? `The supplier accepted the order, but its app record needs attention: ${recordError.message}` : null });
     }
+    if (body.action === "tire-library-status") {
+      if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(await tireLibraryStatus());
+    }
     if (body.action === "size") {
       const query = String(body.query || "");
       const [atdProducts, usafProducts] = await Promise.all([
         searchAtdBySize(query, includeCost),
         includeCost ? searchUsafBySize(query, true) : Promise.resolve([]),
       ]);
-      if (includeCost) await auditSupplierMatches([...atdProducts, ...usafProducts]);
-      return NextResponse.json({ products: [...atdProducts, ...usafProducts], sandbox: atdEnvironment !== "production" });
+      const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts]);
+      if (includeCost) await auditSupplierMatches(products);
+      return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
     }
     if (body.action === "part-number") {
       if (!includeCost) return NextResponse.json({ error: "Staff access is required." }, { status: 401 });
       const query = String(body.query || "");
       const [atdProducts, usafProducts] = await Promise.all([searchAtdByPartNumber(query, true), searchUsafByPartNumber(query, true)]);
-      if (includeCost) await auditSupplierMatches([...atdProducts, ...usafProducts]);
-      return NextResponse.json({ products: [...atdProducts, ...usafProducts], sandbox: atdEnvironment !== "production" });
+      const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts]);
+      if (includeCost) await auditSupplierMatches(products);
+      return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
     }
-    if (body.action === "fitment-products") return NextResponse.json({ products: await searchAtdByFitment(body.vehicle || {}, includeCost), sandbox: atdEnvironment !== "production" });
+    if (body.action === "fitment-products") return NextResponse.json({ products: await enrichWithTireLibrary(await searchAtdByFitment(body.vehicle || {}, includeCost)), sandbox: atdEnvironment !== "production" });
     if (["years", "makes", "models", "trims", "options"].includes(body.action)) return NextResponse.json(await fitmentList(body.action, body.selection || {}));
     return NextResponse.json({ error: "Invalid supplier action" }, { status: 400 });
   } catch (error) {
