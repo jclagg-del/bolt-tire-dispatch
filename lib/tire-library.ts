@@ -166,17 +166,34 @@ function normalize(value: string | null | undefined) {
   return (value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeBrand(value: string | null | undefined) {
+  return normalize(value)
+    .replace(/(?:tires?|tyres?)$/, "")
+    .replace(/(?:rubber|company|corp|corporation|incorporated|inc)$/, "");
+}
+
+function normalizeModel(value: string | null | undefined, brand?: string | null) {
+  let model = normalize(value);
+  const normalizedBrand = normalizeBrand(brand);
+  if (normalizedBrand && model.startsWith(normalizedBrand)) model = model.slice(normalizedBrand.length);
+  return model.replace(/(?:tires?|tyres?)$/, "");
+}
+
 function findMatch(product: EnrichableTire, catalog: TireLibrarySearchResult[]) {
   const productIds = [product.manufacturerProductNumber, product.atdProductNumber].map(normalize).filter(Boolean);
-  const brand = normalize(product.brand);
-  const model = normalize(product.model);
-  return catalog.find((item) => {
+  const brand = normalizeBrand(product.brand);
+  const model = normalizeModel(product.model, product.brand);
+  const exactIdentifier = catalog.find((item) => {
     const itemNumber = normalize(item.item_number);
-    if (itemNumber && productIds.includes(itemNumber)) return true;
-    const libraryBrand = normalize(item.make_name);
-    const libraryModel = normalize(item.model_name);
-    if (!brand || brand !== libraryBrand || !model || !libraryModel) return false;
-    return model === libraryModel || (model.length >= 6 && (model.includes(libraryModel) || libraryModel.includes(model)));
+    return Boolean(itemNumber && productIds.includes(itemNumber));
+  });
+  if (exactIdentifier) return exactIdentifier;
+  return catalog.find((item) => {
+    const libraryBrand = normalizeBrand(item.make_name);
+    const libraryModel = normalizeModel(item.model_name, item.make_name);
+    const sameBrand = brand === libraryBrand || (Math.min(brand.length, libraryBrand.length) >= 4 && (brand.includes(libraryBrand) || libraryBrand.includes(brand)));
+    if (!sameBrand || !model || !libraryModel) return false;
+    return model === libraryModel || (Math.min(model.length, libraryModel.length) >= 5 && (model.includes(libraryModel) || libraryModel.includes(model)));
   });
 }
 
@@ -241,9 +258,25 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       Promise.all(sizes.map(searchBySize)).then((groups) => groups.flat()),
       activeRebatesByPattern().catch(() => new Map<number, Array<{ code: string; description: string; url: string }>>()),
     ]);
-    return products.map((product) => {
-      const match = findMatch(product, catalogs);
+    const matches = products.map((product) => findMatch(product, catalogs));
+    const representativeByModel = new Map<number, TireLibrarySearchResult>();
+    for (const match of matches) {
+      if (!match) continue;
+      const key = Number(match.tire_model_id || match.id);
+      if (!representativeByModel.has(key)) representativeByModel.set(key, match);
+    }
+    const detailPairs = await Promise.all(Array.from(representativeByModel.entries()).slice(0, 60).map(async ([key, match]) => {
+      try {
+        return [key, await tireLibraryTireDetails(match.id)] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+    const detailsByModel = new Map(detailPairs);
+    return products.map((product, index) => {
+      const match = matches[index];
       if (!match) return product;
+      const detail = detailsByModel.get(Number(match.tire_model_id || match.id));
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
       const rebates: Array<{ code: string; description: string; url?: string }> = [...(product.rebates || [])];
       for (const rebate of libraryRebates) if (!rebates.some((candidate) => candidate.code === rebate.code)) rebates.push(rebate);
@@ -251,7 +284,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         ...product,
         brand: match.make_name || product.brand,
         model: match.model_name || product.model,
-        imageUrl: match.thumbnail_image || product.imageUrl || null,
+        imageUrl: detail?.imageUrl || match.thumbnail_image || product.imageUrl || null,
         category: match.terrain || match.season || match.category || product.category,
         loadSpeed: [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
         warranty: match.warranty || product.warranty,
