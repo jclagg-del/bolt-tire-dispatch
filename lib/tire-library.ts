@@ -321,7 +321,18 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const key = Number(match.tire_model_id || match.id);
       if (!representativeByModel.has(key)) representativeByModel.set(key, match);
     }
-    const detailPairs = await Promise.all(Array.from(representativeByModel.entries()).slice(0, 60).map(async ([key, match]) => {
+    const representativeEntries = Array.from(representativeByModel.entries());
+    const needsImage = ([key]: [number, TireLibrarySearchResult]) =>
+      !imageByModel.get(key) && matches.some((match, index) =>
+        Number(match?.tire_model_id || match?.id) === key &&
+        !safeUrl(match?.thumbnail_image) &&
+        !safeUrl(products[index]?.imageUrl),
+      );
+    const prioritizedEntries = [
+      ...representativeEntries.filter(needsImage),
+      ...representativeEntries.filter((entry) => !needsImage(entry)),
+    ];
+    const detailPairs = await Promise.all(prioritizedEntries.slice(0, 60).map(async ([key, match]) => {
       try {
         const detail = await tireLibraryTireDetails(match.id);
         if (!detail.imageUrl && match.tire_model_id) {
