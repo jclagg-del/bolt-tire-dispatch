@@ -66,6 +66,14 @@ type TireLibraryTireDetail = TireLibrarySearchResult & {
   sidewall?: string | null;
   section_width?: string | null;
   weight?: string | null;
+  angle_image?: string | null;
+  front_image?: string | null;
+  side_image?: string | null;
+  side2_image?: string | null;
+  image_0100?: string | null;
+  image_0200?: string | null;
+  image_0301?: string | null;
+  image_0302?: string | null;
   tire_make?: { id?: number; name?: string | null; image_url?: string | null } | null;
   tire_model?: {
     id?: number;
@@ -271,6 +279,12 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       activeRebatesByPattern().catch(() => new Map<number, Array<{ code: string; description: string; url: string }>>()),
     ]);
     const matches = products.map((product) => findMatch(product, catalogs));
+    const imageByModel = new Map<number, string>();
+    for (const item of catalogs) {
+      const key = Number(item.tire_model_id || item.id);
+      const image = safeUrl(item.thumbnail_image);
+      if (image && !imageByModel.has(key)) imageByModel.set(key, image);
+    }
     const representativeByModel = new Map<number, TireLibrarySearchResult>();
     for (const match of matches) {
       if (!match) continue;
@@ -297,7 +311,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         brand: detail?.brand || match.make_name || product.brand,
         model: detail?.model || match.model_name || product.model,
         description: detail?.description || product.description,
-        imageUrl: detail?.imageUrl || match.thumbnail_image || product.imageUrl || null,
+        imageUrl: detail?.imageUrl || safeUrl(match.thumbnail_image) || imageByModel.get(Number(match.tire_model_id || match.id)) || product.imageUrl || null,
         category: detail?.terrain || detail?.season || detail?.category || match.terrain || match.season || match.category || product.category,
         loadSpeed: detail?.loadSpeed || [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
         warranty: detail?.warranty || match.warranty || product.warranty,
@@ -430,7 +444,17 @@ export async function tireLibraryTireDetails(id: number) {
     utqg: tire.utqg || "",
     snowRated: Boolean(tire.three_pmsf),
     runFlat: Boolean(tire.run_flat),
-    imageUrl: safeUrl(tire.tire_model?.image_url) || safeUrl(tire.thumbnail_image),
+    imageUrl:
+      safeUrl(tire.tire_model?.image_url) ||
+      safeUrl(tire.angle_image) ||
+      safeUrl(tire.front_image) ||
+      safeUrl(tire.side_image) ||
+      safeUrl(tire.side2_image) ||
+      safeUrl(tire.image_0100) ||
+      safeUrl(tire.image_0200) ||
+      safeUrl(tire.image_0301) ||
+      safeUrl(tire.image_0302) ||
+      safeUrl(tire.thumbnail_image),
     image360Url: safeUrl(tire.tire_model?.image_360_url),
     videoUrl: safeUrl(tire.tire_model?.video_url),
     manufacturerUrl: safeUrl(tire.tire_model?.manufacturer_url),
