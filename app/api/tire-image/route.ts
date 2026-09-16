@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 const allowedHosts = [
   "tireweb.tirelibrary.com",
   "images.atdonline.com",
+  "storage.googleapis.com",
 ];
 
 function allowedImage(value: string) {
