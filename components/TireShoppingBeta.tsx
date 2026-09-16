@@ -1301,6 +1301,11 @@ export default function TireShoppingBeta({
                         <span>
                           Local ({tire.supplier === "USAF" ? "Croton" : "Totowa"}) <strong>{tire.availability.local}</strong>
                         </span>
+                        {tire.availability.local > 0 ? (
+                          <span>
+                            Same-day cutoff <strong>11:00 AM ET</strong>
+                          </span>
+                        ) : null}
                         <button
                           type="button"
                           className="tire-beta-warehouse-button"
@@ -1329,7 +1334,9 @@ export default function TireShoppingBeta({
                               {detail.address ? <span>{detail.address}</span> : null}
                               <span>
                                 {detail.quantity || tire.availability.localPlus} tires
-                                {detail.estimatedDelivery
+                                {detail.local
+                                  ? " · Same-day cutoff 11:00 AM ET"
+                                  : detail.estimatedDelivery
                                   ? ` · Expected ${new Date(detail.estimatedDelivery).toLocaleDateString()}`
                                   : ""}
                                 {detail.shipMethod ? ` · ${detail.shipMethod}` : ""}
