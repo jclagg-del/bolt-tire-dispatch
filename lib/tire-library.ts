@@ -63,6 +63,7 @@ type TireLibraryTireDetail = TireLibrarySearchResult & {
   revolutions_per_mile?: string | null;
   rolling_circumference?: string | null;
   diameter_overall?: string | null;
+  sidewall?: string | null;
   section_width?: string | null;
   weight?: string | null;
   tire_make?: { id?: number; name?: string | null; image_url?: string | null } | null;
