@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdByPartNumber, searchAtdBySize } from "@/lib/atd";
 import { searchUsafByPartNumber, searchUsafBySize } from "@/lib/usaf-catalog";
 import { auditSupplierMatches } from "@/lib/inventory-match-audit";
-import { enrichWithTireLibrary, tireLibraryStatus } from "@/lib/tire-library";
+import { enrichWithTireLibrary, sanitizeVehicleFitments, tireLibraryFitmentList, tireLibraryFitmentSize, tireLibraryStatus, tireLibraryTireDetails } from "@/lib/tire-library";
 
 async function staffAuthorized(request: NextRequest) {
   return requireApiUser(request);
@@ -57,11 +57,15 @@ export async function POST(request: NextRequest) {
       if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       return NextResponse.json(await tireLibraryStatus());
     }
+    if (body.action === "tire-details") {
+      const id = Number(body.tireLibraryId);
+      return NextResponse.json({ details: await tireLibraryTireDetails(id) });
+    }
     if (body.action === "size") {
       const query = String(body.query || "");
       const [atdProducts, usafProducts] = await Promise.all([
         searchAtdBySize(query, includeCost),
-        includeCost ? searchUsafBySize(query, true) : Promise.resolve([]),
+        searchUsafBySize(query, includeCost),
       ]);
       const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts]);
       if (includeCost) await auditSupplierMatches(products);
@@ -75,8 +79,39 @@ export async function POST(request: NextRequest) {
       if (includeCost) await auditSupplierMatches(products);
       return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
     }
-    if (body.action === "fitment-products") return NextResponse.json({ products: await enrichWithTireLibrary(await searchAtdByFitment(body.vehicle || {}, includeCost)), sandbox: atdEnvironment !== "production" });
-    if (["years", "makes", "models", "trims", "options"].includes(body.action)) return NextResponse.json(await fitmentList(body.action, body.selection || {}));
+    if (body.action === "fitment-products") {
+      const fitments = sanitizeVehicleFitments(body.vehicle?.fitments);
+      if (!fitments.length) {
+        const fallback = await searchAtdByFitment(body.vehicle || {}, includeCost);
+        return NextResponse.json({ products: await enrichWithTireLibrary(fallback), sandbox: atdEnvironment !== "production" });
+      }
+      const groups = await Promise.all(fitments.map(async (fitment) => {
+        const size = tireLibraryFitmentSize(fitment);
+        const [atdProducts, usafProducts] = await Promise.all([
+          searchAtdBySize(size, includeCost),
+          searchUsafBySize(size, includeCost),
+        ]);
+        const minimumLoad = Number(fitment.load_rating || 0);
+        return [...atdProducts, ...usafProducts]
+          .filter((product) => {
+            if (!minimumLoad || product.supplier === "USAF") return true;
+            const productLoad = Number(product.loadSpeed.match(/\b\d{2,3}\b/)?.[0] || 0);
+            return !productLoad || productLoad >= minimumLoad;
+          })
+          .map((product) => ({ ...product, fitmentPosition: fitment.position }));
+      }));
+      const products = await enrichWithTireLibrary(groups.flat());
+      if (includeCost) await auditSupplierMatches(products);
+      return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
+    }
+    if (["years", "makes", "models", "trims", "options"].includes(body.action)) {
+      try {
+        return NextResponse.json(await tireLibraryFitmentList(body.action, body.selection || {}));
+      } catch (error) {
+        console.warn("Tire Library fitment lookup failed; using supplier fitment:", error instanceof Error ? error.message : error);
+        return NextResponse.json(await fitmentList(body.action, body.selection || {}));
+      }
+    }
     return NextResponse.json({ error: "Invalid supplier action" }, { status: 400 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Supplier request failed" }, { status: 502 });
