@@ -97,6 +97,10 @@ type WarehouseDetail = {
   shipMethod: string;
 };
 
+function tireImageUrl(value: string | null | undefined) {
+  return value ? `/api/tire-image?url=${encodeURIComponent(value)}` : "";
+}
+
 export default function TireShoppingBeta({
   internal = false,
 }: {
@@ -1086,8 +1090,9 @@ export default function TireShoppingBeta({
                       aria-label={`Enlarge ${tire.brand} ${tire.model} image`}
                     >
                       <img
-                        src={tire.imageUrl}
+                        src={tireImageUrl(tire.imageUrl)}
                         alt={`${tire.brand} ${tire.model}`}
+                        loading="lazy"
                       />
                       <small>Click to enlarge</small>
                     </button>
@@ -1433,7 +1438,7 @@ export default function TireShoppingBeta({
               ×
             </button>
             <img
-              src={imagePreview.imageUrl}
+              src={tireImageUrl(imagePreview.imageUrl)}
               alt={`${imagePreview.brand} ${imagePreview.model}`}
             />
             <div>
