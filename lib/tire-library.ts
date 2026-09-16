@@ -110,6 +110,7 @@ export type EnrichableTire = {
   brand: string;
   model: string;
   size: string;
+  description?: string;
   manufacturerProductNumber?: string;
   atdProductNumber?: string;
   cost?: number;
@@ -122,6 +123,14 @@ export type EnrichableTire = {
   treadDepth?: string;
   utqg?: string;
   runFlat?: boolean;
+  sidewall?: string;
+  maxLoad?: string;
+  maxLoadDual?: string;
+  maxPressure?: string;
+  revolutionsPerMile?: string;
+  diameter?: string;
+  sectionWidth?: string;
+  weight?: string;
   hasRebate?: boolean;
   rebates?: Array<{ code: string; description: string; url?: string }>;
 };
@@ -282,17 +291,26 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       for (const rebate of libraryRebates) if (!rebates.some((candidate) => candidate.code === rebate.code)) rebates.push(rebate);
       return {
         ...product,
-        brand: match.make_name || product.brand,
-        model: match.model_name || product.model,
+        brand: detail?.brand || match.make_name || product.brand,
+        model: detail?.model || match.model_name || product.model,
+        description: detail?.description || product.description,
         imageUrl: detail?.imageUrl || match.thumbnail_image || product.imageUrl || null,
-        category: match.terrain || match.season || match.category || product.category,
-        loadSpeed: [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
-        warranty: match.warranty || product.warranty,
-        snowRated: Boolean(match.three_pmsf || product.snowRated),
-        loadRange: match.load_range || product.loadRange,
-        treadDepth: match.tread_depth || product.treadDepth,
-        utqg: match.utqg || product.utqg,
-        runFlat: Boolean(match.run_flat || product.runFlat),
+        category: detail?.terrain || detail?.season || detail?.category || match.terrain || match.season || match.category || product.category,
+        loadSpeed: detail?.loadSpeed || [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
+        warranty: detail?.warranty || match.warranty || product.warranty,
+        snowRated: Boolean(detail?.snowRated || match.three_pmsf || product.snowRated),
+        loadRange: detail?.loadRange || match.load_range || product.loadRange,
+        treadDepth: detail?.treadDepth || match.tread_depth || product.treadDepth,
+        utqg: detail?.utqg || match.utqg || product.utqg,
+        runFlat: Boolean(detail?.runFlat || match.run_flat || product.runFlat),
+        sidewall: detail?.sidewall || product.sidewall,
+        maxLoad: detail?.maxLoad || product.maxLoad,
+        maxLoadDual: detail?.maxLoadDual || product.maxLoadDual,
+        maxPressure: detail?.maxPressure || product.maxPressure,
+        revolutionsPerMile: detail?.revolutionsPerMile || product.revolutionsPerMile,
+        diameter: detail?.diameter || product.diameter,
+        sectionWidth: detail?.sectionWidth || product.sectionWidth,
+        weight: detail?.weight || product.weight,
         hasRebate: Boolean(rebates.length || product.hasRebate),
         rebates,
         tireLibraryId: match.id,
@@ -397,6 +415,18 @@ export async function tireLibraryTireDetails(id: number) {
   const tire = await tireLibraryRequest<TireLibraryTireDetail>(`tires/${id}?rebate_status=Active`);
   return {
     id: tire.id,
+    brand: tire.tire_make?.name || tire.make_name || "",
+    model: tire.tire_model?.name || tire.model_name || "",
+    category: tire.category || "",
+    season: tire.season || "",
+    terrain: tire.terrain || "",
+    warranty: tire.warranty || "",
+    loadSpeed: [tire.load_rating, tire.speed_rating].filter(Boolean).join(" "),
+    loadRange: tire.load_range || "",
+    treadDepth: tire.tread_depth || "",
+    utqg: tire.utqg || "",
+    snowRated: Boolean(tire.three_pmsf),
+    runFlat: Boolean(tire.run_flat),
     imageUrl: safeUrl(tire.tire_model?.image_url) || safeUrl(tire.thumbnail_image),
     image360Url: safeUrl(tire.tire_model?.image_360_url),
     videoUrl: safeUrl(tire.tire_model?.video_url),
