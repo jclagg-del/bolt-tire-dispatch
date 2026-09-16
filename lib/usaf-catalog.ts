@@ -56,9 +56,12 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     const warehouses = (Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : [])
       .filter((warehouse) => warehouse.quantity > 0 && regionalUsafWarehouse(warehouse.warehouse))
-      .map((warehouse) => ({ ...warehouse, ...regionalUsafWarehouse(warehouse.warehouse)! }));
-    const regionalQuantity = warehouses.reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
-    if (!regionalQuantity) return null;
+      .map((warehouse) => ({ ...warehouse, ...regionalUsafWarehouse(warehouse.warehouse)! }))
+      .sort((a, b) => Number(Boolean(b.local)) - Number(Boolean(a.local)) || a.name.localeCompare(b.name));
+    const localQuantity = warehouses.filter((warehouse) => warehouse.local).reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
+    const regionalQuantity = warehouses.filter((warehouse) => !warehouse.local).reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
+    const availableQuantity = localQuantity + regionalQuantity;
+    if (!availableQuantity) return null;
     return {
       id: `USAF-${row.part_number}`,
       supplier: "USAF",
@@ -90,7 +93,7 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
       installedPrice: estimatedTotals[1],
       estimatedTotals,
       ...(includeCost ? { cost, map: Number(row.map_price || 0), msrp: Number(row.retail_price || 0) } : {}),
-      availability: { local: 0, localPlus: regionalQuantity, nationwide: regionalQuantity },
+      availability: { local: localQuantity, localPlus: regionalQuantity, nationwide: availableQuantity },
       warehouseInventory: warehouses,
     };
   }).filter((product): product is NonNullable<typeof product> => product !== null);
@@ -116,9 +119,14 @@ export async function searchUsafByPartNumber(query: string, includeCost: boolean
     const quotePrice = Math.max(Number(row.map_price || 0), Math.ceil(cost + Math.max(cost * markup / 100, minimumProfit)));
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
-    const warehouses = (Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : []).filter((warehouse) => warehouse.quantity > 0 && regionalUsafWarehouse(warehouse.warehouse)).map((warehouse) => ({ ...warehouse, ...regionalUsafWarehouse(warehouse.warehouse)! }));
-    const regionalQuantity = warehouses.reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
-    if (!regionalQuantity) return null;
-    return { id: `USAF-${row.part_number}`, supplier: "USAF" as const, atdProductNumber: row.part_number, manufacturerProductNumber: row.upc || row.part_number, brand: row.brand, model: row.model, description: row.sales_class || row.model, size: row.tire_size, category: row.tire_type || "Tire", serviceCategory: truck ? "truck" as const : "passenger" as const, fitmentPosition: "both" as const, loadSpeed: [row.load_range && `Load ${row.load_range}`, row.ply_rating && `${row.ply_rating} ply`].filter(Boolean).join(" · "), warranty: row.warranty || "", snowRated: row.snowflake, loadRange: row.load_range || "", treadDepth: row.tread_depth || "", utqg: row.utqg || "", sidewall: row.sidewall || "", maxLoad: "", rimRange: "", oeMarking: "", imageUrl: null, discontinued: row.discontinued, runFlat: row.run_flat, hasRebate: false, rebates: [], quotePrice, installedPrice: estimatedTotals[1], estimatedTotals, ...(includeCost ? { cost, map: Number(row.map_price || 0), msrp: Number(row.retail_price || 0) } : {}), availability: { local: 0, localPlus: regionalQuantity, nationwide: regionalQuantity }, warehouseInventory: warehouses };
+    const warehouses = (Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : [])
+      .filter((warehouse) => warehouse.quantity > 0 && regionalUsafWarehouse(warehouse.warehouse))
+      .map((warehouse) => ({ ...warehouse, ...regionalUsafWarehouse(warehouse.warehouse)! }))
+      .sort((a, b) => Number(Boolean(b.local)) - Number(Boolean(a.local)) || a.name.localeCompare(b.name));
+    const localQuantity = warehouses.filter((warehouse) => warehouse.local).reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
+    const regionalQuantity = warehouses.filter((warehouse) => !warehouse.local).reduce((sum, warehouse) => sum + Number(warehouse.quantity || 0), 0);
+    const availableQuantity = localQuantity + regionalQuantity;
+    if (!availableQuantity) return null;
+    return { id: `USAF-${row.part_number}`, supplier: "USAF" as const, atdProductNumber: row.part_number, manufacturerProductNumber: row.upc || row.part_number, brand: row.brand, model: row.model, description: row.sales_class || row.model, size: row.tire_size, category: row.tire_type || "Tire", serviceCategory: truck ? "truck" as const : "passenger" as const, fitmentPosition: "both" as const, loadSpeed: [row.load_range && `Load ${row.load_range}`, row.ply_rating && `${row.ply_rating} ply`].filter(Boolean).join(" · "), warranty: row.warranty || "", snowRated: row.snowflake, loadRange: row.load_range || "", treadDepth: row.tread_depth || "", utqg: row.utqg || "", sidewall: row.sidewall || "", maxLoad: "", rimRange: "", oeMarking: "", imageUrl: null, discontinued: row.discontinued, runFlat: row.run_flat, hasRebate: false, rebates: [], quotePrice, installedPrice: estimatedTotals[1], estimatedTotals, ...(includeCost ? { cost, map: Number(row.map_price || 0), msrp: Number(row.retail_price || 0) } : {}), availability: { local: localQuantity, localPlus: regionalQuantity, nationwide: availableQuantity }, warehouseInventory: warehouses };
   }).filter((product): product is NonNullable<typeof product> => product !== null);
 }
