@@ -90,6 +90,14 @@ type TireLibraryTireDetail = TireLibrarySearchResult & {
   rebates?: TireLibraryRebateSummary[];
 };
 
+type TireLibraryPatternDetail = {
+  id?: number;
+  name?: string | null;
+  image_url?: string | null;
+  image_360_url?: string | null;
+  image_360_thumbnail_url?: string | null;
+};
+
 export type TireLibraryVehicleFitment = {
   name?: string | null;
   position?: string | null;
@@ -270,6 +278,28 @@ async function activeRebatesByPattern() {
   return byPattern;
 }
 
+function basePatternName(value: string | null | undefined) {
+  return String(value || "")
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/[\s-]+(?:LT|P-Metric|LT-Metric)$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function tireLibraryPatternImage(id: number, name?: string | null) {
+  if (!Number.isInteger(id) || id < 1) return "";
+  const pattern = await tireLibraryRequest<TireLibraryPatternDetail>(`tire-patterns/${id}`);
+  const direct = safeUrl(pattern.image_url) || safeUrl(pattern.image_360_thumbnail_url) || safeUrl(pattern.image_360_url);
+  if (direct) return direct;
+  const search = basePatternName(name || pattern.name);
+  if (!search) return "";
+  const related = await tireLibraryRequest<TireLibraryPatternDetail[]>(`tire-patterns?search=${encodeURIComponent(search)}`);
+  const searchKey = normalizeModel(search);
+  const candidate = related.find((item) => normalizeModel(basePatternName(item.name)) === searchKey && safeUrl(item.image_url))
+    || related.find((item) => safeUrl(item.image_url));
+  return safeUrl(candidate?.image_url) || safeUrl(candidate?.image_360_thumbnail_url) || safeUrl(candidate?.image_360_url);
+}
+
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
   if (!apiKey() || !products.length) return products;
   try {
@@ -293,7 +323,11 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     }
     const detailPairs = await Promise.all(Array.from(representativeByModel.entries()).slice(0, 60).map(async ([key, match]) => {
       try {
-        return [key, await tireLibraryTireDetails(match.id)] as const;
+        const detail = await tireLibraryTireDetails(match.id);
+        if (!detail.imageUrl && match.tire_model_id) {
+          detail.imageUrl = await tireLibraryPatternImage(match.tire_model_id, match.model_name).catch(() => "");
+        }
+        return [key, detail] as const;
       } catch {
         return [key, null] as const;
       }
