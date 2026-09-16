@@ -155,6 +155,7 @@ export default function TireShoppingBeta({
   const [orderRequestId, setOrderRequestId] = useState("");
   const [orderChoosingSupplier, setOrderChoosingSupplier] = useState(false);
   const [imagePreview, setImagePreview] = useState<Product | null>(null);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [warehouseProductId, setWarehouseProductId] = useState("");
   const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [warehouseError, setWarehouseError] = useState("");
@@ -217,6 +218,7 @@ export default function TireShoppingBeta({
     try {
       const payload = await atdApi({ action: "size", query });
       setProducts(payload.products || []);
+      setFailedImages(new Set());
       setSelected([]);
     } catch (reason) {
       setProducts([]);
@@ -229,7 +231,7 @@ export default function TireShoppingBeta({
     setLoading(true); setError(""); setSearched(true);
     try {
       const payload = await atdApi({ action: "part-number", query: partNumber });
-      setProducts(payload.products || []); setSelected([]);
+      setProducts(payload.products || []); setFailedImages(new Set()); setSelected([]);
     } catch (reason) {
       setProducts([]); setError(reason instanceof Error ? reason.message : "Part-number search failed");
     } finally { setLoading(false); }
@@ -255,6 +257,7 @@ export default function TireShoppingBeta({
         },
       });
       setProducts(payload.products || []);
+      setFailedImages(new Set());
       setSelected([]);
       const position = option.position?.[0];
       setQuery(
@@ -1082,7 +1085,7 @@ export default function TireShoppingBeta({
                   className={`tire-beta-product ${isSelected ? "selected" : ""}`}
                   key={tire.id}
                 >
-                  {tire.imageUrl ? (
+                  {tire.imageUrl && !failedImages.has(tire.id) ? (
                     <button
                       type="button"
                       className="tire-beta-image tire-beta-image-button"
@@ -1093,6 +1096,18 @@ export default function TireShoppingBeta({
                         src={tireImageUrl(tire.imageUrl)}
                         alt={`${tire.brand} ${tire.model}`}
                         loading="lazy"
+                        onError={(event) => {
+                          if (event.currentTarget.dataset.directFallback !== "1") {
+                            event.currentTarget.dataset.directFallback = "1";
+                            event.currentTarget.src = tire.imageUrl || "";
+                            return;
+                          }
+                          setFailedImages((current) => {
+                            const next = new Set(current);
+                            next.add(tire.id);
+                            return next;
+                          });
+                        }}
                       />
                       <small>Click to enlarge</small>
                     </button>
@@ -1440,6 +1455,14 @@ export default function TireShoppingBeta({
             <img
               src={tireImageUrl(imagePreview.imageUrl)}
               alt={`${imagePreview.brand} ${imagePreview.model}`}
+              onError={(event) => {
+                if (event.currentTarget.dataset.directFallback !== "1") {
+                  event.currentTarget.dataset.directFallback = "1";
+                  event.currentTarget.src = imagePreview.imageUrl || "";
+                  return;
+                }
+                setImagePreview(null);
+              }}
             />
             <div>
               <strong>
