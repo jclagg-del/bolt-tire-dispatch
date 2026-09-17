@@ -38,6 +38,11 @@ type CustomerOrder = {
   job_completed_at: string | null;
 };
 
+type TireOrderDetails = {
+  supplier: string;
+  deliveryDate: string;
+};
+
 function formatDate(dateValue: string) {
   const [year, month, day] = dateValue.split("-").map(Number);
 
@@ -307,7 +312,7 @@ export default function OrdersPage() {
     );
   };
 
-  const approveOrder = async (order: CustomerOrder) => {
+  const approveOrder = async (order: CustomerOrder, tireOrder?: TireOrderDetails) => {
     if (workingId !== null) return;
 
     if (order.approved_job_id) {
@@ -333,7 +338,11 @@ export default function OrdersPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
       },
-      body: JSON.stringify({ orderId: order.id }),
+      body: JSON.stringify({
+        orderId: order.id,
+        tireSupplier: tireOrder?.supplier.trim() || null,
+        estimatedDeliveryDate: tireOrder?.deliveryDate || null,
+      }),
     });
     const result = await response.json().catch(() => ({}));
     setWorkingId(null);
@@ -488,7 +497,7 @@ type OrderSectionProps = {
   emptyText: string;
   workingId: number | null;
   onToggleTires: (order: CustomerOrder) => void;
-  onApprove: (order: CustomerOrder) => void;
+  onApprove: (order: CustomerOrder, tireOrder?: TireOrderDetails) => void;
   onReject: (order: CustomerOrder) => void;
   onDelete: (order: CustomerOrder) => void;
   router: ReturnType<typeof useRouter>;
@@ -505,6 +514,14 @@ function OrderSection({
   onDelete,
   router,
 }: OrderSectionProps) {
+  const [tireOrderDrafts, setTireOrderDrafts] = useState<Record<number, TireOrderDetails>>({});
+  const updateTireOrderDraft = (orderId: number, updates: Partial<TireOrderDetails>) => {
+    setTireOrderDrafts((current) => {
+      const previous = current[orderId] || { supplier: "", deliveryDate: "" };
+      return { ...current, [orderId]: { ...previous, ...updates } };
+    });
+  };
+
   return (
     <section style={section}>
       <h2 style={sectionTitle}>{title}</h2>
@@ -676,6 +693,39 @@ function OrderSection({
                   Tires have been ordered
                 </label>
 
+                {(order.order_status === "new" || (approved && !order.approved_job_id)) && order.tires_ordered ? (
+                  <div style={tireOrderFields}>
+                    <label style={orderFieldLabel}>
+                      Supplier
+                      <input
+                        list="order-supplier-options"
+                        value={tireOrderDrafts[order.id]?.supplier || ""}
+                        onChange={(event) => updateTireOrderDraft(order.id, { supplier: event.target.value })}
+                        placeholder="ATD, U.S. AutoForce, Goodyear…"
+                        disabled={working}
+                        style={orderFieldInput}
+                      />
+                    </label>
+                    <label style={orderFieldLabel}>
+                      Expected delivery date
+                      <input
+                        type="date"
+                        value={tireOrderDrafts[order.id]?.deliveryDate || ""}
+                        onChange={(event) => updateTireOrderDraft(order.id, { deliveryDate: event.target.value })}
+                        disabled={working}
+                        style={orderFieldInput}
+                      />
+                    </label>
+                    <datalist id="order-supplier-options">
+                      <option value="ATD" />
+                      <option value="U.S. AutoForce" />
+                      <option value="Goodyear" />
+                      <option value="K&M" />
+                      <option value="NTW" />
+                    </datalist>
+                  </div>
+                ) : null}
+
                 <div style={actions}>
                   {(approved || completed || cancellationRequested) && order.approved_job_id ? (
                     <button
@@ -693,7 +743,7 @@ function OrderSection({
                     <>
                       <button
                         type="button"
-                        onClick={() => onApprove(order)}
+                        onClick={() => onApprove(order, tireOrderDrafts[order.id])}
                         disabled={working}
                         style={approveButton}
                       >
@@ -985,6 +1035,36 @@ const checkboxRow: React.CSSProperties = {
 const checkbox: React.CSSProperties = {
   width: 19,
   height: 19,
+};
+
+const tireOrderFields: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: 10,
+  marginTop: 10,
+  padding: 12,
+  border: "1px solid #dbeafe",
+  borderRadius: 9,
+  background: "#f8fbff",
+};
+
+const orderFieldLabel: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  color: "#374151",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const orderFieldInput: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "10px 11px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "white",
+  color: "#111827",
+  fontSize: 14,
 };
 
 const actions: React.CSSProperties = {
