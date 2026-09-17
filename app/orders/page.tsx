@@ -399,7 +399,7 @@ export default function OrdersPage() {
       return;
     }
 
-    router.push(`/jobs/${newJob.id}`);
+    router.push("/orders");
     router.refresh();
   };
 
