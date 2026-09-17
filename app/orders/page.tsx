@@ -330,30 +330,33 @@ export default function OrdersPage() {
 
     setWorkingId(order.id);
     setErrorMessage("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await fetch("/api/orders/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          tireSupplier: tireOrder?.supplier.trim() || null,
+          estimatedDeliveryDate: tireOrder?.deliveryDate || null,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        await fetchOrders();
+        setErrorMessage(result.error || "The order could not be approved.");
+        return;
+      }
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const response = await fetch("/api/orders/approve", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${sessionData.session?.access_token || ""}`,
-      },
-      body: JSON.stringify({
-        orderId: order.id,
-        tireSupplier: tireOrder?.supplier.trim() || null,
-        estimatedDeliveryDate: tireOrder?.deliveryDate || null,
-      }),
-    });
-    const result = await response.json().catch(() => ({}));
-    setWorkingId(null);
-    if (!response.ok) {
-      setErrorMessage(result.error || "The order could not be approved.");
       await fetchOrders();
-      return;
+    } catch (reason) {
+      setErrorMessage(reason instanceof Error ? reason.message : "The order could not be approved.");
+    } finally {
+      setWorkingId(null);
     }
-
-    router.push("/orders");
-    router.refresh();
   };
 
   const newOrders = orders.filter(
