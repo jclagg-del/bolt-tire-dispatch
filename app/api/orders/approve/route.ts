@@ -55,7 +55,9 @@ function jobNotes(order: CustomerOrder) {
   return parts.length ? parts.join("\n") : null;
 }
 
-async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, order: CustomerOrder) {
+type TireOrderDetails = { supplier: string | null; deliveryDate: string | null };
+
+async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, order: CustomerOrder, tireOrder: TireOrderDetails) {
   if (!order.job_number?.trim()) return null;
   const { data, error } = await admin
     .from("jobs")
@@ -68,6 +70,12 @@ async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, orde
     .maybeSingle();
   if (error) throw new Error(`Existing-job check failed: ${error.message}`);
   if (!data) return null;
+  const { error: jobUpdateError } = await admin.from("jobs").update({
+    tires_ordered: order.tires_ordered,
+    tire_supplier: tireOrder.supplier,
+    estimated_delivery_date: tireOrder.deliveryDate,
+  }).eq("id", data.id);
+  if (jobUpdateError) throw new Error(`Existing job delivery details could not be updated: ${jobUpdateError.message}`);
   const timestamp = new Date().toISOString();
   const { error: linkError } = await admin.from("customer_orders").update({
     order_status: "approved",
@@ -82,9 +90,13 @@ async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, orde
 export async function POST(request: NextRequest) {
   if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const { orderId } = await request.json();
+    const { orderId, tireSupplier, estimatedDeliveryDate } = await request.json();
     const id = Number(orderId);
     if (!Number.isInteger(id) || id < 1) return NextResponse.json({ error: "A valid order is required." }, { status: 400 });
+    const tireOrder: TireOrderDetails = {
+      supplier: String(tireSupplier || "").trim().slice(0, 100) || null,
+      deliveryDate: /^\d{4}-\d{2}-\d{2}$/.test(String(estimatedDeliveryDate || "")) ? String(estimatedDeliveryDate) : null,
+    };
 
     const admin = createAdminClient();
     const { data, error } = await admin.from("customer_orders").select("*").eq("id", id).single();
@@ -92,7 +104,7 @@ export async function POST(request: NextRequest) {
     const order = data as CustomerOrder;
     if (order.approved_job_id) return NextResponse.json({ jobId: order.approved_job_id, existing: true });
 
-    const existingJobId = await linkExistingJob(admin, order);
+    const existingJobId = await linkExistingJob(admin, order, tireOrder);
     if (existingJobId) return NextResponse.json({ jobId: existingJobId, existing: true });
 
     if (order.order_status === "approved" && order.reviewed_at) {
@@ -131,6 +143,8 @@ export async function POST(request: NextRequest) {
       tire_product_number: order.tire_product_number,
       notes: jobNotes(order),
       tires_ordered: order.tires_ordered,
+      tire_supplier: tireOrder.supplier,
+      estimated_delivery_date: tireOrder.deliveryDate,
       submitted_by_customer: true,
       customer_order_status: "approved",
       vehicle_id: "stepvan",
