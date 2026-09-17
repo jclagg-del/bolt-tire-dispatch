@@ -387,7 +387,7 @@ export default function EditJobPage() {
   };
 
   const handleArchive = async () => {
-    if (!id || archiving) return;
+    if (!id || !form || archiving) return;
 
     const confirmed = window.confirm(
       "Archive this job? It will be hidden from active job lists but not permanently deleted."
@@ -397,20 +397,73 @@ export default function EditJobPage() {
 
     setArchiving(true);
 
-    const { error } = await supabase
+    const { data: archivedJob, error } = await supabase
       .from("jobs")
       .update({
         archived: true,
         job_status: "archived",
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
 
-    setArchiving(false);
-
-    if (error) {
-      alert(`Error archiving job: ${error.message}`);
+    if (error || !archivedJob) {
+      setArchiving(false);
+      alert(`Error archiving job: ${error?.message || "The job was not updated."}`);
       return;
     }
+
+    const { data: linkedOrder, error: linkedOrderError } = await supabase
+      .from("customer_orders")
+      .select("id")
+      .eq("approved_job_id", id)
+      .maybeSingle();
+
+    if (linkedOrderError) {
+      setArchiving(false);
+      alert(`The job was archived, but its customer order could not be checked: ${linkedOrderError.message}`);
+      return;
+    }
+
+    if (linkedOrder) {
+      let replacementJob: { id: number } | null = null;
+      if (form.po_number.trim()) {
+        const { data, error: replacementError } = await supabase
+          .from("jobs")
+          .select("id")
+          .eq("customer", form.customer.trim())
+          .eq("po_number", form.po_number.trim())
+          .eq("archived", false)
+          .neq("id", id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (replacementError) {
+          setArchiving(false);
+          alert(`The job was archived, but a duplicate job could not be checked: ${replacementError.message}`);
+          return;
+        }
+        replacementJob = data;
+      }
+
+      const { error: orderUpdateError } = await supabase
+        .from("customer_orders")
+        .update({
+          approved_job_id: replacementJob?.id || null,
+          order_status: replacementJob ? "approved" : "new",
+          reviewed_at: replacementJob ? new Date().toISOString() : null,
+          approved_at: replacementJob ? new Date().toISOString() : null,
+        })
+        .eq("id", linkedOrder.id);
+
+      if (orderUpdateError) {
+        setArchiving(false);
+        alert(`The job was archived, but its customer order could not be updated: ${orderUpdateError.message}`);
+        return;
+      }
+    }
+
+    setArchiving(false);
 
     router.push("/jobs");
     router.refresh();
