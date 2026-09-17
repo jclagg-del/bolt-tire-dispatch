@@ -2,18 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import AppHeader from "@/components/AppHeader";
+import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
 import { supabase } from "@/lib/supabase";
 
 type ReceivingJob = {
   id: string;
   customer: string | null;
+  facility_name: string | null;
+  po_number: string | null;
   mo_number: string | null;
+  service_type: string | null;
   tires: string | null;
   size: string | null;
   tire_product_number: string | null;
   qty: number | null;
   scheduled: string | null;
+  vehicle: string | null;
 };
 
 function formatScheduled(value: string | null) {
@@ -36,6 +42,7 @@ export default function TireReceivingPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [labelJob, setLabelJob] = useState<TireLabelJob | null>(null);
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -43,7 +50,7 @@ export default function TireReceivingPage() {
 
     const { data, error: loadError } = await supabase
       .from("jobs")
-      .select("id,customer,mo_number,tires,size,tire_product_number,qty,scheduled")
+      .select("id,customer,facility_name,po_number,mo_number,service_type,tires,size,tire_product_number,qty,scheduled,vehicle")
       .eq("tires_received", false)
       .eq("archived", false)
       .eq("complete", false)
@@ -90,6 +97,24 @@ export default function TireReceivingPage() {
     setUpdatingId(null);
   };
 
+  const printLabels = (job: ReceivingJob) => {
+    flushSync(() => setLabelJob({
+      id: job.id,
+      customer: job.customer,
+      facilityName: job.facility_name,
+      jobNumber: job.po_number,
+      moNumber: job.mo_number,
+      serviceType: job.service_type,
+      tires: job.tires,
+      size: job.size,
+      productNumber: job.tire_product_number,
+      quantity: job.qty,
+      vehicle: job.vehicle,
+      scheduled: job.scheduled,
+    }));
+    window.print();
+  };
+
   return (
     <div style={shell}>
       <AppHeader />
@@ -131,20 +156,26 @@ export default function TireReceivingPage() {
                       <Info label="Quantity" value={job.qty ? String(job.qty) : "—"} />
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    style={{ ...receivedButton, ...(updating ? disabledButton : {}) }}
-                    disabled={updating}
-                    onClick={() => markReceived(job)}
-                  >
-                    {updating ? "Updating..." : "✓ Received"}
-                  </button>
+                  <div style={cardActions}>
+                    <button type="button" style={printButton} disabled={updating} onClick={() => printLabels(job)}>
+                      Print {Math.max(1, Number(job.qty) || 1)} Labels
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...receivedButton, ...(updating ? disabledButton : {}) }}
+                      disabled={updating}
+                      onClick={() => markReceived(job)}
+                    >
+                      {updating ? "Updating..." : "✓ Received"}
+                    </button>
+                  </div>
                 </article>
               );
             })}
           </div>
         )}
       </main>
+      <TireLabelPrint job={labelJob} />
     </div>
   );
 }
@@ -169,6 +200,8 @@ const fields: React.CSSProperties = { display: "grid", gridTemplateColumns: "rep
 const labelStyle: React.CSSProperties = { color: "#6b7280", fontSize: 11, fontWeight: 800, letterSpacing: .6, textTransform: "uppercase", marginBottom: 4 };
 const valueStyle: React.CSSProperties = { color: "#1f2937", fontSize: 16, fontWeight: 650, overflowWrap: "anywhere" };
 const receivedButton: React.CSSProperties = { alignSelf: "center", minHeight: 54, padding: "14px 22px", border: 0, borderRadius: 12, background: "#15803d", color: "white", fontSize: 16, fontWeight: 800, cursor: "pointer" };
+const cardActions: React.CSSProperties = { display: "grid", gap: 8, alignSelf: "center", minWidth: 190 };
+const printButton: React.CSSProperties = { ...receivedButton, background: "#172554" };
 const disabledButton: React.CSSProperties = { opacity: .6, cursor: "wait" };
 const message: React.CSSProperties = { background: "white", borderRadius: 14, padding: 28, textAlign: "center", color: "#6b7280" };
 const empty: React.CSSProperties = { background: "white", border: "1px solid #bbf7d0", borderRadius: 18, padding: "48px 20px", textAlign: "center" };

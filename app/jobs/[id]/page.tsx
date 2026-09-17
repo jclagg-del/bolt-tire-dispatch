@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
+import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
 
 type JobForm = {
   customer: string;
@@ -89,6 +91,7 @@ export default function EditJobPage() {
   const [stateFeeOverridden, setStateFeeOverridden] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [labelJob, setLabelJob] = useState<TireLabelJob | null>(null);
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
@@ -469,6 +472,25 @@ export default function EditJobPage() {
     router.refresh();
   };
 
+  const printTireLabels = () => {
+    if (!id || !form) return;
+
+    flushSync(() => setLabelJob({
+      id: String(id),
+      customer: form.customer,
+      jobNumber: form.po_number,
+      moNumber: form.mo_number,
+      serviceType: form.service_type,
+      tires: form.tires,
+      size: form.size,
+      productNumber: form.tire_product_number,
+      quantity: Number(form.qty) || 1,
+      vehicle: form.vehicle,
+      scheduled: form.scheduled,
+    }));
+    window.print();
+  };
+
   const openCompleteModal = () => {
     if (!form || completing) return;
 
@@ -637,6 +659,14 @@ export default function EditJobPage() {
                 {archiving
                   ? "Archiving..."
                   : "📦 Archive Job"}
+              </button>
+
+              <button
+                type="button"
+                onClick={printTireLabels}
+                style={labelButton}
+              >
+                🏷️ Print Tire Labels
               </button>
             </div>
           </div>
@@ -946,6 +976,7 @@ export default function EditJobPage() {
         onCancel={closeCompleteModal}
         onConfirm={handleComplete}
       />
+      <TireLabelPrint job={labelJob} />
     </div>
   );
 }
@@ -1228,4 +1259,9 @@ const archiveButton: React.CSSProperties = {
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: 700,
+};
+
+const labelButton: React.CSSProperties = {
+  ...archiveButton,
+  background: "#172554",
 };

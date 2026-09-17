@@ -192,3 +192,27 @@ body{
 .quote-public-tires{display:grid;gap:12px}.quote-public-tires.split{grid-template-columns:repeat(2,minmax(0,1fr))}.quote-public-tire{display:grid;align-content:start;gap:7px;min-width:0}.quote-public-tire.rear{padding-left:12px;border-left:1px solid #dbe3ee}.quote-public-position{padding:8px 10px;border-radius:8px;background:#142449;color:#fff;font-size:12px;font-weight:900;text-align:center}.quote-public-tire .quote-tire-image{height:170px}.quote-public-tire h2,.quote-public-tire h3{overflow-wrap:anywhere}.quote-public-fitment{margin:0;color:#64748b;font-size:13px;font-weight:750}.direct-order-summary .quote-public-tires.split{grid-template-columns:1fr}.direct-order-summary .quote-public-tire.rear{padding:12px 0 0;border-left:0;border-top:1px solid #dbe3ee}.direct-order-summary .quote-public-tire .quote-tire-image{width:120px;height:120px;margin:auto}.direct-order-summary .quote-public-tire h2,.direct-order-summary .quote-public-tire h3{margin:0}.direct-order-summary .quote-price-each{font-size:19px}@media(max-width:620px){.quote-public-tires.split{grid-template-columns:1fr}.quote-public-tire.rear{padding:12px 0 0;border-left:0;border-top:1px solid #dbe3ee}}
 .quote-split-toggle{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #b8caf0;border-radius:12px;background:#f3f7ff;cursor:pointer}.quote-split-toggle input{width:20px;height:20px}.quote-split-toggle span{display:flex;flex-direction:column;gap:2px}.quote-split-toggle small{color:#63718a}.quote-axle-label{padding:8px 10px;border-radius:8px;background:#142449;color:#fff;font-weight:800}.quote-option-card.split-option{max-width:760px}.quote-option-card.split-option .quote-rear-fields{border-width:2px;background:#eef4ff}
 .quote-option-card.split-option{max-width:none}.quote-split-cards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}.quote-axle-card,.quote-rear-fields{display:grid;gap:10px;padding:16px;border:2px solid #cbdaf6;border-radius:14px;background:#f7f9fd}.quote-rear-fields{margin-top:0;background:#eef4ff}@media(max-width:760px){.quote-split-cards{grid-template-columns:1fr}}
+.tire-label-print-root{display:none}
+@media print{
+  @page{size:4in 6in;margin:0}
+  body *{visibility:hidden!important}
+  .tire-label-print-root,.tire-label-print-root *{visibility:visible!important}
+  .tire-label-print-root{display:block!important;position:absolute;inset:0;width:4in;background:#fff;color:#000}
+  .tire-receiving-label{box-sizing:border-box;width:4in;height:6in;padding:.22in;overflow:hidden;background:#fff;break-after:page;page-break-after:always;font-family:Arial,Helvetica,sans-serif}
+  .tire-receiving-label:last-child{break-after:auto;page-break-after:auto}
+  .tire-receiving-label header{display:flex;align-items:center;justify-content:space-between;gap:.12in;border-bottom:4px solid #000;padding-bottom:.1in}
+  .tire-receiving-label header strong{font-size:23pt;line-height:1}
+  .tire-receiving-label header span{padding:.08in .12in;background:#000;color:#fff;font-size:15pt;font-weight:900;text-align:center}
+  .tire-label-job-number{display:grid;gap:.03in;padding:.16in 0;border-bottom:2px solid #000}
+  .tire-label-job-number small,.tire-receiving-label small{font-size:8pt;font-weight:800;letter-spacing:.06em}
+  .tire-label-job-number b{font-size:32pt;line-height:1.05;overflow-wrap:anywhere}
+  .tire-label-grid{display:grid;grid-template-columns:1fr 1fr;gap:.12in;padding:.13in 0;border-bottom:2px solid #000}
+  .tire-label-grid>div{display:grid;gap:.04in}
+  .tire-label-grid strong{font-size:16pt;overflow-wrap:anywhere}
+  .tire-label-tire{display:grid;gap:.06in;padding:.16in 0;border-bottom:2px solid #000}
+  .tire-label-tire strong{font-size:20pt;line-height:1.15;overflow-wrap:anywhere}
+  .tire-label-tire span{font-size:11pt;font-weight:700}
+  .tire-label-bottom{border-bottom:0}
+  .tire-label-bottom strong{font-size:13pt}
+  .tire-receiving-label p{margin:.05in 0 0;font-size:10pt;font-weight:700;overflow-wrap:anywhere}
+}
