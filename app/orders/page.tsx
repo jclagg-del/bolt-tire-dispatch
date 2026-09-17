@@ -326,6 +326,70 @@ export default function OrdersPage() {
     setWorkingId(order.id);
     setErrorMessage("");
 
+    if (order.job_number?.trim()) {
+      const { data: existingJob, error: existingJobError } = await supabase
+        .from("jobs")
+        .select("id")
+        .eq("customer", order.customer)
+        .eq("po_number", order.job_number.trim())
+        .eq("archived", false)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingJobError) {
+        setWorkingId(null);
+        setErrorMessage(`The app could not check for an existing job: ${existingJobError.message}`);
+        return;
+      }
+
+      if (existingJob) {
+        const { error: linkError } = await supabase
+          .from("customer_orders")
+          .update({
+            order_status: "approved",
+            approved_job_id: existingJob.id,
+            reviewed_at: new Date().toISOString(),
+            approved_at: new Date().toISOString(),
+          })
+          .eq("id", order.id);
+
+        setWorkingId(null);
+        if (linkError) {
+          setErrorMessage(`An existing job was found, but the order could not be linked to it: ${linkError.message}`);
+          return;
+        }
+        router.push("/orders");
+        router.refresh();
+        return;
+      }
+    }
+
+    const approvalTimestamp = new Date().toISOString();
+    const { data: claimedOrder, error: claimError } = await supabase
+      .from("customer_orders")
+      .update({
+        order_status: "approved",
+        reviewed_at: approvalTimestamp,
+        approved_at: approvalTimestamp,
+      })
+      .eq("id", order.id)
+      .eq("order_status", "new")
+      .is("approved_job_id", null)
+      .select("id")
+      .maybeSingle();
+
+    if (claimError || !claimedOrder) {
+      setWorkingId(null);
+      await fetchOrders();
+      setErrorMessage(
+        claimError
+          ? `The order could not be reserved for approval: ${claimError.message}`
+          : "This order has already been accepted or is being accepted in another window."
+      );
+      return;
+    }
+
     const scheduled = createScheduledValue(
       order.requested_date,
       order.requested_time
@@ -369,6 +433,15 @@ export default function OrdersPage() {
       .single();
 
     if (jobError || !newJob) {
+      await supabase
+        .from("customer_orders")
+        .update({
+          order_status: "new",
+          reviewed_at: null,
+          approved_at: null,
+        })
+        .eq("id", order.id)
+        .is("approved_job_id", null);
       setWorkingId(null);
       setErrorMessage(
         `Error creating job: ${
@@ -381,10 +454,7 @@ export default function OrdersPage() {
     const { error: orderError } = await supabase
       .from("customer_orders")
       .update({
-        order_status: "approved",
         approved_job_id: newJob.id,
-        reviewed_at: new Date().toISOString(),
-        approved_at: new Date().toISOString(),
       })
       .eq("id", order.id);
 
