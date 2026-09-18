@@ -227,12 +227,13 @@ export default function BillingPage() {
     setJobs((current) => current.map((item) => item.id === job.id ? { ...item, review_request_sent_at: new Date().toISOString() } : item));
   };
 
-  const readyToBill = jobs.filter(
-    (j) => j.complete && !j.invoice_number && j.payment_status !== "paid"
-  );
+  const readyToBill = jobs.filter((job) => {
+    const status = job.job_status || (job.complete ? "completed" : "scheduled");
+    return job.complete && !["billed", "paid"].includes(status) && job.payment_status !== "paid";
+  });
 
-  const billedUnpaid = jobs.filter(
-    (j) => j.invoice_number && j.payment_status !== "paid"
+  const billedUnpaid = jobs.filter((job) =>
+    job.job_status === "billed" && job.payment_status !== "paid"
   );
 
   const paidJobs = jobs
