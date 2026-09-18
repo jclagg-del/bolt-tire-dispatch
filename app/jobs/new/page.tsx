@@ -365,28 +365,6 @@ export default function NewJobPage() {
     router.refresh();
   };
 
-  const startServiceJob = () => {
-    setForm((current) => ({
-      ...current,
-      customer: "",
-      service_type: "General Service",
-      vehicle_id: vehicles.find((vehicle) => vehicle.id === "service")?.id || current.vehicle_id,
-      tires: "",
-      size: "",
-      qty: "",
-      price_tires: "",
-      tire_product_number: "",
-      tires_ordered: false,
-      tire_supplier: "",
-      estimated_delivery_date: "",
-      tires_received: false,
-      installation_cost: "",
-      tire_disposal_fee: "0",
-      ny_state_tire_fee: "0",
-    }));
-    setPricingCategory("tires_only");
-  };
-
   return (
     <div style={shell}>
       <AppHeader />
@@ -401,9 +379,6 @@ export default function NewJobPage() {
                 Create a new job and auto-fill repeat customer contact info.
               </p>
             </div>
-            <button type="button" onClick={startServiceJob} style={serviceJobButton}>
-              + Service Job
-            </button>
           </div>
         </div>
 
@@ -899,7 +874,7 @@ export default function NewJobPage() {
           />
 
           <button type="submit" style={button} disabled={saving}>
-            {saving ? "Saving..." : "💾 Save Job"}
+            {saving ? "Adding Job..." : "➕ Add Job"}
           </button>
         </form>
       </div>
@@ -1083,17 +1058,6 @@ const awaitingStatusCard: React.CSSProperties = { ...taxCard, border: "1px solid
 const checkboxLabel: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", color: "#111827" };
 const checkbox: React.CSSProperties = { width: 22, height: 22, marginTop: 1 };
 const checkboxHelp: React.CSSProperties = { display: "block", marginTop: 3, color: "#6b7280", fontSize: 13, fontWeight: 400 };
-
-const serviceJobButton: React.CSSProperties = {
-  padding: "11px 15px",
-  border: "none",
-  borderRadius: 10,
-  background: "#0f172a",
-  color: "white",
-  fontSize: 14,
-  fontWeight: 800,
-  cursor: "pointer",
-};
 
 const button: React.CSSProperties = {
   marginTop: 16,
