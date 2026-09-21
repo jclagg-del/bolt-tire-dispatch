@@ -1,25 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasKingdomAccess } from "@/lib/kingdom-auth";
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "").replace(/[&<>\"]/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '\"': "&quot;",
-  })[character] || character);
-}
-
-function serviceLabel(value: unknown) {
-  const labels: Record<string, string> = {
-    installed: "Installation",
-    delivery: "Delivery",
-    pickup: "Pickup",
-    delivery_pickup: "Delivery and pickup",
-  };
-  return labels[String(value || "")] || String(value || "Not provided");
-}
+import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
 
 export async function GET() {
   if (!await hasKingdomAccess()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -93,24 +75,7 @@ export async function POST(request: Request) {
   let notificationSent = false;
   let notificationError = "";
   try {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
-    const recipient = process.env.NEW_ORDER_NOTIFICATION_EMAIL || "office@bolttire.com";
-    const vehicle = [order.vehicle_year, order.vehicle_make, order.vehicle_model].filter(Boolean).join(" ");
-    const subject = `NEW ORDER | ${customer === "HPR" ? "HPR" : "KSS"} | Job ${order.job_number || "not provided"} | MO ${order.mo_number || "not provided"}`;
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: process.env.KINGDOM_NOTIFICATION_FROM || "Bolt Tire <no-reply@bolttire.com>",
-        reply_to: "office@bolttire.com",
-        to: [recipient],
-        subject,
-        html: `<div style="font-family:Arial,sans-serif;max-width:680px;color:#111827"><h2>New ${escapeHtml(customer)} order</h2><p><strong>Order type:</strong> ${escapeHtml(serviceLabel(order.service_method))}</p><p><strong>Requested:</strong> ${escapeHtml(order.requested_date)} at ${escapeHtml(order.requested_time)}</p><p><strong>Facility:</strong> ${escapeHtml(order.facility_name)}<br>${escapeHtml(order.address)}</p><p><strong>Contact:</strong> ${escapeHtml(order.contact_name)} · ${escapeHtml(order.contact_number)}<br><strong>Submitted by:</strong> ${escapeHtml(order.submitted_by)}</p><p><strong>Vehicle:</strong> ${escapeHtml(vehicle)}${order.vehicle_color ? ` · ${escapeHtml(order.vehicle_color)}` : ""}${order.license_plate ? ` · Plate ${escapeHtml(order.license_plate)}` : ""}</p><p><strong>Job number:</strong> ${escapeHtml(order.job_number || "Not provided")}<br><strong>MO number:</strong> ${escapeHtml(order.mo_number || "Not provided")}</p><p><strong>Tires:</strong> ${escapeHtml(order.qty)} × ${escapeHtml(order.tire_size)}<br><strong>Position:</strong> ${escapeHtml(order.tire_position)}<br><strong>Part number:</strong> ${escapeHtml(order.tire_product_number || "Not provided")}<br><strong>Goodyear order:</strong> ${order.goodyear_order ? "Yes" : "No"}</p>${order.notes ? `<p><strong>Notes:</strong><br>${escapeHtml(order.notes).replace(/\n/g, "<br>")}</p>` : ""}<p style="margin-top:24px"><a href="https://app.bolttire.com/orders" style="background:#1d4ed8;color:#fff;padding:12px 18px;border-radius:7px;text-decoration:none;font-weight:700">Open Orders</a></p></div>`,
-      }),
-    });
-    const result = await response.json().catch(() => ({})) as { message?: string };
-    if (!response.ok) throw new Error(result.message || `Resend returned ${response.status}`);
+    await sendFleetOrderNotification("new", { id: created.id, ...order });
     notificationSent = true;
   } catch (notificationFailure) {
     notificationError = notificationFailure instanceof Error ? notificationFailure.message : "Email notification failed";
