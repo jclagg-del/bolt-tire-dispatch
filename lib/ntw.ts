@@ -1,4 +1,5 @@
 import "server-only";
+import { request as httpsRequest } from "node:https";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 
@@ -41,6 +42,52 @@ function configuration() {
   return { clientId, clientSecret, customerId, dealerCode };
 }
 
+function caCertificate() {
+  const value = process.env.NTW_CA_CERT?.trim();
+  return value ? value.replace(/\\n/g, "\n") : undefined;
+}
+
+async function postJson(
+  url: URL,
+  headers: Record<string, string>,
+  body: Record<string, unknown>
+) {
+  const payload = JSON.stringify(body);
+
+  return new Promise<{ status: number; payload: { product?: NtwProduct[]; message?: string; error?: string } }>((resolve, reject) => {
+    const request = httpsRequest(
+      url,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "Content-Length": Buffer.byteLength(payload).toString(),
+        },
+        ca: caCertificate(),
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        response.on("end", () => {
+          const responseText = Buffer.concat(chunks).toString("utf8");
+          let parsed: { product?: NtwProduct[]; message?: string; error?: string } = {};
+          try {
+            parsed = responseText ? JSON.parse(responseText) : {};
+          } catch {
+            parsed = { error: responseText || "NTW returned an unreadable response" };
+          }
+          resolve({ status: response.statusCode || 500, payload: parsed });
+        });
+      }
+    );
+
+    request.setTimeout(20_000, () => request.destroy(new Error("NTW request timed out")));
+    request.on("error", reject);
+    request.write(payload);
+    request.end();
+  });
+}
+
 export function ntwConfigured() {
   return Boolean(process.env.NTW_CLIENT_ID?.trim() && process.env.NTW_CLIENT_SECRET && process.env.NTW_CUSTOMER_ID?.trim());
 }
@@ -61,27 +108,27 @@ async function ntwRequest(criteria: Record<string, unknown>[], searchType: "ByTi
   const { clientId, clientSecret, customerId, dealerCode } = configuration();
   const url = new URL(baseUrl);
   if (dealerCode) url.searchParams.set("dealerCode", dealerCode);
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
+  const response = await postJson(
+    url,
+    {
       Accept: "application/json",
       "Content-Type": "application/json",
       "X-IBM-Client-Id": clientId,
       "X-IBM-Client-Secret": clientSecret,
     },
-    body: JSON.stringify({
+    {
       customerId,
       isDropShip: false,
       customerType: "external",
       searchType,
       source: "Bolt Tire",
       criteria,
-    }),
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => ({})) as { product?: NtwProduct[]; message?: string; error?: string };
-  if (!response.ok) throw new Error(payload.message || payload.error || `NTW request failed (${response.status})`);
-  return payload.product || [];
+    }
+  );
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(response.payload.message || response.payload.error || `NTW request failed (${response.status})`);
+  }
+  return response.payload.product || [];
 }
 
 function addressLabel(address: NtwAddress | undefined) {
