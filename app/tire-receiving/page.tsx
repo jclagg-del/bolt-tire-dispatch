@@ -141,7 +141,6 @@ export default function TireReceivingPage() {
         ) : (
           <div style={list}>
             {upcomingJobs.map((job) => {
-              const description = [job.tires, job.size].filter(Boolean).join(" • ") || "No tire description";
               const updating = updatingId === job.id;
 
               return (
@@ -150,9 +149,11 @@ export default function TireReceivingPage() {
                     <div style={customer}>{job.customer || "Unnamed customer"}</div>
                     <div style={scheduled}>{formatScheduled(job.scheduled)}</div>
                     <div style={fields}>
-                      <Info label="MO" value={job.mo_number || "—"} />
-                      <Info label="Tire description" value={description} />
-                      <Info label="Product number" value={job.tire_product_number || "—"} />
+                      <Info label="Job number" value={job.po_number || "—"} />
+                      <Info label="MO number" value={job.mo_number || "—"} />
+                      <Info label="Tire make / model" value={job.tires || "—"} />
+                      <Info label="Tire size" value={job.size || "—"} />
+                      <Info label="Part number" value={job.tire_product_number || "—"} />
                       <Info label="Quantity" value={job.qty ? String(job.qty) : "—"} />
                     </div>
                   </button>
