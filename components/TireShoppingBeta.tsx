@@ -191,11 +191,9 @@ export default function TireShoppingBeta({
       "Content-Type": "application/json",
     };
     if (internal) {
-      // Refresh first so a long-lived staff page does not silently fall back
-      // to public supplier results when its access token has expired.
-      const refreshed = await supabase.auth.refreshSession();
-      const session = refreshed.data.session || (await supabase.auth.getSession()).data.session;
-      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token)
+        headers.Authorization = `Bearer ${data.session.access_token}`;
     }
     const response = await fetch("/api/atd", {
       method: "POST",
