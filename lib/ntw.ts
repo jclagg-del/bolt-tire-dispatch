@@ -53,6 +53,7 @@ async function postJson(
   body: Record<string, unknown>
 ) {
   const payload = JSON.stringify(body);
+  const ca = caCertificate();
 
   return new Promise<{ status: number; payload: { product?: NtwProduct[]; message?: string; error?: string } }>((resolve, reject) => {
     const request = httpsRequest(
@@ -63,7 +64,8 @@ async function postJson(
           ...headers,
           "Content-Length": Buffer.byteLength(payload).toString(),
         },
-        ca: caCertificate(),
+        ca,
+        allowPartialTrustChain: Boolean(ca),
       },
       (response) => {
         const chunks: Buffer[] = [];
