@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Product = {
   id: string;
-  supplier?: "ATD" | "USAF";
+  supplier?: "ATD" | "USAF" | "NTW";
   brand: string;
   model: string;
   description: string;
@@ -36,7 +36,8 @@ type Product = {
   fitmentPosition: "front" | "rear" | "both";
   atdProductNumber: string;
   availability: { local: number; localPlus: number; nationwide: number };
-  warehouseInventory?: Array<{ warehouse: string; quantity: number; name?: string; address?: string; local?: boolean }>;
+  warehouseInventory?: Array<{ warehouse: string; quantity: number; name?: string; address?: string; local?: boolean; estimatedDelivery?: string; estimatedDeliveryDate?: string; shipMethod?: string }>;
+  qaOnly?: boolean;
   tireLibraryId?: number;
   tireLibraryMatched?: boolean;
   tireLibraryDetailsLoaded?: boolean;
@@ -100,6 +101,17 @@ type WarehouseDetail = {
 
 function tireImageUrl(value: string | null | undefined) {
   return value ? `/api/tire-image?url=${encodeURIComponent(value)}` : "";
+}
+
+function supplierName(supplier: Product["supplier"]) {
+  if (supplier === "USAF") return "U.S. AutoForce";
+  return supplier || "ATD";
+}
+
+function localWarehouseName(supplier: Product["supplier"]) {
+  if (supplier === "USAF") return "Croton";
+  if (supplier === "NTW") return "Albany";
+  return "Totowa";
 }
 
 export default function TireShoppingBeta({
@@ -457,13 +469,13 @@ export default function TireShoppingBeta({
     setWarehouseLoading(true);
     setWarehouseError("");
     setWarehouseDetails([]);
-    if (tire.supplier === "USAF") {
+    if (tire.supplier === "USAF" || tire.supplier === "NTW") {
       setWarehouseDetails((tire.warehouseInventory || []).filter((item) => item.quantity > 0).map((item) => ({
-        name: item.name || `U.S. AutoForce warehouse ${item.warehouse}`,
+        name: item.name || `${supplierName(tire.supplier)} warehouse ${item.warehouse}`,
         address: item.address,
         quantity: item.quantity,
-        estimatedDelivery: "",
-        shipMethod: "U.S. AutoForce truck",
+        estimatedDelivery: item.estimatedDeliveryDate || item.estimatedDelivery || "",
+        shipMethod: item.shipMethod || (tire.supplier === "USAF" ? "U.S. AutoForce truck" : "NTW delivery"),
         local: item.local,
       })));
       setWarehouseLoading(false);
@@ -1306,8 +1318,8 @@ export default function TireShoppingBeta({
                       <div className="tire-beta-stock">
                         {supplierAvailability.map((match) => (
                           <span key={match.supplier || "ATD"}>
-                            <strong>{match.supplier === "USAF" ? "U.S. AutoForce" : "ATD"}</strong>
-                            {` · ${match.supplier === "USAF" ? "Croton" : "Totowa"} `}
+                            <strong>{supplierName(match.supplier)}{match.qaOnly ? " QA" : ""}</strong>
+                            {` · ${localWarehouseName(match.supplier)} `}
                             <strong>{match.availability.local}</strong>
                             {` · nearby `}
                             <strong>{match.availability.localPlus}</strong>
@@ -1324,10 +1336,10 @@ export default function TireShoppingBeta({
                           aria-expanded={warehouseProductId === tire.id}
                           onClick={() => toggleWarehouseDetails(tire)}
                         >
-                          {tire.supplier === "USAF" ? "Nearby warehouses" : "Nearby warehouse"} <strong>{tire.availability.localPlus}</strong>
+                          {tire.supplier === "ATD" ? "Nearby warehouse" : "Nearby warehouses"} <strong>{tire.availability.localPlus}</strong>
                           <b>{warehouseProductId === tire.id ? "▲" : "▼"}</b>
                         </button>
-                        {tire.supplier !== "USAF" ? <span>
+                        {tire.supplier === "ATD" ? <span>
                           Nationwide{" "}
                           <strong>{tire.availability.nationwide}</strong>
                         </span> : null}
@@ -1379,7 +1391,7 @@ export default function TireShoppingBeta({
                             ${(tire.quotePrice - (tire.cost || 0)).toFixed(2)}
                           </strong>
                         </span>
-                        <small>{tire.supplier || "ATD"} · {tire.atdProductNumber}</small>
+                        <small>{supplierName(tire.supplier)}{tire.qaOnly ? " QA test" : ""} · {tire.atdProductNumber}</small>
                       </>
                     )}
                     <div className="tire-beta-customer-price">
@@ -1540,7 +1552,7 @@ export default function TireShoppingBeta({
                   const connected = supplier === "ATD" && Boolean(match);
                   return <button type="button" key={supplier} disabled={!connected} onClick={() => match && beginOrder(match)}>
                     <span><strong>{supplier === "USAF" ? "U.S. AutoForce" : supplier}</strong><small>{match ? `${match.atdProductNumber} · $${Number(match.cost || 0).toFixed(2)} each` : "No matching product in this search"}</small></span>
-                    <b>{connected ? "Select" : match && supplier === "USAF" ? "Ordering connection next" : "Not connected"}</b>
+                    <b>{connected ? "Select" : match && supplier === "NTW" && match.qaOnly ? "QA inventory only" : match && supplier === "USAF" ? "Ordering connection next" : "Not connected"}</b>
                   </button>;
                 })}
               </div>
