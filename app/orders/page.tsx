@@ -277,6 +277,38 @@ export default function OrdersPage() {
     await fetchOrders();
   };
 
+  const restoreOrder = async (order: CustomerOrder) => {
+    if (workingId !== null) return;
+
+    const confirmed = window.confirm(
+      `Restore the rejected request from ${order.contact_name} to New Orders?`
+    );
+
+    if (!confirmed) return;
+
+    setWorkingId(order.id);
+    setErrorMessage("");
+
+    const { error } = await supabase
+      .from("customer_orders")
+      .update({
+        order_status: "new",
+        reviewed_at: null,
+      })
+      .eq("id", order.id);
+
+    setWorkingId(null);
+
+    if (error) {
+      setErrorMessage(
+        `Error restoring order: ${error.message}`
+      );
+      return;
+    }
+
+    await fetchOrders();
+  };
+
   const deleteOrder = async (order: CustomerOrder) => {
     if (workingId !== null) return;
 
@@ -431,6 +463,7 @@ export default function OrdersPage() {
                 onToggleTires={toggleTiresOrdered}
                 onApprove={approveOrder}
                 onReject={rejectOrder}
+                onRestore={restoreOrder}
                 onDelete={deleteOrder}
                 router={router}
               />
@@ -444,6 +477,7 @@ export default function OrdersPage() {
               onToggleTires={toggleTiresOrdered}
               onApprove={approveOrder}
               onReject={rejectOrder}
+              onRestore={restoreOrder}
               onDelete={deleteOrder}
               router={router}
             />
@@ -456,6 +490,7 @@ export default function OrdersPage() {
               onToggleTires={toggleTiresOrdered}
               onApprove={approveOrder}
               onReject={rejectOrder}
+              onRestore={restoreOrder}
               onDelete={deleteOrder}
               router={router}
             />
@@ -469,6 +504,7 @@ export default function OrdersPage() {
                 onToggleTires={toggleTiresOrdered}
                 onApprove={approveOrder}
                 onReject={rejectOrder}
+                onRestore={restoreOrder}
                 onDelete={deleteOrder}
                 router={router}
               />
@@ -483,6 +519,7 @@ export default function OrdersPage() {
                 onToggleTires={toggleTiresOrdered}
                 onApprove={approveOrder}
                 onReject={rejectOrder}
+                onRestore={restoreOrder}
                 onDelete={deleteOrder}
                 router={router}
               />
@@ -502,6 +539,7 @@ type OrderSectionProps = {
   onToggleTires: (order: CustomerOrder) => void;
   onApprove: (order: CustomerOrder, tireOrder?: TireOrderDetails) => void;
   onReject: (order: CustomerOrder) => void;
+  onRestore: (order: CustomerOrder) => void;
   onDelete: (order: CustomerOrder) => void;
   router: ReturnType<typeof useRouter>;
 };
@@ -514,6 +552,7 @@ function OrderSection({
   onToggleTires,
   onApprove,
   onReject,
+  onRestore,
   onDelete,
   router,
 }: OrderSectionProps) {
@@ -766,6 +805,15 @@ function OrderSection({
                         Reject
                       </button>
                     </>
+                  ) : rejected ? (
+                    <button
+                      type="button"
+                      onClick={() => onRestore(order)}
+                      disabled={working}
+                      style={restoreButton}
+                    >
+                      {working ? "Restoring..." : "Restore to New Orders"}
+                    </button>
                   ) : null}
 
                   <button
@@ -1090,6 +1138,11 @@ const approveButton: React.CSSProperties = {
 };
 
 const openJobButton: React.CSSProperties = {
+  ...approveButton,
+  background: "#2563eb",
+};
+
+const restoreButton: React.CSSProperties = {
   ...approveButton,
   background: "#2563eb",
 };
