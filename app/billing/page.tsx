@@ -413,7 +413,7 @@ export default function BillingPage() {
                               </button>
                             </>
                           )}
-                          {job.complete && job.customer !== "Kingdom Support Services" && (job.phone || job.contact_number) ? (
+                          {job.complete && job.customer !== "Kingdom Support Services" && job.customer !== "HPR" && (job.phone || job.contact_number) ? (
                             <button
                               type="button"
                               onClick={(event) => { event.stopPropagation(); sendCompletionText(job); }}

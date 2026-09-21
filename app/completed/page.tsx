@@ -131,7 +131,7 @@ export default function CompletedPage() {
                 <div style={customer}>{job.customer || "Unnamed Job"}</div>
 
                 <div style={cardActions}>
-                  {job.customer !== "Kingdom Support Services" && (job.phone || job.contact_number) ? <button
+                  {job.customer !== "Kingdom Support Services" && job.customer !== "HPR" && (job.phone || job.contact_number) ? <button
                     onClick={() => sendCompletionText(job)}
                     style={textBtn}
                     disabled={sendingTextId === job.id || Boolean(job.review_request_sent_at)}

@@ -65,11 +65,8 @@ export async function POST(request: Request) {
   if (jobError || !job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
   if (!job.complete) return NextResponse.json({ skipped: true });
 
-  if (job.customer === "HPR" && mode !== "review_text") {
-    return NextResponse.json({ skipped: true, reason: "hpr-completion-email-disabled" });
-  }
-
-  if (job.customer !== "Kingdom Support Services") {
+  const isFleetCustomer = job.customer === "Kingdom Support Services" || job.customer === "HPR";
+  if (!isFleetCustomer) {
     if (mode !== "review_text") {
       return NextResponse.json({ skipped: true, reason: "manual-send-required" });
     }
@@ -87,7 +84,10 @@ export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Completion email is not connected yet" }, { status: 503 });
 
-  const recipient = process.env.KINGDOM_NOTIFICATION_EMAIL || "ksspartsorders@jw.org";
+  const isHpr = job.customer === "HPR";
+  const recipient = isHpr
+    ? (process.env.HPR_NOTIFICATION_EMAIL || "HPRVM.US@jw.org")
+    : (process.env.KINGDOM_NOTIFICATION_EMAIL || "ksspartsorders@jw.org");
   const status = "COMPLETED";
   const jobNumber = job.po_number || "Not provided";
   const moNumber = job.mo_number || "Not provided";
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       reply_to: "office@bolttire.com",
       to: [recipient],
       subject,
-      html: `<h2>Kingdom Support Services job completed</h2><p><strong>Status:</strong> Completed</p><p><strong>Job/PO:</strong> ${escapeHtml(jobNumber)}</p><p><strong>MO:</strong> ${escapeHtml(moNumber)}</p><p><strong>Vehicle:</strong> ${escapeHtml(vehicle)}</p><p><strong>Mileage:</strong> ${escapeHtml(mileage)}</p><p><strong>Service:</strong> ${escapeHtml(service)}</p><p><strong>Completed:</strong> ${escapeHtml(completed)} ET</p>`,
+      html: `<h2>${isHpr ? "HPR" : "Kingdom Support Services"} job completed</h2><p><strong>Status:</strong> Completed</p><p><strong>Job/PO:</strong> ${escapeHtml(jobNumber)}</p><p><strong>MO:</strong> ${escapeHtml(moNumber)}</p><p><strong>Vehicle:</strong> ${escapeHtml(vehicle)}</p><p><strong>Mileage:</strong> ${escapeHtml(mileage)}</p><p><strong>Service:</strong> ${escapeHtml(service)}</p><p><strong>Completed:</strong> ${escapeHtml(completed)} ET</p>`,
     }),
   });
   const result = await response.json();
