@@ -15,7 +15,14 @@ async function optionalNtw<T>(request: () => Promise<T[]>) {
   try {
     return await request();
   } catch (error) {
-    console.warn("NTW inventory lookup failed; continuing with other suppliers:", error instanceof Error ? error.message : error);
+    const cause = error instanceof Error && "cause" in error
+      ? error.cause as { code?: string; message?: string } | undefined
+      : undefined;
+    console.warn(
+      "NTW inventory lookup failed; continuing with other suppliers:",
+      error instanceof Error ? error.message : error,
+      cause?.code || cause?.message || "",
+    );
     return [];
   }
 }
