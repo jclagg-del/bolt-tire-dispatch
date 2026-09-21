@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hasKingdomAccess } from "@/lib/kingdom-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -22,7 +23,14 @@ export async function PATCH(request: Request, { params }: Context) {
   if (body.action === "request_cancellation") {
     const { error: cancellationError } = await admin.from("customer_orders").update({ order_status: "cancellation_requested", reviewed_at: null }).eq("id", order.id);
     if (cancellationError) return NextResponse.json({ error: cancellationError.message }, { status: 500 });
-    return NextResponse.json({ cancelled: true });
+    let notificationSent = false;
+    try {
+      await sendFleetOrderNotification("cancellation", order);
+      notificationSent = true;
+    } catch (notificationError) {
+      console.error("Order cancellation email notification failed:", notificationError instanceof Error ? notificationError.message : notificationError, { orderId: order.id });
+    }
+    return NextResponse.json({ cancelled: true, notificationSent });
   }
 
   const requestedServiceMethod = String(body.service_method || "").toLowerCase();
@@ -98,5 +106,12 @@ export async function PATCH(request: Request, { params }: Context) {
     }).eq("id", linkedJob.id);
     if (jobError) return NextResponse.json({ error: `Order saved, but the linked job could not be updated: ${jobError.message}` }, { status: 500 });
   }
-  return NextResponse.json({ saved: true });
+  let notificationSent = false;
+  try {
+    await sendFleetOrderNotification("changed", { ...order, ...updates });
+    notificationSent = true;
+  } catch (notificationError) {
+    console.error("Order change email notification failed:", notificationError instanceof Error ? notificationError.message : notificationError, { orderId: order.id });
+  }
+  return NextResponse.json({ saved: true, notificationSent });
 }
