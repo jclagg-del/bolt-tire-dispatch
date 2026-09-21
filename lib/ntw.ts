@@ -33,6 +33,17 @@ type NtwProduct = {
   tireImage?: { url?: string };
 };
 
+type NtwResponse = {
+  product?: NtwProduct[];
+  message?: unknown;
+  error?: unknown;
+  errorMessage?: unknown;
+  errors?: unknown;
+  detail?: unknown;
+  title?: unknown;
+  [key: string]: unknown;
+};
+
 function configuration() {
   const clientId = process.env.NTW_CLIENT_ID?.trim();
   const clientSecret = process.env.NTW_CLIENT_SECRET;
@@ -55,7 +66,7 @@ async function postJson(
   const payload = JSON.stringify(body);
   const ca = caCertificate();
 
-  return new Promise<{ status: number; payload: { product?: NtwProduct[]; message?: string; error?: string } }>((resolve, reject) => {
+  return new Promise<{ status: number; payload: NtwResponse }>((resolve, reject) => {
     const request = httpsRequest(
       url,
       {
@@ -72,7 +83,7 @@ async function postJson(
         response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
         response.on("end", () => {
           const responseText = Buffer.concat(chunks).toString("utf8");
-          let parsed: { product?: NtwProduct[]; message?: string; error?: string } = {};
+          let parsed: NtwResponse = {};
           try {
             parsed = responseText ? JSON.parse(responseText) : {};
           } catch {
@@ -88,6 +99,21 @@ async function postJson(
     request.write(payload);
     request.end();
   });
+}
+
+function ntwFailureMessage(status: number, payload: NtwResponse) {
+  const values = [payload.message, payload.error, payload.errorMessage, payload.errors, payload.detail, payload.title];
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return `NTW request failed (${status}): ${value.trim()}`;
+    if (value && typeof value === "object") {
+      const detail = JSON.stringify(value);
+      if (detail && detail !== "{}" && detail !== "[]") return `NTW request failed (${status}): ${detail.slice(0, 1200)}`;
+    }
+  }
+  const detail = JSON.stringify(payload);
+  return detail && detail !== "{}"
+    ? `NTW request failed (${status}): ${detail.slice(0, 1200)}`
+    : `NTW request failed (${status})`;
 }
 
 export function ntwConfigured() {
@@ -128,7 +154,7 @@ async function ntwRequest(criteria: Record<string, unknown>[], searchType: "ByTi
     }
   );
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(response.payload.message || response.payload.error || `NTW request failed (${response.status})`);
+    throw new Error(ntwFailureMessage(response.status, response.payload));
   }
   return response.payload.product || [];
 }
