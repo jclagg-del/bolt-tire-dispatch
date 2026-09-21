@@ -508,7 +508,10 @@ export default function KingdomOrderPage() {
       return;
     }
 
-    const { error } = await supabase.from("customer_orders").insert({
+    const orderResponse = await fetch("/api/public/kingdom/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
       customer: form.customer,
       goodyear_order: form.goodyear_order,
       service_method: form.service_method,
@@ -532,14 +535,14 @@ export default function KingdomOrderPage() {
       tire_size: form.tire_size.trim(),
       tire_product_number: form.tire_product_number.trim() || null,
       notes: [form.request_earlier_service ? "EARLIER SERVICE REQUESTED — contact customer if an earlier opening becomes available." : "", form.notes.trim()].filter(Boolean).join("\n\n") || null,
-      order_status: "new",
-      tires_ordered: false,
+      }),
     });
 
     setSubmitting(false);
 
-    if (error) {
-      setErrorMessage(`We could not submit the request. ${error.message}`);
+    if (!orderResponse.ok) {
+      const result = await orderResponse.json().catch(() => ({}));
+      setErrorMessage(`We could not submit the request. ${result.error || "Please try again."}`);
       return;
     }
 
