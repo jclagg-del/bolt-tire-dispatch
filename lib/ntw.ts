@@ -47,7 +47,10 @@ type NtwResponse = {
 function configuration() {
   const clientId = process.env.NTW_CLIENT_ID?.trim();
   const clientSecret = process.env.NTW_CLIENT_SECRET;
-  const customerId = process.env.NTW_CUSTOMER_ID?.trim();
+  // NTW customer numbers are numeric identifiers; normalize legacy values that
+  // were stored with left-padding so the API receives the canonical account.
+  const rawCustomerId = process.env.NTW_CUSTOMER_ID?.trim();
+  const customerId = rawCustomerId?.replace(/^0+(?=\d)/, "");
   const dealerCode = process.env.NTW_DEALER_CODE?.trim();
   if (!clientId || !clientSecret || !customerId) throw new Error("NTW credentials are not configured");
   return { clientId, clientSecret, customerId, dealerCode };
