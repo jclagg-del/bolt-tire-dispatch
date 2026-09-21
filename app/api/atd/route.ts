@@ -3,11 +3,21 @@ import { requireApiUser } from "@/lib/supabase/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdByPartNumber, searchAtdBySize } from "@/lib/atd";
 import { searchUsafByPartNumber, searchUsafBySize } from "@/lib/usaf-catalog";
+import { ntwEnvironment, searchNtwByPartNumber, searchNtwBySize } from "@/lib/ntw";
 import { auditSupplierMatches } from "@/lib/inventory-match-audit";
 import { enrichWithTireLibrary, sanitizeVehicleFitments, tireLibraryFitmentList, tireLibraryFitmentSize, tireLibraryStatus, tireLibraryTireDetails } from "@/lib/tire-library";
 
 async function staffAuthorized(request: NextRequest) {
   return requireApiUser(request);
+}
+
+async function optionalNtw<T>(request: () => Promise<T[]>) {
+  try {
+    return await request();
+  } catch (error) {
+    console.warn("NTW inventory lookup failed; continuing with other suppliers:", error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -63,19 +73,24 @@ export async function POST(request: NextRequest) {
     }
     if (body.action === "size") {
       const query = String(body.query || "");
-      const [atdProducts, usafProducts] = await Promise.all([
+      const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
         searchAtdBySize(query, includeCost),
         searchUsafBySize(query, includeCost),
+        ntwEnvironment === "production" || includeCost ? optionalNtw(() => searchNtwBySize(query, includeCost)) : Promise.resolve([]),
       ]);
-      const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts]);
+      const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts, ...ntwProducts]);
       if (includeCost) await auditSupplierMatches(products);
       return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
     }
     if (body.action === "part-number") {
       if (!includeCost) return NextResponse.json({ error: "Staff access is required." }, { status: 401 });
       const query = String(body.query || "");
-      const [atdProducts, usafProducts] = await Promise.all([searchAtdByPartNumber(query, true), searchUsafByPartNumber(query, true)]);
-      const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts]);
+      const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
+        searchAtdByPartNumber(query, true),
+        searchUsafByPartNumber(query, true),
+        optionalNtw(() => searchNtwByPartNumber(query, true)),
+      ]);
+      const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts, ...ntwProducts]);
       if (includeCost) await auditSupplierMatches(products);
       return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
     }
@@ -87,14 +102,15 @@ export async function POST(request: NextRequest) {
       }
       const groups = await Promise.all(fitments.map(async (fitment) => {
         const size = tireLibraryFitmentSize(fitment);
-        const [atdProducts, usafProducts] = await Promise.all([
+        const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
           searchAtdBySize(size, includeCost),
           searchUsafBySize(size, includeCost),
+          ntwEnvironment === "production" || includeCost ? optionalNtw(() => searchNtwBySize(size, includeCost)) : Promise.resolve([]),
         ]);
         const minimumLoad = Number(fitment.load_rating || 0);
-        return [...atdProducts, ...usafProducts]
+        return [...atdProducts, ...usafProducts, ...ntwProducts]
           .filter((product) => {
-            if (!minimumLoad || product.supplier === "USAF") return true;
+            if (!minimumLoad || product.supplier === "USAF" || product.supplier === "NTW") return true;
             const productLoad = Number(product.loadSpeed.match(/\b\d{2,3}\b/)?.[0] || 0);
             return !productLoad || productLoad >= minimumLoad;
           })
