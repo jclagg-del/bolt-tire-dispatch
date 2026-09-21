@@ -156,7 +156,9 @@ async function ntwRequest(criteria: Record<string, unknown>[], searchType: "ByTi
   if (response.status < 200 || response.status >= 300) {
     throw new Error(ntwFailureMessage(response.status, response.payload));
   }
-  return response.payload.product || [];
+  const products = response.payload.product || [];
+  console.info("NTW inventory lookup succeeded", { searchType, productCount: products.length });
+  return products;
 }
 
 function addressLabel(address: NtwAddress | undefined) {
