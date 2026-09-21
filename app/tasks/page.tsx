@@ -24,7 +24,7 @@ type Task = {
   archived: boolean | null;
 };
 
-export const TASK_TYPES = [
+const TASK_TYPES = [
   "Brake Service",
   "Oil Change",
   "Air Filter Service",
