@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
 import { supplierOffers } from "@/lib/tire-supplier-offers";
+import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 
 type Product = {
   id: string;
@@ -156,8 +157,8 @@ export default function TireShoppingBeta({
     [trims, setTrims] = useState<string[]>([]),
     [fitmentOptions, setFitmentOptions] = useState<FitmentOption[]>([]);
   const [fitmentLoading, setFitmentLoading] = useState("");
-  const [brand, setBrand] = useState("All"),
-    [minPrice, setMinPrice] = useState(""),
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [minPrice, setMinPrice] = useState(""),
     [maxPrice, setMaxPrice] = useState(""),
     [minWarranty, setMinWarranty] = useState("0"),
     [loadRange, setLoadRange] = useState("All"),
@@ -315,15 +316,10 @@ export default function TireShoppingBeta({
     ],
     [products],
   );
-  const brands = useMemo(
-    () => [
-      "All",
-      ...Array.from(
-        new Set(products.map((item) => item.brand).filter(Boolean)),
-      ).sort(),
-    ],
-    [products],
-  );
+  const brands = useMemo(() => tireBrands(products), [products]);
+  useEffect(() => {
+    setSelectedBrands((current) => current.filter((brand) => brands.includes(brand)));
+  }, [brands]);
   const loadRanges = useMemo(
     () => [
       "All",
@@ -355,7 +351,7 @@ export default function TireShoppingBeta({
             (!availableOnly ||
               tire.availability.local + tire.availability.localPlus > 0) &&
             (!snowOnly || tire.snowRated) &&
-            (brand === "All" || tire.brand === brand) &&
+            matchesBrands(tire.brand, selectedBrands) &&
             (!minPrice || installedTotal(tire, quantity) >= Number(minPrice)) &&
             (!maxPrice || installedTotal(tire, quantity) <= Number(maxPrice)) &&
             Number(
@@ -380,7 +376,7 @@ export default function TireShoppingBeta({
         }),
     [
       availableOnly,
-      brand,
+      selectedBrands,
       category,
       loadRange,
       maxPrice,
@@ -905,7 +901,7 @@ export default function TireShoppingBeta({
               type="button"
               onClick={() => {
                 setCategory("All");
-                setBrand("All");
+                setSelectedBrands([]);
                 setMinPrice("");
                 setMaxPrice("");
                 setMinWarranty("0");
@@ -920,14 +916,24 @@ export default function TireShoppingBeta({
               Reset
             </button>
           </div>
-          <label>
-            Brand
-            <select value={brand} onChange={(e) => setBrand(e.target.value)}>
-              {brands.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
+          <div className="tire-beta-brand-filter">
+            <span>Brands</span>
+            <details>
+              <summary aria-label="Choose brands">{selectedBrands.length === 0 ? "All brands" : selectedBrands.length === 1 ? selectedBrands[0] : `${selectedBrands.length} brands selected`}</summary>
+              <div className="tire-beta-brand-options" role="group" aria-label="Filter by brands">
+                <button type="button" onClick={() => setSelectedBrands([])}>Show all brands</button>
+                {brands.map((item) => <label key={item}>
+                  <input type="checkbox" checked={selectedBrands.includes(item)} onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelectedBrands((current) => checked ? [...current, item] : current.filter((brand) => brand !== item));
+                  }} />
+                  <span>{item}</span>
+                </label>)}
+                {!brands.length ? <small>Search for tires to see available brands.</small> : null}
+              </div>
+            </details>
+            {selectedBrands.length > 1 ? <small>{selectedBrands.join(", ")}</small> : null}
+          </div>
           <label>
             Category
             <select

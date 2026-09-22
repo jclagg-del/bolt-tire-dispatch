@@ -156,6 +156,14 @@ body{
 .tire-beta-filters input{box-sizing:border-box;width:100%;max-width:100%;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px;background:#fff;color:#0f172a}.tire-beta-price-range{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;min-width:0}
 .tire-beta-filters .tire-beta-check { display: flex; align-items: center; gap: 8px; }
 .tire-beta-check input { width: 17px; height: 17px; }
+.tire-beta-brand-filter { display: grid; gap: 7px; min-width: 0; font-size: 13px; font-weight: 800; }
+.tire-beta-brand-filter details { min-width: 0; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; }
+.tire-beta-brand-filter summary { padding: 10px; cursor: pointer; overflow-wrap: anywhere; }
+.tire-beta-brand-options { display: grid; gap: 2px; max-height: 260px; overflow-y: auto; padding: 6px 10px; border-top: 1px solid #e2e8f0; }
+.tire-beta-brand-options label { display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; overflow-wrap: anywhere; }
+.tire-beta-brand-options input[type="checkbox"] { width: 17px; height: 17px; flex: 0 0 17px; padding: 0; accent-color: #2563eb; }
+.tire-beta-brand-options button { border: 0; background: transparent; color: #2563eb; cursor: pointer; padding: 8px 0; text-align: left; font: inherit; }
+.tire-beta-brand-filter small { color: #64748b; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .tire-beta-pricing-basis{box-sizing:border-box;display:grid;gap:8px;width:100%;min-width:0;margin:8px 0;padding:10px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;text-align:left;overflow-wrap:anywhere}.tire-beta-pricing-basis>span{display:grid;gap:3px;font-size:12px}.tire-beta-pricing-basis strong{font-size:14px;color:#0f172a}.tire-beta-pricing-basis summary{font-size:12px;color:#1d4ed8;cursor:pointer}.tire-beta-pricing-basis p{font-size:11px;color:#475569;line-height:1.5;margin:8px 0}
 .tire-beta-coming { display: grid; gap: 6px; border-top: 1px solid #e2e8f0; padding-top: 14px; color: #64748b; font-size: 12px; line-height: 1.5; }
 .tire-beta-results { display: grid; gap: 12px; min-width: 0; }
