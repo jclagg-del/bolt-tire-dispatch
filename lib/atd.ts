@@ -31,7 +31,7 @@ async function atdRequest<T>(path: string, body?: unknown): Promise<T> {
     });
     const payload = await response.json().catch(() => ({}));
     if(response.ok)return payload as T;
-    if(attempt===0&&response.status>=500){await new Promise(resolve=>setTimeout(resolve,350));continue}
+    if(path !== "order/place-order" && attempt===0&&response.status>=500){await new Promise(resolve=>setTimeout(resolve,350));continue}
     throw new Error(typeof payload?.errorMessage === "string" ? payload.errorMessage : `ATD request failed (${response.status})`);
   }
   throw new Error("ATD is temporarily unavailable");

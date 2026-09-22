@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
+import CustomerOrderPurchase, { purchaseApi, type PurchaseDetails } from "@/components/CustomerOrderPurchase";
 
 type CustomerOrder = {
   id: number;
@@ -36,6 +37,7 @@ type CustomerOrder = {
   submitted_at: string;
   job_complete: boolean;
   job_completed_at: string | null;
+  purchase?: PurchaseDetails;
 };
 
 type TireOrderDetails = {
@@ -150,9 +152,8 @@ export default function OrdersPage() {
       `)
       .order("submitted_at", { ascending: false });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setErrorMessage(`Error loading orders: ${error.message}`);
       return;
     }
@@ -193,6 +194,16 @@ export default function OrdersPage() {
       }
     }
 
+    let purchases: Record<number, PurchaseDetails> = {};
+    try {
+      // Load in batches so large order histories retain their purchase details.
+      for (let start = 0; start < loadedOrders.length; start += 500) {
+        const result = await purchaseApi({ action: "records", orderIds: loadedOrders.slice(start, start + 500).map(order => order.id) });
+        Object.assign(purchases, result.records || {});
+      }
+    } catch (reason) {
+      setErrorMessage(`Orders loaded, but supplier purchase details could not be refreshed: ${reason instanceof Error ? reason.message : "Please refresh."}`);
+    }
     setOrders(
       loadedOrders.map((order) => {
         const linkedJob = order.approved_job_id
@@ -201,11 +212,14 @@ export default function OrdersPage() {
 
         return {
           ...order,
+          purchase: purchases[order.id],
+          tires_ordered: order.tires_ordered || purchases[order.id]?.status === "placed",
           job_complete: Boolean(linkedJob?.complete),
           job_completed_at: linkedJob?.completed_at || null,
         };
       })
     );
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -471,6 +485,7 @@ export default function OrdersPage() {
 
             <OrderSection
               title={`New Orders (${newOrders.length})`}
+              onPurchased={(orderId, details) => setOrders(current => current.map(order => order.id === orderId ? { ...order, tires_ordered: true, purchase: { ...details, status: "placed" } } : order))}
               orders={newOrders}
               emptyText="No new customer orders."
               workingId={workingId}
@@ -532,6 +547,7 @@ export default function OrdersPage() {
 }
 
 type OrderSectionProps = {
+  onPurchased?: (orderId: number, details: PurchaseDetails) => void;
   title: string;
   orders: CustomerOrder[];
   emptyText: string;
@@ -545,6 +561,7 @@ type OrderSectionProps = {
 };
 
 function OrderSection({
+  onPurchased,
   title,
   orders,
   emptyText,
@@ -557,9 +574,11 @@ function OrderSection({
   router,
 }: OrderSectionProps) {
   const [tireOrderDrafts, setTireOrderDrafts] = useState<Record<number, TireOrderDetails>>({});
+  const [purchasingOrder, setPurchasingOrder] = useState<CustomerOrder | null>(null);
   const updateTireOrderDraft = (orderId: number, updates: Partial<TireOrderDetails>) => {
     setTireOrderDrafts((current) => {
-      const previous = current[orderId] || { supplier: "", deliveryDate: "" };
+      const purchase = orders.find(order => order.id === orderId)?.purchase;
+      const previous = current[orderId] || { supplier: purchase?.status === "placed" ? purchase.supplier : "", deliveryDate: purchase?.status === "placed" ? purchase.deliveryDate || "" : "" };
       return { ...current, [orderId]: { ...previous, ...updates } };
     });
   };
@@ -567,6 +586,10 @@ function OrderSection({
   return (
     <section style={section}>
       <h2 style={sectionTitle}>{title}</h2>
+      {purchasingOrder && <CustomerOrderPurchase order={purchasingOrder} onClose={() => setPurchasingOrder(null)} onComplete={details => {
+        updateTireOrderDraft(purchasingOrder.id, { supplier: details.supplier, deliveryDate: details.deliveryDate || "" });
+        onPurchased?.(purchasingOrder.id, details);
+      }} />}
 
       {orders.length === 0 ? (
         <div style={emptyCard}>{emptyText}</div>
@@ -574,6 +597,7 @@ function OrderSection({
         <div style={orderGrid}>
           {orders.map((order) => {
             const working = workingId === order.id;
+            const draft = tireOrderDrafts[order.id] || { supplier: order.purchase?.status === "placed" ? order.purchase.supplier : "", deliveryDate: order.purchase?.status === "placed" ? order.purchase.deliveryDate || "" : "" };
             const approved =
               order.order_status === "approved";
             const rejected =
@@ -723,12 +747,20 @@ function OrderSection({
                   </a>
                 </div>
 
+                {order.order_status === "new" && <div style={{ marginTop: 16 }}>
+                  <button type="button" style={openJobButton} disabled={working || Boolean(purchasingOrder) || (order.tires_ordered && !order.purchase) || !order.tire_product_number || !order.job_number} onClick={() => setPurchasingOrder(order)}>
+                    {order.purchase?.status === "placed" ? "View supplier confirmation" : order.purchase ? "Check supplier order" : "Order tires by product number"}
+                  </button>
+                  {(!order.tire_product_number || !order.job_number) && <p style={{ color: "#92400e", fontSize: 13 }}>A product number and job number are needed to order.</p>}
+                  {order.purchase?.status === "placed" && <p style={{ color: "#166534", fontSize: 13 }}>{order.purchase.supplier} confirmation: {order.purchase.confirmation} · Expected delivery: {order.purchase.deliveryDate ? formatDate(order.purchase.deliveryDate) : "Not provided by supplier"}</p>}
+                  {order.purchase && order.purchase.status !== "placed" && <p style={{ color: "#92400e", fontSize: 13 }}>A supplier order is pending or needs review. Check its status before ordering again.</p>}
+                </div>}
                 <label style={checkboxRow}>
                   <input
                     type="checkbox"
                     checked={order.tires_ordered}
                     onChange={() => onToggleTires(order)}
-                    disabled={working}
+                    disabled={working || Boolean(order.purchase) || Boolean(purchasingOrder)}
                     style={checkbox}
                   />
 
@@ -741,10 +773,10 @@ function OrderSection({
                       Supplier
                       <input
                         list="order-supplier-options"
-                        value={tireOrderDrafts[order.id]?.supplier || ""}
+                        value={draft.supplier}
                         onChange={(event) => updateTireOrderDraft(order.id, { supplier: event.target.value })}
                         placeholder="ATD, U.S. AutoForce, Goodyear…"
-                        disabled={working}
+                        disabled={working || order.purchase?.status === "placed"}
                         style={orderFieldInput}
                       />
                     </label>
@@ -752,7 +784,7 @@ function OrderSection({
                       Expected delivery date
                       <input
                         type="date"
-                        value={tireOrderDrafts[order.id]?.deliveryDate || ""}
+                        value={draft.deliveryDate}
                         onChange={(event) => updateTireOrderDraft(order.id, { deliveryDate: event.target.value })}
                         disabled={working}
                         style={orderFieldInput}
@@ -785,8 +817,8 @@ function OrderSection({
                     <>
                       <button
                         type="button"
-                        onClick={() => onApprove(order, tireOrderDrafts[order.id])}
-                        disabled={working}
+                        onClick={() => onApprove(order, draft)}
+                        disabled={working || Boolean(purchasingOrder) || Boolean(order.purchase && order.purchase.status !== "placed")}
                         style={approveButton}
                       >
                         {working

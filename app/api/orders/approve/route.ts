@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
+import { purchasingRequestId, supplierOrderDetails } from "@/lib/customer-order-purchasing";
 
 type CustomerOrder = {
   id: number;
@@ -103,6 +104,16 @@ export async function POST(request: NextRequest) {
     if (error || !data) return NextResponse.json({ error: error?.message || "Order not found." }, { status: 404 });
     const order = data as CustomerOrder;
     if (order.approved_job_id) return NextResponse.json({ jobId: order.approved_job_id, existing: true });
+
+    const { data: purchase, error: purchaseError } = await admin.from("supplier_orders").select("status,response").eq("request_id", purchasingRequestId(id)).maybeSingle();
+    if (purchaseError) throw new Error(`Supplier order details could not be loaded: ${purchaseError.message}`);
+    if (purchase && purchase.status !== "placed") return NextResponse.json({ error: "The supplier purchase needs confirmation before creating the job. Check Supplier Orders first." }, { status: 409 });
+    if (purchase?.status === "placed") {
+      const saved = supplierOrderDetails(purchase.response);
+      tireOrder.supplier = saved.supplier;
+      tireOrder.deliveryDate = tireOrder.deliveryDate || saved.deliveryDate;
+      order.tires_ordered = true;
+    }
 
     const existingJobId = await linkExistingJob(admin, order, tireOrder);
     if (existingJobId) return NextResponse.json({ jobId: existingJobId, existing: true });

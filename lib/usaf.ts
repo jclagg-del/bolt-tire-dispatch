@@ -27,6 +27,14 @@ export type UsaForceTire = {
   availability: UsaForceAvailability[];
 };
 
+export function usaForceOrderingStatus() {
+  const url = (process.env.USAF_API_URL?.trim() || DEFAULT_TEST_URL).replace(/\/$/, "");
+  return {
+    configured: Boolean(process.env.USAF_API_USER?.trim() && process.env.USAF_API_PASSWORD && process.env.USAF_ACCOUNT_NUMBER?.trim()),
+    production: url === "https://services.usautoforce.com/integrationservice.asmx",
+  };
+}
+
 function config(): UsaForceConfig {
   const user = process.env.USAF_API_USER?.trim();
   const password = process.env.USAF_API_PASSWORD;
@@ -40,7 +48,7 @@ function config(): UsaForceConfig {
   };
 }
 
-function escapeXml(value: string | number) {
+export function escapeXml(value: string | number) {
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -58,13 +66,27 @@ function decodeXml(value: string) {
     .replaceAll("&amp;", "&");
 }
 
-function first(xml: string, tag: string) {
-  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "i"));
-  return match ? decodeXml(match[1].trim()) : null;
+export function first(xml: string, tag: string) {
+  const value = blocks(xml, tag)[0];
+  return value ? decodeXml(value.trim()) : null;
 }
 
-function blocks(xml: string, tag: string) {
-  return [...xml.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "gi"))].map((match) => match[1]);
+export function blocks(xml: string, tag: string) {
+  // BranchDto repeats quantityAvailable inside the outer quantityAvailable list.
+  // Balance same-name tags so the first inner closing tag cannot truncate a list.
+  const tokens = new RegExp(`<(/?)(?:[\\w-]+:)?${tag}(?=[\\s/>])[^>]*>`, "gi");
+  const results: string[] = [];
+  let depth = 0, start = 0;
+  for (const token of xml.matchAll(tokens)) {
+    if (token[1]) {
+      if (depth > 0 && --depth === 0) results.push(xml.slice(start, token.index));
+    } else if (/\/\s*>$/.test(token[0])) {
+      if (depth === 0) results.push("");
+    } else {
+      if (depth++ === 0) start = token.index! + token[0].length;
+    }
+  }
+  return results;
 }
 
 function number(value: string | null) {
@@ -81,7 +103,7 @@ function envelope(configured: UsaForceConfig, body: string) {
 </soap:Envelope>`;
 }
 
-async function call(method: string, request: string) {
+export async function call(method: string, request: string) {
   const configured = config();
   const response = await fetch(configured.url, {
     method: "POST",
@@ -94,11 +116,13 @@ async function call(method: string, request: string) {
     signal: AbortSignal.timeout(20_000),
   });
   const xml = await response.text();
-  if (!response.ok) throw new Error(`U.S. AutoForce returned HTTP ${response.status}.`);
   const fault = first(xml, "faultstring");
   if (fault) throw new Error(fault);
-  const errorCode = first(xml, "errorCode");
-  const errorMessage = first(xml, "errorMessage");
+  if (!response.ok) throw new Error(`U.S. AutoForce returned HTTP ${response.status}.`);
+  const result = blocks(xml, `${method}Result`)[0];
+  if (result === undefined) throw new Error("U.S. AutoForce returned an unrecognized response.");
+  const errorCode = first(result, "errorCode");
+  const errorMessage = first(result, "errorMessage");
   if (errorCode && errorCode.toLowerCase() !== "success") {
     throw new Error(errorMessage || `U.S. AutoForce error: ${errorCode}`);
   }
