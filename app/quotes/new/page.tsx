@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 import { BusinessSettings, fallbackBusinessSettings, installationDefault } from "@/lib/business-settings";
 import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
+import QuoteCustomerInput from "@/components/QuoteCustomerInput";
+import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
 
 type QuoteForm = {
   customer: string; contact_name: string; phone: string; email: string; vehicle: string;
@@ -26,6 +28,7 @@ export default function NewQuotePage() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
   const [form, setForm] = useState<QuoteForm>(initialForm);
+  const selectedCustomer = useRef<QuoteCustomer | null>(null);
   const [options, setOptions] = useState<QuoteOption[]>(emptyQuoteOptions.map((option) => ({ ...option })));
   const [settings, setSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [saving, setSaving] = useState(false);
@@ -217,7 +220,9 @@ export default function NewQuotePage() {
       <div className="quote-page-header"><div><div className="quote-eyebrow">{editId ? "Edit quote" : "Quotes"}</div><h1>{editId ? "Edit Tire Quote" : "Build Tire Quote"}</h1><p>{editId ? "Update customer details, tire choices, and pricing." : "Create a visual tire comparison."}</p></div><div className="quote-actions">{editId ? <button onClick={() => router.push(`/quotes/${editId}`)} disabled={saving}>Cancel</button> : null}<button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : editId ? "Save Changes" : "Save Quote"}</button></div></div>
 
       <section className="quote-form-card"><h2>Customer and vehicle</h2><div className="quote-form-grid">
-        <QuoteField label="Customer" value={form.customer} onChange={(value) => setForm({ ...form, customer: value })} />
+        <QuoteCustomerInput value={form.customer}
+          onChange={(value) => setForm((current) => changeQuoteCustomerName(current, value, selectedCustomer.current))}
+          onSelect={(customer) => { selectedCustomer.current = customer; setForm((current) => ({ ...current, ...customer })); }} />
         <QuoteField label="Contact name" value={form.contact_name} onChange={(value) => setForm({ ...form, contact_name: value })} />
         <QuoteField label="Phone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
         <QuoteField label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} />

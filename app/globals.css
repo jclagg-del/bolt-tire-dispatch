@@ -48,6 +48,13 @@ body{
 .quote-field > span { font-size: 13px; color: #334155; font-weight: 700; }
 .quote-field input, .quote-field select, .quote-field textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 9px; padding: 10px 11px; font: inherit; background: white; color: #0f172a; }
 .quote-field textarea { min-height: 82px; resize: vertical; }
+.quote-customer-lookup { min-width: 0; position: relative; }
+.quote-customer-lookup > small { display: block; margin-top: 6px; color: #64748b; font-size: 12px; }
+.quote-customer-results { position: absolute; left: 0; right: 0; top: 74px; z-index: 20; max-height: 280px; overflow-y: auto; background: #fff; border: 1px solid #cbd5e1; border-radius: 9px; box-shadow: 0 8px 24px #0f172a26; }
+.quote-customer-results button { display: grid; gap: 4px; width: 100%; min-width: 0; text-align: left; padding: 12px; background: white; color: #0f172a; border: 0; border-bottom: 1px solid #e2e8f0; cursor: pointer; overflow-wrap: anywhere; font: inherit; }
+.quote-customer-results button:hover, .quote-customer-results button:focus-visible { background: #eff6ff; }
+.quote-customer-results button span, .quote-customer-results p { font-size: 12px; color: #475569; }
+.quote-customer-results p { padding: 10px 12px; margin: 0; }
 .quote-field.quote-check { display: flex; flex-direction: row; align-items: center; font-weight: 700; color: #334155; }
 .quote-field.quote-check input { width: auto; }
 .quote-full { grid-column: 1 / -1; }
