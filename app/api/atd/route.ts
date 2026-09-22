@@ -32,6 +32,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const authorized = await staffAuthorized(request);
     const includeCost = Boolean(body.internal) && Boolean(authorized);
+    // Internal searches must never silently fall back to public catalog data.
+    // That fallback hides expired staff sessions and also prevents connected
+    // suppliers (such as NTW in QA) from being queried.
+    if (body.internal && !authorized) {
+      return NextResponse.json({ error: "Staff access is required. Please sign in again." }, { status: 401 });
+    }
     if (["preview-order", "place-order"].includes(body.action)) {
       if (!authorized) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       const quantity = Number(body.quantity);

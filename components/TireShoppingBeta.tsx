@@ -187,19 +187,28 @@ export default function TireShoppingBeta({
   }, [imagePreview]);
 
   async function atdApi(body: Record<string, unknown>) {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+    const requestWithSession = async (accessToken?: string) => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+      return fetch("/api/atd", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...body, internal }),
+      });
     };
-    if (internal) {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.access_token)
-        headers.Authorization = `Bearer ${data.session.access_token}`;
+
+    let sessionData = internal ? (await supabase.auth.getSession()).data : { session: null };
+    let response = await requestWithSession(sessionData.session?.access_token);
+
+    // A browser can retain an expired access token while the refresh token is
+    // still valid. Refresh only after the API rejects the session, then retry
+    // once so normal searches do not add an extra auth round trip.
+    if (internal && response.status === 401) {
+      const refreshed = await supabase.auth.refreshSession();
+      sessionData = refreshed.data;
+      response = await requestWithSession(sessionData.session?.access_token);
     }
-    const response = await fetch("/api/atd", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ ...body, internal }),
-    });
+
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Supplier search failed");
     return payload;
