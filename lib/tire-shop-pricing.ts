@@ -19,3 +19,12 @@ export function supplierCostLabel(cost?: number | null): string {
     ? `Cost $${cost.toFixed(2)} / tire`
     : "Cost unavailable";
 }
+
+export function markupPricing(cost: number, markupPercent: number, minimumProfit: number, category: "passenger" | "truck") {
+  return {
+    suggestedPrice: Number.isFinite(cost) && cost > 0 ? Math.ceil(cost + Math.max(cost * markupPercent / 100, minimumProfit)) : null,
+    pricingMarkupPercent: markupPercent,
+    pricingMinimumProfit: minimumProfit,
+    pricingCategory: category,
+  };
+}

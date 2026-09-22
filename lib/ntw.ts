@@ -2,6 +2,7 @@ import "server-only";
 import { request as httpsRequest } from "node:https";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
+import { markupPricing } from "@/lib/tire-shop-pricing";
 
 const baseUrl = (process.env.NTW_API_URL || "https://tbcservicesqa.tbccorp.com/tbccorp/qa/tbc/api/v2/products/tires").trim();
 export const ntwEnvironment = (process.env.NTW_ENVIRONMENT || "qa").trim().toLowerCase();
@@ -233,7 +234,7 @@ function presentProducts(products: NtwProduct[], includeCost: boolean, settings:
       quotePrice,
       installedPrice: estimatedTotals[1],
       estimatedTotals,
-      ...(includeCost ? { cost, map: 0, msrp: 0 } : {}),
+      ...(includeCost ? { cost, map: 0, msrp: 0, ...markupPricing(cost, markup, minimumProfit, truck ? "truck" : "passenger") } : {}),
       availability: { local: localQuantity, localPlus: nearbyQuantity, nationwide: localQuantity + nearbyQuantity },
       warehouseInventory: warehouses,
       qaOnly: ntwEnvironment !== "production",

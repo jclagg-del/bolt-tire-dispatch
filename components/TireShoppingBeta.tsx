@@ -17,6 +17,11 @@ type Product = {
   loadSpeed: string;
   warranty: string;
   cost?: number;
+  map?: number;
+  suggestedPrice?: number | null;
+  pricingMarkupPercent?: number;
+  pricingMinimumProfit?: number;
+  pricingCategory?: "passenger" | "truck";
   quotePrice: number;
   installedPrice: number;
   estimatedTotals: Record<string, number>;
@@ -1393,11 +1398,20 @@ export default function TireShoppingBeta({
                       </>
                     )}
                     <div className="tire-beta-customer-price">
-                      <span>Tire price</span>
+                      <span>{internal ? "Current tire price" : "Tire price"}</span>
                       <strong>
                         ${tire.quotePrice.toFixed(2)} <small>each</small>
                       </strong>
                     </div>
+                    {internal && <div className="tire-beta-pricing-basis">
+                      <span>Suggested price (markup) <strong>{tire.suggestedPrice != null ? `$${tire.suggestedPrice.toFixed(2)} / tire` : "Unavailable"}</strong></span>
+                      <span>Supplier-reported MAP <strong>{tire.map != null && tire.map > 0 ? `$${tire.map.toFixed(2)} / tire` : "Not provided"}</strong></span>
+                      <details><summary>Price calculation</summary>
+                        <p>{tire.pricingMarkupPercent}% markup or ${tire.pricingMinimumProfit?.toFixed(2)} minimum profit, whichever is higher; rounded up to the next dollar. Uses your {tire.pricingCategory === "truck" ? "light-truck" : "passenger"} pricing settings.</p>
+                        <p>MAP is reported by {supplierName(tire.supplier)}{tire.supplier === "USAF" ? "’s inventory feed (Map column)" : ""}; not independently verified. It is separate from your markup suggestion.</p>
+                        <p>The current tire price above is still used for quotes and customer totals. This comparison does not change it.</p>
+                      </details>
+                    </div>}
                     {!staggered && (
                       <div className="tire-beta-total-price">
                         <span>Estimated total for {quantity}</span>

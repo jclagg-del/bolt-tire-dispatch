@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
+import { markupPricing } from "@/lib/tire-shop-pricing";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
 export const atdEnvironment = (process.env.ATD_ENVIRONMENT || "sandbox").trim().toLowerCase();
@@ -148,7 +149,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       quotePrice: customerPricing.quotePrice,
       installedPrice: customerPricing.installedPrice,
       estimatedTotals,
-      ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0) } : {}),
+      ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0), ...markupPricing(cost, truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent, truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit, truck ? "truck" : "passenger") } : {}),
       availability: { local: stock?.local || 0, localPlus: stock?.localplus || 0, nationwide: stock?.nationwide || 0 },
     };
   });
