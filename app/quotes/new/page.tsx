@@ -46,8 +46,9 @@ export default function NewQuotePage() {
       const next = (data as BusinessSettings | null) || fallbackBusinessSettings;
       setSettings(next);
       if (!editId) applyPricing(next, "passenger", 4);
+      return next;
     };
-    await loadSettings();
+    const loadedPricing = await loadSettings();
 
     if (editId) {
       const { data, error } = await supabase.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", editId).single();
@@ -101,6 +102,7 @@ export default function NewQuotePage() {
           const tiers: QuoteOption["tier"][] = ["good", "better", "best"];
           const front = chosen.find((tire) => tire.fitmentPosition === "front");
           const rear = chosen.find((tire) => tire.fitmentPosition === "rear");
+          if (!draft) applyPricing(loadedPricing, "passenger", front && rear ? 4 : selection.quantity || 4);
           setSplitFitment(Boolean(front && rear));
           setForm((current) => ({ ...current, tire_size: front?.size || selection.tireSize || current.tire_size, quantity: front && rear ? "2" : draft ? current.quantity : String(selection.quantity || 4), rear_tire_size: rear?.size || "", rear_quantity: rear ? "2" : "" }));
           setOptions(emptyQuoteOptions.map((option, index) => {
