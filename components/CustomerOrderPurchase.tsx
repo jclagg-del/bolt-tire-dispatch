@@ -33,7 +33,7 @@ function date(value: string | null) {
 }
 function money(value: number | null) { return value == null ? "Unavailable" : `$${value.toFixed(2)}`; }
 
-export default function CustomerOrderPurchase({ order, onClose, onComplete }: { order: Order; onClose: () => void; onComplete: (details: PurchaseDetails) => void }) {
+export default function CustomerOrderPurchase({ order, onClose, onComplete, api = purchaseApi }: { order: Order; onClose: () => void; onComplete: (details: PurchaseDetails) => void; api?: typeof purchaseApi }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [supplier, setSupplier] = useState("USAF");
   const [lineCode, setLineCode] = useState("");
@@ -57,10 +57,10 @@ export default function CustomerOrderPurchase({ order, onClose, onComplete }: { 
     let active = true;
     closeButton.current?.focus();
     setBusy(true); setError(""); setPreview(null); setProducts([]); setProduct(""); setBranch("");
-    purchaseApi({ action: "configuration" }).then(configuration => {
+    api({ action: "configuration" }).then(configuration => {
       if (!active) return null;
       setSandbox(!configuration.connections[supplier].production);
-      return purchaseApi({ action: "search", orderId: order.id, supplier, lineCode: lookupLineCode });
+      return api({ action: "search", orderId: order.id, supplier, lineCode: lookupLineCode });
     }).then(result => {
       if (!active) return;
       if (!result) return;
@@ -85,7 +85,7 @@ export default function CustomerOrderPurchase({ order, onClose, onComplete }: { 
     if (inFlight.current || !product || completed) return;
     inFlight.current = true; setBusy(true); setPlacing(action === "place"); setError("");
     try {
-      const result = await purchaseApi({ action, orderId: order.id, supplier, lineCode, branch, productNumber: product, expectedTotal: preview?.total, expectedPo: order.job_number, expectedQuantity: order.qty, expectedDeliveryDate: preview?.deliveryDate });
+      const result = await api({ action, orderId: order.id, supplier, lineCode, branch, productNumber: product, expectedTotal: preview?.total, expectedPo: order.job_number, expectedQuantity: order.qty, expectedDeliveryDate: preview?.deliveryDate });
       if (result.completed) {
         setCompleted(result.completed); setWarning(result.warning || ""); onComplete(result.completed);
       } else { setPreview(result.preview); setSandbox(Boolean(result.sandbox)); }
