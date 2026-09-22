@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
+import { supplierOffers } from "@/lib/tire-supplier-offers";
 
 type Product = {
   id: string;
@@ -429,14 +430,7 @@ export default function TireShoppingBeta({
     setOrderConfirmation("");
   }
   function supplierMatches(tire: Product) {
-    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const identifiers = new Set([tire.manufacturerProductNumber, tire.atdProductNumber].map((value) => normalize(value || "")).filter(Boolean));
-    return products.filter((candidate) => {
-      if (tire.tireLibraryId && candidate.tireLibraryId === tire.tireLibraryId) return true;
-      const candidateIdentifiers = [candidate.manufacturerProductNumber, candidate.atdProductNumber].map((value) => normalize(value || "")).filter(Boolean);
-      if (candidateIdentifiers.some((identifier) => identifiers.has(identifier))) return true;
-      return normalize(candidate.brand) === normalize(tire.brand) && normalize(candidate.model) === normalize(tire.model) && normalize(candidate.size) === normalize(tire.size);
-    });
+    return supplierOffers(tire, products);
   }
   function closeOrder() {
     if (orderBusy) return;
@@ -1107,11 +1101,7 @@ export default function TireShoppingBeta({
           ) : (
             results.map((tire) => {
               const isSelected = selected.some((item) => item.id === tire.id);
-              const supplierAvailability = Array.from(
-                new Map(
-                  supplierMatches(tire).map((match) => [match.supplier || "ATD", match]),
-                ).values(),
-              ).sort((a, b) => (a.supplier === "ATD" ? -1 : b.supplier === "ATD" ? 1 : 0));
+              const supplierAvailability = supplierMatches(tire);
               return (
                 <article
                   className={`tire-beta-product ${isSelected ? "selected" : ""}`}
