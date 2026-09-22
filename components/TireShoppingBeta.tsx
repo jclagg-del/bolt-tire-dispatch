@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { installedTotal, tireGrossProfit } from "@/lib/tire-shop-pricing";
 
 type Product = {
   id: string;
@@ -349,8 +350,8 @@ export default function TireShoppingBeta({
               tire.availability.local + tire.availability.localPlus > 0) &&
             (!snowOnly || tire.snowRated) &&
             (brand === "All" || tire.brand === brand) &&
-            (!minPrice || tire.installedPrice >= Number(minPrice)) &&
-            (!maxPrice || tire.installedPrice <= Number(maxPrice)) &&
+            (!minPrice || installedTotal(tire, quantity) >= Number(minPrice)) &&
+            (!maxPrice || installedTotal(tire, quantity) <= Number(maxPrice)) &&
             Number(
               (tire.warranty.match(/[\d,]+/)?.[0] || "0").replace(/,/g, ""),
             ) >= Number(minWarranty) &&
@@ -368,12 +369,8 @@ export default function TireShoppingBeta({
               (a.availability.local + a.availability.localPlus)
             );
           if (sort === "margin")
-            return (
-              b.installedPrice -
-              (b.cost || 0) -
-              (a.installedPrice - (a.cost || 0))
-            );
-          return a.installedPrice - b.installedPrice;
+            return tireGrossProfit(b) - tireGrossProfit(a);
+          return installedTotal(a, quantity) - installedTotal(b, quantity);
         }),
     [
       availableOnly,
@@ -384,6 +381,7 @@ export default function TireShoppingBeta({
       minPrice,
       minWarranty,
       products,
+      quantity,
       rebateOnly,
       runFlatOnly,
       snowOnly,
@@ -944,7 +942,7 @@ export default function TireShoppingBeta({
           </label>
           <div className="tire-beta-price-range">
             <label>
-              Min installed
+              Min installed total
               <input
                 type="number"
                 min="0"
@@ -955,7 +953,7 @@ export default function TireShoppingBeta({
               />
             </label>
             <label>
-              Max installed
+              Max installed total
               <input
                 type="number"
                 min="0"
@@ -1397,7 +1395,7 @@ export default function TireShoppingBeta({
                         <span>
                           Gross profit{" "}
                           <strong>
-                            ${(tire.quotePrice - (tire.cost || 0)).toFixed(2)}
+                            ${tireGrossProfit(tire).toFixed(2)}
                           </strong>
                         </span>
                         <small>{supplierName(tire.supplier)}{tire.qaOnly ? " QA test" : ""} · {tire.atdProductNumber}</small>
@@ -1414,10 +1412,7 @@ export default function TireShoppingBeta({
                         <span>Estimated total for {quantity}</span>
                         <strong>
                           $
-                          {Number(
-                            tire.estimatedTotals?.[String(quantity)] ??
-                              tire.installedPrice * quantity,
-                          ).toFixed(2)}
+                          {installedTotal(tire, quantity).toFixed(2)}
                         </strong>
                         <small>tires, installation & standard fees</small>
                       </div>
