@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { installedTotal, tireGrossProfit } from "@/lib/tire-shop-pricing";
+import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
 
 type Product = {
   id: string;
@@ -1326,6 +1326,7 @@ export default function TireShoppingBeta({
                         {supplierAvailability.map((match) => (
                           <span key={match.supplier || "ATD"}>
                             <strong>{supplierName(match.supplier)}{match.qaOnly ? " QA" : ""}</strong>
+                            {` · `}<strong>{supplierCostLabel(match.cost)}</strong>
                             {` · ${localWarehouseName(match.supplier)} `}
                             <strong>{match.availability.local}</strong>
                             {` · nearby `}

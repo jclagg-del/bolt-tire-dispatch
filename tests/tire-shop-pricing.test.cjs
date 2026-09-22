@@ -7,7 +7,7 @@ const mod = new Module(__filename, module);
 mod._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/tire-shop-pricing.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 }).outputText, __filename);
-const { installedTotal, tireGrossProfit } = mod.exports;
+const { installedTotal, tireGrossProfit, supplierCostLabel } = mod.exports;
 
 const tires = [
   { model: 'Weatherready', installedPrice: 280, quotePrice: 251, cost: 200, estimatedTotals: { 1: 280, 4: 1341, 2: 700 } },
@@ -25,4 +25,12 @@ test('fallback matches display and gross profit excludes service charges', () =>
   assert.equal(installedTotal({ installedPrice: 100, quotePrice: 80 }, 3), 300);
   assert.equal(tireGrossProfit(tires[0]), 51);
   assert.equal(tireGrossProfit(tires[1]), 22);
+});
+
+test('each supplier cost is per tire with missing prices explicitly unavailable', () => {
+  assert.equal(supplierCostLabel(220.99), 'Cost $220.99 / tire');
+  assert.equal(supplierCostLabel(208), 'Cost $208.00 / tire');
+  for (const missing of [undefined, null, 0, -1, NaN, Infinity]) {
+    assert.equal(supplierCostLabel(missing), 'Cost unavailable');
+  }
 });

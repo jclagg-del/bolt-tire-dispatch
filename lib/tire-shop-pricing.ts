@@ -13,3 +13,9 @@ export function installedTotal(tire: ShopPrice, quantity: number): number {
 export function tireGrossProfit(tire: ShopPrice): number {
   return tire.quotePrice - (tire.cost || 0);
 }
+
+export function supplierCostLabel(cost?: number | null): string {
+  return typeof cost === "number" && Number.isFinite(cost) && cost > 0
+    ? `Cost $${cost.toFixed(2)} / tire`
+    : "Cost unavailable";
+}
