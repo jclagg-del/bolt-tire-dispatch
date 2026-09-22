@@ -156,6 +156,17 @@ body{
 .tire-beta-filters input{box-sizing:border-box;width:100%;max-width:100%;min-width:0;border:1px solid #cbd5e1;border-radius:9px;padding:10px;background:#fff;color:#0f172a}.tire-beta-price-range{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;min-width:0}
 .tire-beta-filters .tire-beta-check { display: flex; align-items: center; gap: 8px; }
 .tire-beta-check input { width: 17px; height: 17px; }
+.tire-beta-quote-selection { min-width: 0; }
+.tire-beta-quote-selected { display: grid; gap: 7px; min-width: 0; margin-bottom: 12px; padding: 14px 16px; border: 1px solid #bdd3ff; border-radius: 14px; background: #f8faff; }
+.tire-beta-quote-selected > small { color: #53647d; font-size: 12px; }
+.tire-beta-quote-selected ul { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; padding: 0; margin: 4px 0 0; list-style: none; min-width: 0; }
+.tire-beta-quote-selected li { min-width: 0; }
+.tire-beta-quote-selected label { box-sizing: border-box; height: 100%; display: grid; grid-template-columns: 20px minmax(0,1fr); align-content: start; align-items: start; gap: 10px; padding: 10px; background: white; border: 1px solid #dbe3ee; border-radius: 9px; cursor: pointer; }
+.tire-beta-quote-selected input[type="checkbox"] { width: 18px; height: 18px; padding: 0; margin: 0; accent-color: #2563eb; }
+.tire-beta-quote-selected-info { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.tire-beta-quote-selected-info > span { color: #53647d; font-size: 12px; }
+.tire-beta-quote-selected-price { grid-column: 2; white-space: nowrap; font-size: 13px; }
+@media(max-width:700px) { .tire-beta-quote-selected ul { grid-template-columns: 1fr; } }
 .tire-beta-brand-filter { display: grid; gap: 7px; min-width: 0; font-size: 13px; font-weight: 800; }
 .tire-beta-brand-filter details { min-width: 0; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; }
 .tire-beta-brand-filter summary { padding: 10px; cursor: pointer; overflow-wrap: anywhere; }

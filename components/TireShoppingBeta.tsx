@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
 import { supplierOffers } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
+import SelectedQuoteTires from "@/components/SelectedQuoteTires";
 
 type Product = {
   id: string;
@@ -1071,6 +1072,7 @@ export default function TireShoppingBeta({
             </div>
           </div>
           {internal && searched && (
+            <section className="tire-beta-quote-selection">
             <div className="tire-beta-quote-tray">
               <div>
                 <strong>{selected.length} of 3 selected</strong>
@@ -1084,6 +1086,8 @@ export default function TireShoppingBeta({
                 Generate Quote
               </button>
             </div>
+            <SelectedQuoteTires tires={selected} onRemove={(id) => setSelected((items) => items.filter((item) => item.id !== id))} />
+            </section>
           )}
           {staggered && (
             <div className="tire-beta-staggered-note">
