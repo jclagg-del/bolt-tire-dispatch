@@ -7,6 +7,7 @@ import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-s
 import { supplierOffers } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import SelectedQuoteTires from "@/components/SelectedQuoteTires";
+import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 
 type Product = {
   id: string;
@@ -140,6 +141,7 @@ export default function TireShoppingBeta({
   const [sort, setSort] = useState(internal ? "margin" : "price");
   const [quantity, setQuantity] = useState(4);
   const [selected, setSelected] = useState<Product[]>([]);
+  const [resumingQuote, setResumingQuote] = useState(false);
   const [mode, setMode] = useState<"size" | "vehicle" | "part">(
     internal ? "size" : "vehicle",
   );
@@ -183,6 +185,25 @@ export default function TireShoppingBeta({
   const [warehouseError, setWarehouseError] = useState("");
   const [warehouseDetails, setWarehouseDetails] = useState<WarehouseDetail[]>([]);
   const [detailLoading, setDetailLoading] = useState("");
+  useEffect(() => {
+    if (!internal) return;
+    const saved = readShoppingSession<{
+      query: string; products: Product[]; selected: Product[]; quantity: number;
+      category: string; selectedBrands: string[]; minPrice: string; maxPrice: string;
+      minWarranty: string; loadRange: string; speedRating: string; availableOnly: boolean;
+      snowOnly: boolean; runFlatOnly: boolean; rebateOnly: boolean; sort: string;
+      mode: "size" | "vehicle" | "part"; partNumber: string; vehicle: typeof vehicle;
+      years: string[]; makes: string[]; models: string[]; trims: string[]; fitmentOptions: FitmentOption[];
+    }>(sessionStorage, shopSessionKey);
+    if (!saved || !Array.isArray(saved.products) || !Array.isArray(saved.selected)) return;
+    setQuery(saved.query); setProducts(saved.products); setSelected(saved.selected); setQuantity(saved.quantity);
+    setCategory(saved.category); setSelectedBrands(saved.selectedBrands); setMinPrice(saved.minPrice); setMaxPrice(saved.maxPrice);
+    setMinWarranty(saved.minWarranty); setLoadRange(saved.loadRange); setSpeedRating(saved.speedRating);
+    setAvailableOnly(saved.availableOnly); setSnowOnly(saved.snowOnly); setRunFlatOnly(saved.runFlatOnly); setRebateOnly(saved.rebateOnly);
+    setSort(saved.sort); setMode(saved.mode); setPartNumber(saved.partNumber); setVehicle(saved.vehicle);
+    setYears(saved.years); setMakes(saved.makes); setModels(saved.models); setTrims(saved.trims); setFitmentOptions(saved.fitmentOptions);
+    setSearched(true); setResumingQuote(!!readShoppingSession(sessionStorage, quoteDraftKey));
+  }, [internal]);
   useEffect(() => {
     if (!internal && !years.length) loadFitment("years");
   }, [internal]);
@@ -319,6 +340,7 @@ export default function TireShoppingBeta({
   );
   const brands = useMemo(() => tireBrands(products), [products]);
   useEffect(() => {
+    if (!products.length) return;
     setSelectedBrands((current) => current.filter((brand) => brands.includes(brand)));
   }, [brands]);
   const loadRanges = useMemo(
@@ -404,10 +426,17 @@ export default function TireShoppingBeta({
 
   function buildQuote() {
     if (!selected.length) return;
+    try {
+      saveShoppingSession(sessionStorage, shopSessionKey, {
+        query, products, selected, quantity, category, selectedBrands, minPrice, maxPrice,
+        minWarranty, loadRange, speedRating, availableOnly, snowOnly, runFlatOnly, rebateOnly,
+        sort, mode, partNumber, vehicle, years, makes, models, trims, fitmentOptions,
+      });
     sessionStorage.setItem(
       "bolt-tire-quote-selection",
-      JSON.stringify({ tireSize: query, products: selected }),
+      JSON.stringify({ tireSize: query, products: selected, quantity }),
     );
+    } catch { alert("Your browser could not keep this shopping session. Please free some browser storage and try again so your selections are not lost."); return; }
     router.push("/quotes/new?from=tire-shop");
   }
   function beginOrder(tire: Product) {
@@ -1077,13 +1106,14 @@ export default function TireShoppingBeta({
               <div>
                 <strong>{selected.length} of 3 selected</strong>
                 <span>Choose up to three tires to compare on the quote.</span>
+                {resumingQuote ? <span>Restored your previous search. Search again to refresh prices and availability.</span> : null}
               </div>
               <button
                 type="button"
                 disabled={!selected.length}
                 onClick={buildQuote}
               >
-                Generate Quote
+                {resumingQuote ? "Return to Quote" : "Generate Quote"}
               </button>
             </div>
             <SelectedQuoteTires tires={selected} onRemove={(id) => setSelected((items) => items.filter((item) => item.id !== id))} />

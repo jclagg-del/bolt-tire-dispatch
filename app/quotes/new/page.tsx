@@ -8,6 +8,7 @@ import { BusinessSettings, fallbackBusinessSettings, installationDefault } from 
 import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
 import QuoteCustomerInput from "@/components/QuoteCustomerInput";
 import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
+import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 
 type QuoteForm = {
   customer: string; contact_name: string; phone: string; email: string; vehicle: string;
@@ -29,6 +30,7 @@ export default function NewQuotePage() {
   const editId = searchParams.get("edit");
   const [form, setForm] = useState<QuoteForm>(initialForm);
   const selectedCustomer = useRef<QuoteCustomer | null>(null);
+  const shopSelection = useRef<string | null>(null);
   const [options, setOptions] = useState<QuoteOption[]>(emptyQuoteOptions.map((option) => ({ ...option })));
   const [settings, setSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [saving, setSaving] = useState(false);
@@ -78,16 +80,29 @@ export default function NewQuotePage() {
     }
 
     const stored = sessionStorage.getItem("bolt-tire-quote-selection");
+    const draft = searchParams.get("from") === "tire-shop" ? readShoppingSession<{
+      form: QuoteForm; options: QuoteOption[]; splitFitment: boolean; selection: string | null;
+    }>(sessionStorage, quoteDraftKey) : null;
+    if (draft) {
+      setForm(draft.form); setOptions(draft.options); setSplitFitment(draft.splitFitment);
+      shopSelection.current = stored || draft.selection;
+      if (!stored || stored === draft.selection) {
+        sessionStorage.removeItem("bolt-tire-quote-selection");
+        return;
+      }
+    }
     if (stored) {
       try {
-        const selection = JSON.parse(stored) as { tireSize?: string; products?: Array<{ brand:string; model:string; imageUrl:string|null; quotePrice:number; warranty:string; category:string; loadSpeed:string; snowRated:boolean; fitmentPosition?:"front"|"rear"|"both"; size?:string; supplier?:string; atdProductNumber?:string; manufacturerProductNumber?:string; cost?:number; availability:{local:number;localPlus:number;nationwide:number} }> };
+        shopSelection.current = stored;
+        const selection = JSON.parse(stored) as { tireSize?: string; quantity?: number; products?: Array<{ id?:string; brand:string; model:string; imageUrl:string|null; quotePrice:number; warranty:string; category:string; loadSpeed:string; snowRated:boolean; fitmentPosition?:"front"|"rear"|"both"; size?:string; supplier?:string; atdProductNumber?:string; manufacturerProductNumber?:string; cost?:number; availability:{local:number;localPlus:number;nationwide:number} }> };
+        const previousProducts = draft?.selection ? JSON.parse(draft.selection).products || [] : [];
         const chosen = (selection.products || []).slice(0, 3);
         if (chosen.length) {
           const tiers: QuoteOption["tier"][] = ["good", "better", "best"];
           const front = chosen.find((tire) => tire.fitmentPosition === "front");
           const rear = chosen.find((tire) => tire.fitmentPosition === "rear");
           setSplitFitment(Boolean(front && rear));
-          setForm((current) => ({ ...current, tire_size: front?.size || selection.tireSize || current.tire_size, quantity: front && rear ? "2" : current.quantity, rear_tire_size: rear?.size || "", rear_quantity: rear ? "2" : "" }));
+          setForm((current) => ({ ...current, tire_size: front?.size || selection.tireSize || current.tire_size, quantity: front && rear ? "2" : draft ? current.quantity : String(selection.quantity || 4), rear_tire_size: rear?.size || "", rear_quantity: rear ? "2" : "" }));
           setOptions(emptyQuoteOptions.map((option, index) => {
             if (front && rear) {
               if (index > 0) return { ...option };
@@ -96,12 +111,17 @@ export default function NewQuotePage() {
             }
             const tire = chosen[index];
             if (!tire) return { ...option };
+            const previousIndex = previousProducts.findIndex((previous: { id?: string }) => tire.id && previous.id === tire.id);
+            if (draft && !draft.splitFitment && previousIndex >= 0 && draft.options[previousIndex]) {
+              return { ...draft.options[previousIndex], tier: tiers[index], sort_order: option.sort_order };
+            }
             const stock = tire.availability.local || tire.availability.localPlus;
             return {
               ...option, tier: tiers[index], brand: tire.brand, model: tire.model, image_url: tire.imageUrl || "",
               price_per_tire: String(tire.quotePrice), warranty_miles: (tire.warranty.match(/[\d,]+/)?.[0] || "").replace(/,/g, ""),
               tire_type: tire.category, load_speed_rating: tire.loadSpeed, snow_rating: tire.snowRated ? "3PMSF" : "",
               availability: stock ? `In stock (${stock})` : "Special order", recommended: index === Math.min(1, chosen.length - 1),
+              supplier: tire.supplier, supplier_product_id: tire.atdProductNumber, manufacturer_product_id: tire.manufacturerProductNumber, wholesale_cost: tire.cost,
             };
           }));
           sessionStorage.removeItem("bolt-tire-quote-selection");
@@ -210,7 +230,16 @@ export default function NewQuotePage() {
     }
     setSaving(false);
     if (optionError) return alert(`Quote saved, but options failed: ${optionError.message}`);
+    sessionStorage.removeItem(quoteDraftKey);
+    sessionStorage.removeItem(shopSessionKey);
     router.push(`/quotes/${quote.id}`);
+  };
+
+  const backToShop = () => {
+    try {
+      saveShoppingSession(sessionStorage, quoteDraftKey, { form, options, splitFitment, selection: shopSelection.current });
+    } catch { alert("Your browser could not preserve this draft. Save the quote before leaving so your information is not lost."); return; }
+    router.push("/tire-shop");
   };
 
   if (loadingQuote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-empty">Loading quote...</div></main></div>;
@@ -219,6 +248,7 @@ export default function NewQuotePage() {
     <div className="quote-shell"><AppHeader /><main className="quote-page">
       <div className="quote-page-header"><div><div className="quote-eyebrow">{editId ? "Edit quote" : "Quotes"}</div><h1>{editId ? "Edit Tire Quote" : "Build Tire Quote"}</h1><p>{editId ? "Update customer details, tire choices, and pricing." : "Create a visual tire comparison."}</p></div><div className="quote-actions">{editId ? <button onClick={() => router.push(`/quotes/${editId}`)} disabled={saving}>Cancel</button> : null}<button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : editId ? "Save Changes" : "Save Quote"}</button></div></div>
 
+      {!editId ? <div className="quote-actions" style={{ marginBottom: 16 }}><button type="button" onClick={backToShop} disabled={saving || Boolean(uploadingTier)}>← Back to Tire Shop</button><span>Your draft stays in this browser tab while you shop.</span></div> : null}
       <section className="quote-form-card"><h2>Customer and vehicle</h2><div className="quote-form-grid">
         <QuoteCustomerInput value={form.customer}
           onChange={(value) => setForm((current) => changeQuoteCustomerName(current, value, selectedCustomer.current))}
