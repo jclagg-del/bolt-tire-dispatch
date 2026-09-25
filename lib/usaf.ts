@@ -32,6 +32,7 @@ export function usaForceOrderingStatus() {
   return {
     configured: Boolean(process.env.USAF_API_USER?.trim() && process.env.USAF_API_PASSWORD && process.env.USAF_ACCOUNT_NUMBER?.trim()),
     production: url === "https://services.usautoforce.com/integrationservice.asmx",
+    test: url === DEFAULT_TEST_URL,
   };
 }
 

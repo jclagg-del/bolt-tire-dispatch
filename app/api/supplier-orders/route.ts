@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
   const orders = (data || []).map((row) => {
     const response = record(row.response);
-    const order = record(response.order);
+    const order = record(response.order || record(response.preview).order);
     const lines = records(order.orderlines ?? response.orderlines);
     const line = lines[0] || {};
     const fulfillments = records(line.fulfillments ?? order.fulfillments);
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
 
     return {
       id: row.id,
+      testOnly: response.testOnly === true,
       supplier: row.supplier,
       productNumber: row.atd_product_number,
       productDescription: text(line.description, line.productdescription, line.name),

@@ -61,10 +61,16 @@ export async function previewUsafOrder(input: { part: string; lineCode: string; 
   return { supplier: "U.S. AutoForce", order: { ordertotal: total, thresholdmessage: warning, orderlines: [{ description: product.model, fulfillments: [{ quantity: input.quantity, sourcedcname: warehouse.name, estimateddelivery: expectedDate, shipmethod: "U.S. AutoForce truck", status: "Available", freight, branch: input.branch, cutoffDateTime: first(branch, "cutoffDateTime") }] }] }, product, branch: input.branch, lineCode: input.lineCode };
 }
 
-export async function placeUsafOrder(input: { part: string; lineCode: string; branch: string; quantity: number; po: string; mo: string; transaction: string }, preview: Awaited<ReturnType<typeof previewUsafOrder>>) {
-  if (!usaForceOrderingStatus().production) throw new Error("U.S. AutoForce production ordering is not configured.");
+export async function placeUsafOrder(input: { part: string; lineCode: string; branch: string; quantity: number; po: string; mo: string; transaction: string; testMode?: boolean }, preview: Awaited<ReturnType<typeof previewUsafOrder>>) {
+  const connection = usaForceOrderingStatus();
+  if (input.testMode) {
+    if (!connection.test || connection.production || !/^TEST[-A-Z0-9]{1,11}$/.test(input.po)) throw new Error("Test orders require the USAF staging server and a TEST-prefixed PO (15 characters maximum).");
+  } else if (!connection.production) throw new Error("U.S. AutoForce production ordering is not configured.");
+  validatePart(input.part, input.quantity);
+  if (preview.product.atdProductNumber !== input.part || preview.lineCode !== input.lineCode || preview.branch !== input.branch || preview.order.orderlines[0].fulfillments[0].quantity !== input.quantity) throw new Error("The order no longer matches its preview.");
+  const note = input.testMode ? "TEST ONLY - DO NOT FULFILL" : `Job ${input.po} | MO ${input.mo}`;
   // Never retry a purchase after a timeout; the supplier may already have accepted it.
-  const { xml } = await call("Order", request("Order", `${base(input.transaction)}<orderType>NORMAL</orderType><fillFlag>cancelorder</fillFlag><branch>${x(input.branch)}</branch><poNumber>${x(input.po)}</poNumber><deliveryMethod>USAF-TRK</deliveryMethod><shipTo><shipToCode>${x(account())}</shipToCode></shipTo><billTo><billToCode>${x(account())}</billToCode></billTo>${partXml(input.part, input.quantity, input.lineCode)}<comments><CommentDto><type>vehicle</type><text>${x(`Job ${input.po} | MO ${input.mo}`)}</text></CommentDto></comments>`));
+  const { xml } = await call("Order", request("Order", `${base(input.transaction)}<orderType>NORMAL</orderType><fillFlag>cancelorder</fillFlag><branch>${x(input.branch)}</branch><poNumber>${x(input.po)}</poNumber><deliveryMethod>USAF-TRK</deliveryMethod><shipTo><shipToCode>${x(account())}</shipToCode></shipTo><billTo><billToCode>${x(account())}</billToCode></billTo>${partXml(input.part, input.quantity, input.lineCode)}<comments><CommentDto><type>vehicle</type><text>${x(note)}</text></CommentDto></comments>`));
   const result = blocks(xml, "OrderResult")[0];
   const confirmation = first(result, "orderNumber");
   const status = first(result, "status") || "";

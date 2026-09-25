@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
+import UsafPurchase from "@/components/UsafPurchase";
 
 type SupplierOrder = {
   id: string; supplier: string; productNumber: string; productDescription: string | null;
   quantity: number; total: number | null; confirmationNumber: string | null; status: string;
   poNumber: string | null; notes: string | null; createdAt: string; placedBy: string;
   fulfillmentStatus: string | null; expectedDelivery: string | null; source: string | null; shipMethod: string | null;
+  testOnly?: boolean;
 };
 
 function money(value: number | null) {
@@ -31,6 +33,7 @@ export default function SupplierOrdersPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [purchasing, setPurchasing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -61,7 +64,7 @@ export default function SupplierOrdersPage() {
     <main style={page}>
       <section style={hero}>
         <div><div style={eyebrow}>PURCHASING</div><h1 style={title}>Supplier Orders</h1><p style={subtitle}>Track tire orders from every distributor in one place.</p></div>
-        <button type="button" style={refresh} onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh orders"}</button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><button type="button" style={refresh} onClick={() => setPurchasing(true)}>Order from U.S. AutoForce</button><button type="button" style={refresh} onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh orders"}</button></div>
       </section>
 
       <section style={filters}>
@@ -74,7 +77,7 @@ export default function SupplierOrdersPage() {
         <div style={list}>{visible.map((order) => <article key={order.id} style={card}>
           <div style={cardTop}>
             <div><div style={supplier}>{order.supplier}</div><h2 style={product}>{order.productDescription || `Product ${order.productNumber}`}</h2><div style={muted}>Product #{order.productNumber}</div></div>
-            <span style={{ ...badge, ...(order.status === "placed" ? placedBadge : order.status === "failed" ? failedBadge : pendingBadge) }}>{order.status}</span>
+            <span style={{ ...badge, ...(order.testOnly ? pendingBadge : order.status === "placed" ? placedBadge : order.status === "failed" ? failedBadge : pendingBadge) }}>{order.testOnly ? "TEST — " : ""}{order.status}</span>
           </div>
           <div style={grid}>
             <Info label="Confirmation" value={order.confirmationNumber || "Pending"} strong />
@@ -89,6 +92,7 @@ export default function SupplierOrdersPage() {
           {order.notes && <div style={note}><b>Order note:</b> {order.notes}</div>}
         </article>)}</div>}
     </main>
+    {purchasing && <UsafPurchase onClose={() => setPurchasing(false)} onComplete={load} />}
   </div>;
 }
 
