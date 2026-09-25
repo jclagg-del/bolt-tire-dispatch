@@ -14,6 +14,7 @@ mod.require = id => {
   if (id === '@/lib/supabase') return { supabase: {} };
   if (id === '@/components/AppHeader') return { default: () => null };
   if (id === '@/lib/quo') return { getQuoCallUrl: () => null, getQuoTextUrl: () => null };
+  if (id === '@/lib/job-completion') return {};
   return require(id);
 };
 mod._compile(ts.transpileModule(source, {

@@ -3,6 +3,7 @@
 type Props = {
   show: boolean;
   completing: boolean;
+  deliveryOnly?: boolean;
   mileageMissing: boolean;
   mileageConfirmed: boolean;
   torqueConfirmed: boolean;
@@ -15,6 +16,7 @@ type Props = {
 export default function CompletionModal({
   show,
   completing,
+  deliveryOnly = false,
   mileageMissing,
   mileageConfirmed,
   torqueConfirmed,
@@ -26,15 +28,15 @@ export default function CompletionModal({
   if (!show) return null;
 
   const canComplete =
-    !mileageMissing && mileageConfirmed && torqueConfirmed && !completing;
+    (deliveryOnly || (!mileageMissing && mileageConfirmed && torqueConfirmed)) && !completing;
 
   return (
     <div style={modalOverlay}>
       <div style={modalCard}>
-        <h2 style={modalTitle}>Before completing this job</h2>
-        <p style={modalText}>Please confirm the required reminders below.</p>
+        <h2 style={modalTitle}>{deliveryOnly ? "Complete this delivery" : "Before completing this job"}</h2>
+        <p style={modalText}>{deliveryOnly ? "Confirm the tires have been delivered. Mileage and wheel-torque checks are not required for deliveries." : "Please confirm the required reminders below."}</p>
 
-        {mileageMissing && (
+        {!deliveryOnly && <>{mileageMissing && (
           <div style={warningBox}>
             Vehicle mileage has not been entered yet. Add mileage in the form before completing this job.
           </div>
@@ -58,6 +60,7 @@ export default function CompletionModal({
           />
           <span>All wheels have been torqued properly</span>
         </label>
+        </>}
 
         <div style={modalButtonRow}>
           <button type="button" onClick={onCancel} style={modalCancelButton}>

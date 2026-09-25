@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
+import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
 
 type Job = {
   id: string | number;
@@ -294,13 +295,9 @@ export default function RoutePage() {
   const handleComplete = async () => {
     if (!selectedJob || completingId) return;
 
-    if (!routeMileage.trim()) {
-      alert("Please enter vehicle mileage before completing the job.");
-      return;
-    }
-
-    if (!mileageConfirmed || !torqueConfirmed) {
-      alert("Please confirm mileage and wheel torque before completing the job.");
+    const completionError = jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed);
+    if (completionError) {
+      alert(completionError);
       return;
     }
 
@@ -309,7 +306,7 @@ export default function RoutePage() {
     const { error } = await supabase
       .from("jobs")
       .update({
-        vehicle_mileage: routeMileage.trim() || null,
+        ...completionMileageUpdate(selectedJob.service_type, routeMileage),
         complete: true,
         job_status: "completed",
         completed_at: new Date().toISOString(),
@@ -350,8 +347,9 @@ export default function RoutePage() {
   }
 
   const mileageMissing = !routeMileage.trim();
+  const deliveryOnly = isDeliveryService(selectedJob?.service_type);
   const canComplete =
-    !!selectedJob && !mileageMissing && mileageConfirmed && torqueConfirmed && !completingId;
+    !!selectedJob && !jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed) && !completingId;
 
   return (
     <div style={shell}>
@@ -437,14 +435,14 @@ export default function RoutePage() {
       {showCompleteModal && selectedJob && (
         <div style={modalOverlay}>
           <div style={modalCard}>
-            <h2 style={modalTitle}>Before completing this job</h2>
+            <h2 style={modalTitle}>{deliveryOnly ? "Complete this delivery" : "Before completing this job"}</h2>
             <p style={modalText}>
-              Confirm the job is wrapped up properly before marking it complete.
+              {deliveryOnly ? "Confirm the tires have been delivered. Mileage and wheel-torque checks are not required for deliveries." : "Confirm the job is wrapped up properly before marking it complete."}
             </p>
 
             <div style={jobNameBox}>{selectedJob.customer || "Unnamed Job"}</div>
 
-            <input
+            {!deliveryOnly && <><input
               value={routeMileage}
               onChange={(e) => setRouteMileage(e.target.value)}
               style={modalInput}
@@ -476,6 +474,7 @@ export default function RoutePage() {
               />
               <span>All wheels have been torqued properly</span>
             </label>
+            </>}
 
             <div style={modalButtonRow}>
               <button type="button" onClick={closeCompleteModal} style={modalCancelButton}>

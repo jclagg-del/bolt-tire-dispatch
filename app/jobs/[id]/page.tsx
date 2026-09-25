@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
+import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
 import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
 
 type JobForm = {
@@ -85,6 +86,7 @@ export default function EditJobPage() {
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [form, setForm] = useState<JobForm | null>(null);
+  const [savedServiceType, setSavedServiceType] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
@@ -175,6 +177,7 @@ export default function EditJobPage() {
       Number(savedStateFee) !== defaultStateFee
     );
 
+    setSavedServiceType(data.service_type || "");
     setForm({
       customer: data.customer || "",
       contact_name: data.contact_name || "",
@@ -510,15 +513,9 @@ export default function EditJobPage() {
   const handleComplete = async () => {
     if (!id || !form || completing) return;
 
-    if (!form.vehicle_mileage.trim()) {
-      alert("Please enter vehicle mileage before completing the job.");
-      return;
-    }
-
-    if (!mileageConfirmed || !torqueConfirmed) {
-      alert(
-        "Please confirm mileage and wheel torque before completing the job."
-      );
+    const completionError = jobCompletionError(savedServiceType, form.vehicle_mileage, mileageConfirmed, torqueConfirmed);
+    if (completionError) {
+      alert(completionError);
       return;
     }
 
@@ -527,7 +524,7 @@ export default function EditJobPage() {
     const { error } = await supabase
       .from("jobs")
       .update({
-        vehicle_mileage: form.vehicle_mileage.trim() || null,
+        ...completionMileageUpdate(savedServiceType, form.vehicle_mileage),
         complete: true,
         job_status: "completed",
         completed_at: new Date().toISOString(),
@@ -967,6 +964,7 @@ export default function EditJobPage() {
 
       <CompletionModal
         show={showCompleteModal}
+        deliveryOnly={isDeliveryService(savedServiceType)}
         completing={completing}
         mileageMissing={mileageMissing}
         mileageConfirmed={mileageConfirmed}
