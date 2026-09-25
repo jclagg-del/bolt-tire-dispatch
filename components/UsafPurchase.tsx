@@ -17,11 +17,11 @@ async function api(body: Record<string, unknown>) {
 }
 const money = (value: number | null) => value == null ? "Unavailable" : `$${value.toFixed(2)}`;
 
-export default function UsafPurchase({ onClose, onComplete }: { onClose: () => void; onComplete: () => void }) {
+export default function UsafPurchase({ onClose, onComplete, initialPart = "", initialQuantity = 1 }: { onClose: () => void; onComplete: () => void; initialPart?: string; initialQuantity?: number }) {
   const [mode, setMode] = useState<Mode>("unavailable");
   const [ready, setReady] = useState(false);
-  const [part, setPart] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [part, setPart] = useState(initialPart);
+  const [quantity, setQuantity] = useState(initialQuantity);
   const [po, setPo] = useState("");
   const [mo, setMo] = useState("");
   const [products, setProducts] = useState<Product[]>([]);

@@ -7,6 +7,7 @@ import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-s
 import { supplierOffers } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import SelectedQuoteTires from "@/components/SelectedQuoteTires";
+import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 
 type Product = {
@@ -178,6 +179,7 @@ export default function TireShoppingBeta({
     [orderConfirmation, setOrderConfirmation] = useState("");
   const [orderRequestId, setOrderRequestId] = useState("");
   const [orderChoosingSupplier, setOrderChoosingSupplier] = useState(false);
+  const [usafOrderProduct, setUsafOrderProduct] = useState<Product | null>(null);
   const [imagePreview, setImagePreview] = useState<Product | null>(null);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [warehouseProductId, setWarehouseProductId] = useState("");
@@ -1560,6 +1562,12 @@ export default function TireShoppingBeta({
           </section>
         </div>
       ) : null}
+      {internal && usafOrderProduct && <UsafPurchase
+        initialPart={usafOrderProduct.atdProductNumber}
+        initialQuantity={orderQuantity}
+        onClose={() => setUsafOrderProduct(null)}
+        onComplete={() => { /* The dialog shows the receipt; the shop keeps its search. */ }}
+      />}
       {internal && orderProduct ? (
         <div
           className="atd-order-overlay"
@@ -1598,10 +1606,14 @@ export default function TireShoppingBeta({
                 <p>Select where you want to order this exact tire. Connected suppliers with a matching product are available below.</p>
                 {(["ATD", "USAF", "K&M", "NTW"] as const).map((supplier) => {
                   const match = supplierMatches(orderProduct).find((item) => item.supplier === supplier);
-                  const connected = supplier === "ATD" && Boolean(match);
-                  return <button type="button" key={supplier} disabled={!connected} onClick={() => match && beginOrder(match)}>
+                  const connected = (supplier === "ATD" || supplier === "USAF") && Boolean(match);
+                  return <button type="button" key={supplier} disabled={!connected} onClick={() => {
+                    if (!match) return;
+                    if (supplier === "USAF") { setUsafOrderProduct(match); setOrderProduct(null); setOrderChoosingSupplier(false); }
+                    else beginOrder(match);
+                  }}>
                     <span><strong>{supplier === "USAF" ? "U.S. AutoForce" : supplier}</strong><small>{match ? `${match.atdProductNumber} · $${Number(match.cost || 0).toFixed(2)} each` : "No matching product in this search"}</small></span>
-                    <b>{connected ? "Select" : match && supplier === "NTW" && match.qaOnly ? "QA inventory only" : match && supplier === "USAF" ? "Ordering connection next" : "Not connected"}</b>
+                    <b>{connected ? "Select" : match && supplier === "NTW" && match.qaOnly ? "QA inventory only" : "Not connected"}</b>
                   </button>;
                 })}
               </div>
