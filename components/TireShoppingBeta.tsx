@@ -1381,7 +1381,7 @@ export default function TireShoppingBeta({
                           aria-expanded={warehouseProductId === tire.id}
                           onClick={() => toggleWarehouseDetails(tire)}
                         >
-                          {tire.supplier === "ATD" ? "Nearby warehouse" : "Nearby warehouses"} <strong>{tire.availability.localPlus}</strong>
+                          {tire.supplier === "USAF" ? "All warehouses" : tire.supplier === "ATD" ? "Nearby warehouse" : "Nearby warehouses"} <strong>{tire.supplier === "USAF" ? tire.availability.nationwide : tire.availability.localPlus}</strong>
                           <b>{warehouseProductId === tire.id ? "▲" : "▼"}</b>
                         </button>
                         {tire.supplier === "ATD" ? <span>
@@ -1410,13 +1410,13 @@ export default function TireShoppingBeta({
                                   : ""}
                                 {detail.shipMethod ? ` · ${detail.shipMethod}` : ""}
                               </span>
-                              <a
+                              {(tire.supplier !== "USAF" || detail.address) && <a
                                 href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(detail.address || detail.name)}`}
                                 target="_blank"
                                 rel="noreferrer"
                               >
                                 View distance and directions
-                              </a>
+                              </a>}
                             </div>
                           ))
                         )}

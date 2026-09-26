@@ -12,3 +12,26 @@ export const USAF_REGIONAL_WAREHOUSES: Record<string, { name: string; address: s
 export function regionalUsafWarehouse(warehouse: string) {
   return USAF_REGIONAL_WAREHOUSES[String(warehouse).trim()] || null;
 }
+
+// The regional directory supplies labels, not an inventory allowlist.
+export function usafWarehouse(warehouse: string) {
+  const region = regionalUsafWarehouse(warehouse);
+  return {
+    name: region?.name || `U.S. AutoForce warehouse ${String(warehouse).trim()}`,
+    address: region?.address || "",
+    local: Boolean(region?.local),
+    regional: Boolean(region),
+  };
+}
+
+export function usafCatalogInventory(inventory: Array<{ warehouse: string; quantity: number }>) {
+  const warehouses = inventory
+    .filter(item => String(item.warehouse).trim() && Number(item.quantity) > 0)
+    .map(item => ({ ...item, quantity: Number(item.quantity), ...usafWarehouse(item.warehouse) }));
+  return {
+    warehouses,
+    localQuantity: warehouses.filter(item => item.local).reduce((sum, item) => sum + item.quantity, 0),
+    regionalQuantity: warehouses.filter(item => item.regional && !item.local).reduce((sum, item) => sum + item.quantity, 0),
+    availableQuantity: warehouses.reduce((sum, item) => sum + item.quantity, 0),
+  };
+}

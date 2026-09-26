@@ -1,5 +1,5 @@
 import { blocks, call, escapeXml as x, first, usaForceOrderingStatus } from "./usaf";
-import { regionalUsafWarehouse } from "./usaf-warehouses";
+import { usafWarehouse } from "./usaf-warehouses";
 import { deliveryDate } from "./customer-order-purchasing";
 
 const namespace = "https://services.usautoforce.com";
@@ -33,10 +33,9 @@ export async function searchUsafOrderProduct(part: string, quantity: number, lin
       atdProductNumber: first(item, "partNumber") || "", lineCode: first(item, "lineCode") || "", brand: first(item, "manufacturer") || "", model: first(item, "description") || "", size: first(item, "tireSize") || "", loadSpeed: "",
       cost: amount(item, "cost"), fet: amount(item, "fet") || 0, fee: amount(item, "fee") || 0, core: amount(item, "core") || 0, tax: amount(item, "tax") || 0,
       warehouses: blocks(blocks(item, "quantityAvailable")[0] || "", "BranchDto").flatMap(branch => {
-        const code = first(branch, "code") || "";
-        const region = regionalUsafWarehouse(code);
-        return region ? [{ code, name: region.name, local: Boolean(region.local), quantity: amount(branch, "quantityAvailable") || 0, deliveryDate: deliveryDate(first(branch, "deliveryDate")), cutoff: first(branch, "cutoffDateTime") }] : [];
-      }).sort((a, b) => Number(b.local) - Number(a.local) || a.name.localeCompare(b.name)),
+        const code = (first(branch, "code") || "").trim();
+        return code ? [{ code, ...usafWarehouse(code), quantity: amount(branch, "quantityAvailable") || 0, deliveryDate: deliveryDate(first(branch, "deliveryDate")), cutoff: first(branch, "cutoffDateTime") }] : [];
+      }), // Preserve USAF's ETA/quantity ordering, including transfer warehouses.
     };
   }).filter(item => item.atdProductNumber.toUpperCase() === part.toUpperCase() && Boolean(item.lineCode));
 }
@@ -48,7 +47,7 @@ export async function previewUsafOrder(input: { part: string; lineCode: string; 
   const product = products.find(item => item.lineCode === input.lineCode);
   const warehouse = product?.warehouses.find(item => item.code === input.branch);
   if (!product || product.cost == null || !Number.isFinite(product.cost) || product.cost <= 0) throw new Error("U.S. AutoForce did not return a valid price for this tire.");
-  if (!warehouse || warehouse.quantity < input.quantity) throw new Error("This warehouse cannot fill the requested quantity. Choose an available regional warehouse.");
+  if (!warehouse || warehouse.quantity < input.quantity) throw new Error("This warehouse cannot fill the requested quantity. Choose an available warehouse.");
   const { xml } = await call("OrderDeadline", request("OrderDeadline", `${base(crypto.randomUUID())}<orderType>NORMAL</orderType><deliveryMethod>USAF-TRK</deliveryMethod><fillFlag>cancelorder</fillFlag><shipTo><shipToCode>${x(account())}</shipToCode></shipTo>${partXml(input.part, input.quantity, input.lineCode, input.branch, true)}`));
   const deadline = blocks(xml, "OrderDeadlineResult")[0];
   const branch = blocks(deadline, "BranchDto").find(item => first(item, "code") === input.branch);

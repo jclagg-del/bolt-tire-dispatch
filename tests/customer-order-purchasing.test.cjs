@@ -66,8 +66,11 @@ test('USAF looks up exact part and Croton, previews and submits PO/MO with fill-
   } } })('lib/usaf-ordering.ts');
   const input = { part: '110822702', lineCode: 'GY', branch: '4853', quantity: 2, po: '3094589', mo: 'M<&123', transaction: 'stable-id' };
   const products = await usaf.searchUsafOrderProduct(input.part, 2);
-  assert.equal(products[0].warehouses.length, 1);
+  assert.equal(products[0].warehouses.length, 2);
   assert.equal(products[0].warehouses[0].name, 'Croton-on-Hudson, NY');
+  assert.equal(products[0].warehouses[1].code, '07');
+  assert.equal(products[0].warehouses[1].local, false);
+  assert.equal(products[0].warehouses[1].quantity, 999);
   const preview = await usaf.previewUsafOrder(input);
   assert.equal(preview.order.ordertotal, 204);
   const placed = await usaf.placeUsafOrder(input, preview);
@@ -79,9 +82,57 @@ test('USAF looks up exact part and Croton, previews and submits PO/MO with fill-
   assert.match(purchase[0].body, /<poNumber>3094589<\/poNumber>/);
   assert.match(purchase[0].body, /<fillFlag>cancelorder<\/fillFlag>/);
   assert.match(purchase[0].body, /<lineCode>GY<\/lineCode>/);
+  assert.match(purchase[0].body, /<branch>4853<\/branch>/);
+  for (const lookup of requests.filter(r => r.method === 'StockCheck')) assert.doesNotMatch(lookup.body, /<branch>|<warehouse>/i);
   assert.match(purchase[0].body, /M&lt;&amp;123/);
   await assert.rejects(usaf.previewUsafOrder({ ...input, quantity: 20 }), /cannot fill/);
   await assert.rejects(usaf.previewUsafOrder({ ...input, po: '1234567890123456' }), /15 characters/);
+});
+
+test('USAF preserves supplier ETA/quantity order and can preview and order a transfer warehouse', async () => {
+  const requests = [];
+  const actual = loader()('lib/usaf.ts');
+  const branches = '<BranchDto><code>07</code><quantityAvailable>8</quantityAvailable><deliveryDate>2026-09-23</deliveryDate></BranchDto><BranchDto><code>4853</code><quantityAvailable>12</quantityAvailable><deliveryDate>2026-09-24</deliveryDate></BranchDto>';
+  const networkStock = stock.replace(/<quantityAvailable>[\s\S]*<\/quantityAvailable>/, `<quantityAvailable>${branches}</quantityAvailable>`);
+  const lib = loader({ './usaf': { ...actual, usaForceOrderingStatus: () => ({ production: true }), call: async (method, body) => {
+    requests.push({ method, body });
+    return { xml: method === 'StockCheck' ? networkStock : method === 'OrderDeadline' ? deadline.replace('<code>4853</code>', '<code>07</code>') : method === 'Order' ? '<OrderResult><orderNumber>MOCK-TRANSFER</orderNumber><status>ordered</status></OrderResult>' : '<OrderStatusDetailResult/>' };
+  } } })('lib/usaf-ordering.ts');
+  const input = { part: '110822702', lineCode: 'GY', branch: '07', quantity: 2, po: '3094589', mo: '', transaction: 'mock-transfer' };
+  const products = await lib.searchUsafOrderProduct(input.part, 2);
+  assert.deepEqual(products[0].warehouses.map(w => w.code), ['07', '4853']);
+  assert.equal(products[0].warehouses[0].deliveryDate, '2026-09-23');
+  const preview = await lib.previewUsafOrder(input);
+  await lib.placeUsafOrder(input, preview);
+  for (const r of requests) {
+    if (r.method === 'StockCheck') assert.doesNotMatch(r.body, /<(branch|warehouse)>/i);
+    else assert.match(r.body, /<branch>07<\/branch>/);
+  }
+  await assert.rejects(lib.previewUsafOrder({ ...input, branch: 'not-returned' }), /cannot fill/);
+});
+
+test('USAF catalog retains transfer inventory without calling it local or nearby', () => {
+  const { usafCatalogInventory } = loader()('lib/usaf-warehouses.ts');
+  const result = usafCatalogInventory([{ warehouse: '07', quantity: 8 }, { warehouse: '4853', quantity: 4 }, { warehouse: '4860', quantity: 6 }, { warehouse: '', quantity: 999 }, { warehouse: '99', quantity: 0 }]);
+  assert.equal(result.warehouses.length, 3);
+  assert.equal(result.localQuantity, 4);
+  assert.equal(result.regionalQuantity, 6);
+  assert.equal(result.availableQuantity, 18);
+  assert.equal(result.warehouses[0].local, false);
+  assert.equal(result.warehouses[0].regional, false);
+  assert.equal(result.warehouses[0].address, '');
+});
+
+test('USAF size stock check omits warehouse restriction and retains every returned branch', async t => {
+  const saved = { ...process.env };
+  t.after(() => { for (const key of ['USAF_API_URL', 'USAF_API_USER', 'USAF_API_PASSWORD', 'USAF_ACCOUNT_NUMBER']) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } });
+  Object.assign(process.env, { USAF_API_URL: 'https://example.invalid', USAF_API_USER: 'test', USAF_API_PASSWORD: 'test', USAF_ACCOUNT_NUMBER: 'test' });
+  t.mock.method(global, 'fetch', async (_url, options) => {
+    assert.doesNotMatch(options.body, /<(branch|warehouse)>/i);
+    return new Response('<StockCheckResult><tires><TireDto><partNumber>123</partNumber><quantityAvailable><BranchDto><code>07</code><quantityAvailable>8</quantityAvailable></BranchDto><BranchDto><code>4853</code><quantityAvailable>4</quantityAvailable></BranchDto></quantityAvailable></TireDto></tires></StockCheckResult>');
+  });
+  const result = await loader()('lib/usaf.ts').usaForceStockCheck('2756518', 4);
+  assert.deepEqual(result.tires[0].availability.map(w => w.branch), ['07', '4853']);
 });
 
 function routeFixture({ supplierError = false, production = true, authenticated = true } = {}) {

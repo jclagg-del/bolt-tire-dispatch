@@ -51,11 +51,13 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
     return chain;
   } };
   const catalog = new Module(__filename,module);
+  const warehouses = new Module(__filename,module);
+  warehouses._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/usaf-warehouses.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,__filename);
   const stubs = {
     'server-only': {},
     '@/lib/supabase/admin': {createAdminClient:()=>admin},
     '@/lib/business-settings': {fallbackBusinessSettings:settings, installationDefault:()=>329},
-    '@/lib/usaf-warehouses': {regionalUsafWarehouse:()=>({name:'Croton',local:true})},
+    '@/lib/usaf-warehouses': warehouses.exports,
     '@/lib/tire-shop-pricing': mod.exports,
   };
   catalog.require = name => Object.hasOwn(stubs,name) ? stubs[name] : require(name);
@@ -69,5 +71,11 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
     assert.equal(customer.quotePrice,302);
     assert.deepEqual(customer.estimatedTotals,staff.estimatedTotals);
     for (const field of ['cost','map','suggestedPrice','pricingMarkupPercent','pricingMinimumProfit','pricingCategory']) assert.equal(Object.hasOwn(customer,field),false);
+  }
+  row.warehouse_inventory = [{warehouse:'07',quantity:8}];
+  for (const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
+    const [product] = await search('224060', true);
+    assert.equal(product.warehouseInventory[0].warehouse, '07');
+    assert.deepEqual(product.availability, {local:0,localPlus:0,nationwide:8});
   }
 });
