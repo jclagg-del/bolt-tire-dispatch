@@ -5,6 +5,8 @@ import { fallbackBusinessSettings, installationDefault, type BusinessSettings } 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { availableShopTimes } from "@/lib/shop-availability";
 import { normalizeShopCustomer, shopCustomerError } from "@/lib/shop-customer";
+import { lookupDiscount } from "@/lib/discounts-server";
+import { discountedTirePrice } from "@/lib/discounts";
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +14,9 @@ export async function POST(request: Request) {
     const { name, phone, email, vehicle, address } = normalizeShopCustomer(body);
     const customerError = shopCustomerError(body);
     if (customerError) return NextResponse.json({ error: customerError }, { status: 400 });
+    let discount;
+    try { discount = await lookupDiscount(body.discountCode); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Discount code could not be checked." }, { status: 400 }); }
     const query = String(body.query || "").replace(/[^0-9]/g, "");
     const productId = String(body.productId || "");
     const quantity = Math.min(6, Math.max(1, Number(body.quantity) || 4));
@@ -46,6 +51,9 @@ export async function POST(request: Request) {
     const settings = { ...fallbackBusinessSettings, ...(savedSettings || {}) } as BusinessSettings;
     const category = products.some((item) => item.serviceCategory === "truck") ? "truck" : "passenger";
     const quoteQuantity = staggered ? 4 : quantity;
+    const frontPrice = discountedTirePrice(front.quotePrice, Number(discount?.percent || 0));
+    const rearPrice = rear ? discountedTirePrice(rear.quotePrice, Number(discount?.percent || 0)) : null;
+    const discountAmount = Math.round(((front.quotePrice - frontPrice) * (staggered ? 2 : quoteQuantity) + (staggered && rear ? (rear.quotePrice - (rearPrice || 0)) * 2 : 0)) * 100) / 100;
     const disposalEach = category === "truck" ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const { data: quote, error } = await admin.from("quotes").insert({
       status: "approved", customer: name, contact_name: name, phone: phone || null, email: email || null,
@@ -54,7 +62,11 @@ export async function POST(request: Request) {
       rear_tire_size: staggered ? rear?.size || null : null, rear_quantity: staggered ? 2 : null, service_category: category,
       installation_cost: installationSelected ? installationDefault(settings, quoteQuantity, category) : 0, service_call_fee: 0,
       disposal_fee: installationSelected ? disposalEach * quoteQuantity : 0, ny_state_tire_fee: settings.ny_state_tire_fee * quoteQuantity,
-      sales_tax_rate: settings.default_sales_tax_rate, tax_exempt: false,
+      sales_tax_rate: settings.default_sales_tax_rate, tax_exempt: Boolean(discount?.tax_exempt),
+      discount_code_id: discount?.id || null, discount_code_label: discount?.code || null,
+      discount_percent: Number(discount?.percent || 0), discount_amount: discountAmount,
+      discount_organization: discount?.organization || null,
+      checkout_service: installationSelected ? "installation" : "tires_only",
       purchase_source: "website", requested_date: installationSelected ? requestedDate : null,
       requested_time: installationSelected ? requestedTime : null,
       appointment_hold_expires_at: installationSelected ? new Date(Date.now() + 30 * 60 * 1000).toISOString() : null,
@@ -64,7 +76,7 @@ export async function POST(request: Request) {
     const stock = Math.min(...products.map((item) => item.availability.local || item.availability.localPlus));
     const { data: option, error: optionError } = await admin.from("quote_options").insert({
       quote_id: quote.id, tier: "better", brand: front.brand, model: front.model,
-      image_url: front.imageUrl, price_per_tire: front.quotePrice,
+      image_url: front.imageUrl, price_per_tire: frontPrice, original_price_per_tire: front.quotePrice,
       warranty_miles: (()=>{const value=Number((front.warranty.match(/[\d,]+/)?.[0]||"0").replace(/,/g,""));return value*(/k/i.test(front.warranty)?1000:1)||null})(),
       tire_type: front.category, load_speed_rating: front.loadSpeed || null,
       snow_rating: front.snowRated ? "3PMSF" : null, availability: stock ? `In stock (${stock})` : "Special order",
@@ -75,7 +87,8 @@ export async function POST(request: Request) {
       rear_brand: staggered ? rear?.brand || null : null,
       rear_model: staggered ? rear?.model || null : null,
       rear_image_url: staggered ? rear?.imageUrl || null : null,
-      rear_price_per_tire: staggered ? rear?.quotePrice || null : null,
+      rear_price_per_tire: staggered ? rearPrice : null,
+      original_rear_price_per_tire: staggered ? rear?.quotePrice || null : null,
       rear_supplier: staggered ? rear?.supplier || null : null,
       rear_supplier_product_id: staggered ? rear?.atdProductNumber || null : null,
       rear_manufacturer_product_id: staggered ? rear?.manufacturerProductNumber || null : null,

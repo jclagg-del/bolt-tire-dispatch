@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { paidWebsiteOrder, websitePaymentFields } from "@/lib/paid-website-order";
+import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
 
 function valid(payload: string, header: string, secret: string) {
   const parts = Object.fromEntries(header.split(",").map((item) => item.split("=")));
@@ -16,35 +18,56 @@ export async function POST(request: Request) {
   if (!secret) return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
   const payload = await request.text();
   if (!valid(payload, request.headers.get("stripe-signature") || "", secret)) return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-  const event = JSON.parse(payload);
-  if (event.type !== "checkout.session.completed" || event.data.object.payment_status !== "paid") return NextResponse.json({ received: true });
+  let event;
+  try { event = JSON.parse(payload); } catch { return NextResponse.json({ error: "Invalid event" }, { status: 400 }); }
+  if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) || event.data.object.payment_status !== "paid") return NextResponse.json({ received: true });
 
   const session = event.data.object;
   const quoteId = session.metadata?.quote_id;
   if (!quoteId) return NextResponse.json({ received: true });
   const admin = createAdminClient();
+  try {
   const paidAt = new Date().toISOString();
   const amountPaid = Number(session.amount_total || 0) / 100;
   const salesTax = Number(session.total_details?.amount_tax || 0) / 100;
-  await admin.from("quotes").update({ payment_status: "paid", amount_paid: amountPaid, stripe_sales_tax_amount: salesTax, paid_at: paidAt, stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null, updated_at: paidAt }).eq("id", quoteId);
+  const { data: quote, error: quoteError } = await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", quoteId).single();
+  if (quoteError || !quote) throw new Error(quoteError?.message || "Paid quote not found");
+  const option = (quote.quote_options || []).find((item: { id: string }) => item.id === (session.metadata?.option_id || quote.selected_option_id));
+  if (!option) throw new Error("Paid quote has no matching tire option");
+  if (quote.stripe_payment_intent_id && quote.stripe_payment_intent_id !== session.payment_intent) throw new Error("A different payment already exists for this quote. Review payment before proceeding.");
+  const payment = { payment_status: "paid", amount_paid: amountPaid, stripe_sales_tax_amount: salesTax, paid_at: quote.paid_at || paidAt, stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null, selected_option_id: option.id, updated_at: paidAt };
+  const { error: paymentError } = await admin.from("quotes").update(payment).eq("id", quoteId);
+  if (paymentError) throw new Error(paymentError.message);
+  Object.assign(quote, payment);
+  if (quote.purchase_source !== "website" || quote.converted_job_id) return NextResponse.json({ received: true });
 
-  const { data: quote } = await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", quoteId).single();
-  if (!quote || quote.purchase_source !== "website" || quote.converted_job_id) return NextResponse.json({ received: true });
-  const option = (quote.quote_options || []).find((item: { id: string }) => item.id === quote.selected_option_id) || quote.quote_options?.[0];
-  if (!option) return NextResponse.json({ received: true, warning: "Paid quote has no tire option" });
+  // Organization purchases wait in Orders. Payment never places a supplier order
+  // or checks "Tires ordered". Unique source_quote_id makes webhook retries safe.
+  if (quote.discount_organization) {
+    const orderValues = paidWebsiteOrder(quote, option);
+    const { data: created, error: orderError } = await admin.from("customer_orders").insert(orderValues).select("id,payment_notification_sent_at").single();
+    let order = created;
+    if (orderError?.code === "23505") {
+      const existing = await admin.from("customer_orders").select("id,payment_notification_sent_at").eq("source_quote_id", quote.id).single();
+      if (existing.error) throw new Error(existing.error.message);
+      order = existing.data;
+    } else if (orderError) throw new Error(orderError.message);
+    if (!order) throw new Error("Paid order could not be saved");
+    if (!order.payment_notification_sent_at) {
+      await sendFleetOrderNotification("new", { ...orderValues, id: order.id }, `paid-website-order-${quote.id}`);
+      const notified = await admin.from("customer_orders").update({ payment_notification_sent_at: paidAt }).eq("id", order.id);
+      if (notified.error) throw new Error(notified.error.message);
+    }
+    return NextResponse.json({ received: true, orderId: order.id });
+  }
 
-  const taxable = Number(option.price_per_tire) * Number(quote.quantity) + Number(quote.installation_cost) + Number(quote.service_call_fee) + Number(quote.disposal_fee);
   const scheduled = quote.requested_date && quote.requested_time ? `${quote.requested_date}T${String(quote.requested_time).substring(0, 5)}:00` : null;
   const { data: createdJob, error: jobError } = await admin.from("jobs").insert({
-    source_quote_id: quote.id, customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
-    vehicle: quote.vehicle, address: quote.address, scheduled, tires: `${option.brand} ${option.model}`, size: quote.tire_size, qty: quote.quantity,
-    price_tires: Number(option.price_per_tire), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
-    tire_supplier: option.supplier || "ATD", tire_product_number: option.supplier_product_id || option.manufacturer_product_id || null,
-    tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee), subtotal: taxable + Number(quote.ny_state_tire_fee),
-    sales_tax_amount: salesTax, sales_tax_rate: taxable > 0 ? salesTax / taxable * 100 : 0, tax_exempt: false, job_total: amountPaid,
-    payment_status: "paid", paid_date: paidAt, tires_ordered: false,
+    customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone,
+    address: quote.address, scheduled, tire_supplier: option.supplier || "ATD", tires_ordered: false,
     notes: [quote.notes, `Paid website order from quote #${quote.quote_number}. Order tires before the appointment.`].filter(Boolean).join("\n"),
     complete: false, archived: false, vehicle_id: "stepvan", job_status: scheduled ? "scheduled" : "paid",
+    ...websitePaymentFields(quote, option),
   }).select("id").single();
 
   let jobId = createdJob?.id;
@@ -54,6 +77,11 @@ export async function POST(request: Request) {
   } else if (jobError) {
     return NextResponse.json({ error: `Payment recorded, but job creation failed: ${jobError.message}` }, { status: 500 });
   }
-  if (jobId) await admin.from("quotes").update({ status: "converted", converted_job_id: jobId, appointment_hold_expires_at: null, updated_at: paidAt }).eq("id", quote.id);
+  if (!jobId) throw new Error("Paid job could not be located");
+  const linked = await admin.from("quotes").update({ status: "converted", converted_job_id: jobId, appointment_hold_expires_at: null, updated_at: paidAt }).eq("id", quote.id);
+  if (linked.error) throw new Error(linked.error.message);
   return NextResponse.json({ received: true, jobId });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Paid order could not be recorded" }, { status: 500 });
+  }
 }

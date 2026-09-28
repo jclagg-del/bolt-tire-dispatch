@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
     const id = Number(body.orderId);
     if (!Number.isInteger(id) || id < 1) return NextResponse.json({ error: "A valid customer order is required." }, { status: 400 });
-    const { data: order, error } = await admin.from("customer_orders").select("id,customer,job_number,mo_number,qty,tire_size,tire_product_number,tires_ordered,order_status,approved_job_id").eq("id", id).single();
+    const { data: order, error } = await admin.from("customer_orders").select("id,customer,job_number,mo_number,qty,tire_size,tire_product_number,tires_ordered,order_status,approved_job_id,tire_items").eq("id", id).single();
     if (error || !order) return NextResponse.json({ error: "Customer order not found." }, { status: 404 });
     const requestId = purchasingRequestId(id);
     const { data: existing, error: existingError } = await admin.from("supplier_orders").select("status,response").eq("request_id", requestId).maybeSingle();
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     }
     if (existing) return NextResponse.json({ error: "A purchase was already submitted for this request. Check Supplier Orders or contact the supplier before ordering again; its outcome needs confirmation." }, { status: 409 });
     if (order.order_status !== "new" || order.approved_job_id || order.tires_ordered) return NextResponse.json({ error: "Only a new request without tires already ordered can use this button." }, { status: 409 });
+    if (Array.isArray(order.tire_items) && order.tire_items.length > 1) return NextResponse.json({ error: "This order has different front/rear tires. Purchase each listed part in Tire Shop, then record the supplier and delivery date here." }, { status: 409 });
     const part = String(order.tire_product_number || "").trim();
     const po = String(order.job_number || "").trim();
     const quantity = Number(order.qty);

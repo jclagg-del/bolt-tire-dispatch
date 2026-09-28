@@ -14,6 +14,8 @@ type SavedQuote = {
   tax_exempt: boolean; selected_option_id: string | null; expires_at: string | null; converted_job_id: string | null;
   public_token: string; payment_status: "unpaid" | "pending" | "paid" | "refunded"; amount_paid: number | null;
   stripe_sales_tax_amount: number | null;
+  discount_organization?: string | null;
+  purchase_source?: string | null;
   quote_options: Array<Omit<QuoteOption, "price_per_tire" | "warranty_miles"> & { id: string; price_per_tire: number; warranty_miles: number | null }>;
 };
 
@@ -116,6 +118,7 @@ export default function QuoteDetailPage() {
 
   const convertToJob = async () => {
     if (!quote || quote.converted_job_id) return;
+    if (quote.purchase_source === "website" && quote.discount_organization) { router.push("/orders"); return; }
     const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id);
     if (!selected) return alert("Approve one tire option before converting this quote.");
     setSaving(true);
@@ -159,7 +162,7 @@ export default function QuoteDetailPage() {
       <button onClick={() => router.push(`/quotes/new?edit=${quote.id}`)} disabled={saving || quote.status === "converted" || quote.payment_status === "paid"}>Edit Quote</button>
       <button className="quote-primary" onClick={emailCustomerQuote} disabled={saving || !quote.email}>{saving ? "Sending..." : "Email Quote"}</button>
       <button onClick={copyCustomerLink} disabled={saving}>Copy Customer Link</button>
-      <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : "Convert to Job"}</button>
+      <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : quote.purchase_source === "website" && quote.discount_organization ? "Manage in Orders" : "Convert to Job"}</button>
     </div></div>
     {quote.payment_status === "paid" ? <div className="quote-paid-banner"><strong>Paid${quote.amount_paid != null ? ` — $${Number(quote.amount_paid).toFixed(2)}` : ""}</strong><span>Stripe payment received. This quote is ready to schedule or convert to a job.</span></div> : quote.payment_status === "pending" ? <div className="quote-message">Customer checkout has started; payment has not been confirmed yet.</div> : null}
     {message ? <div className="quote-message">{message}</div> : null}

@@ -14,7 +14,7 @@ function loader(stubs = {}) {
     if (!path.extname(file)) file += fs.existsSync(file + '.ts') ? '.ts' : '.tsx';
     if (cache.has(file)) return cache.get(file).exports;
     const mod = new Module(file, module); cache.set(file, mod); mod.paths = module.paths;
-    mod.require = id => Object.hasOwn(stubs, id) ? stubs[id] : id.startsWith('@/') ? load(id.slice(2)) : id.startsWith('.') ? load(path.resolve(path.dirname(file), id)) : require(id);
+    mod.require = id => id === 'server-only' ? {} : Object.hasOwn(stubs, id) ? stubs[id] : id.startsWith('@/') ? load(id.slice(2)) : id.startsWith('.') ? load(path.resolve(path.dirname(file), id)) : require(id);
     mod._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, file);
     return mod.exports;
   }

@@ -38,6 +38,9 @@ type Quote = {
   ny_state_tire_fee: number;
   sales_tax_rate: number;
   tax_exempt: boolean;
+  discount_code_label?: string | null;
+  discount_amount?: number;
+  discount_organization?: string | null;
   selected_option_id: string | null;
   expires_at: string | null;
   payment_status: string;
@@ -372,6 +375,7 @@ export default function PublicQuote() {
       </section>
       <section className="quote-form-card">
         <h2>{purchase ? "Order details" : "Included in every option"}</h2>
+        {q.discount_code_label && <p>Discount code {q.discount_code_label}: ${Number(q.discount_amount || 0).toFixed(2)} tire savings included in the prices above.{q.discount_organization ? ` Organization: ${q.discount_organization}.` : ""}</p>}
         <div className="quote-fee-summary">
           <span>
             Installation{" "}

@@ -44,7 +44,7 @@ export async function availableShopTimes(date: string) {
   const admin = createAdminClient();
   const [{ data: jobs, error: jobsError }, { data: holds, error: holdsError }] = await Promise.all([
     admin.from("jobs").select("scheduled,vehicle_id,complete,archived").eq("complete", false).eq("archived", false).gte("scheduled", `${addDays(date, -1)}T00:00:00`).lt("scheduled", `${addDays(date, 2)}T00:00:00`),
-    admin.from("quotes").select("requested_time").eq("purchase_source", "website").eq("requested_date", date).is("converted_job_id", null).gt("appointment_hold_expires_at", new Date().toISOString()),
+    admin.from("quotes").select("requested_time").eq("purchase_source", "website").eq("requested_date", date).is("converted_job_id", null).or(`payment_status.eq.paid,appointment_hold_expires_at.gt.${new Date().toISOString()}`),
   ]);
   if (jobsError || holdsError) throw new Error(jobsError?.message || holdsError?.message || "Availability could not be loaded");
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { purchasingRequestId, supplierOrderDetails } from "@/lib/customer-order-purchasing";
+import { websitePaymentFields } from "@/lib/paid-website-order";
 
 type CustomerOrder = {
   id: number;
@@ -31,10 +32,11 @@ type CustomerOrder = {
   tires_ordered: boolean;
   approved_job_id: number | null;
   reviewed_at: string | null;
+  source_quote_id?: string | null;
 };
 
 function scheduledValue(order: CustomerOrder) {
-  return `${order.requested_date}T${order.requested_time.substring(0, 5)}:00`;
+  return order.requested_date && order.requested_time ? `${order.requested_date}T${order.requested_time.substring(0, 5)}:00` : null;
 }
 
 function vehicleDescription(order: CustomerOrder) {
@@ -59,13 +61,12 @@ function jobNotes(order: CustomerOrder) {
 type TireOrderDetails = { supplier: string | null; deliveryDate: string | null };
 
 async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, order: CustomerOrder, tireOrder: TireOrderDetails) {
-  if (!order.job_number?.trim()) return null;
-  const { data, error } = await admin
+  if (!order.source_quote_id && !order.job_number?.trim()) return null;
+  let query = admin
     .from("jobs")
-    .select("id")
-    .eq("customer", order.customer)
-    .eq("po_number", order.job_number.trim())
-    .or("archived.eq.false,archived.is.null")
+    .select("id");
+  query = order.source_quote_id ? query.eq("source_quote_id", order.source_quote_id) : query.eq("customer", order.customer).eq("po_number", order.job_number!.trim()).or("archived.eq.false,archived.is.null");
+  const { data, error } = await query
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -85,13 +86,19 @@ async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, orde
     approved_at: timestamp,
   }).eq("id", order.id);
   if (linkError) throw new Error(`Existing job could not be linked: ${linkError.message}`);
+  if (order.source_quote_id) await linkPaidQuote(admin, order.source_quote_id, data.id);
   return data.id;
+}
+
+async function linkPaidQuote(admin: ReturnType<typeof createAdminClient>, quoteId: string, jobId: number) {
+  const { error } = await admin.from("quotes").update({ status: "converted", converted_job_id: jobId, appointment_hold_expires_at: null, updated_at: new Date().toISOString() }).eq("id", quoteId);
+  if (error) throw new Error(`Paid quote could not be linked: ${error.message}`);
 }
 
 export async function POST(request: NextRequest) {
   if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const { orderId, tireSupplier, estimatedDeliveryDate } = await request.json();
+    const { orderId, tireSupplier, estimatedDeliveryDate, serviceMethod } = await request.json();
     const id = Number(orderId);
     if (!Number.isInteger(id) || id < 1) return NextResponse.json({ error: "A valid order is required." }, { status: 400 });
     const tireOrder: TireOrderDetails = {
@@ -103,7 +110,21 @@ export async function POST(request: NextRequest) {
     const { data, error } = await admin.from("customer_orders").select("*").eq("id", id).single();
     if (error || !data) return NextResponse.json({ error: error?.message || "Order not found." }, { status: 404 });
     const order = data as CustomerOrder;
-    if (order.approved_job_id) return NextResponse.json({ jobId: order.approved_job_id, existing: true });
+    if (order.approved_job_id) {
+      if (order.source_quote_id) await linkPaidQuote(admin, order.source_quote_id, order.approved_job_id);
+      return NextResponse.json({ jobId: order.approved_job_id, existing: true });
+    }
+    let paidFields = {};
+    if (order.source_quote_id) {
+      const { data: quote, error: paidError } = await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", order.source_quote_id).single();
+      const option = quote?.quote_options?.find((item: { id: string }) => item.id === quote.selected_option_id);
+      if (paidError || !quote || quote.payment_status !== "paid" || !option) throw new Error("The paid checkout record must be verified before creating this job.");
+      paidFields = websitePaymentFields(quote, option);
+      if (!order.service_method) {
+        if (!["delivery", "pickup"].includes(serviceMethod)) return NextResponse.json({ error: "Choose delivery or pickup for this tires-only order." }, { status: 400 });
+        order.service_method = serviceMethod;
+      }
+    }
 
     const { data: purchase, error: purchaseError } = await admin.from("supplier_orders").select("status,response").eq("request_id", purchasingRequestId(id)).maybeSingle();
     if (purchaseError) throw new Error(`Supplier order details could not be loaded: ${purchaseError.message}`);
@@ -132,6 +153,7 @@ export async function POST(request: NextRequest) {
       order_status: "approved",
       reviewed_at: lockTimestamp,
       approved_at: lockTimestamp,
+      service_method: order.service_method,
     }).eq("id", order.id).is("approved_job_id", null).eq("order_status", order.order_status);
     claim = order.reviewed_at ? claim.eq("reviewed_at", order.reviewed_at) : claim.is("reviewed_at", null);
     const { data: claimed, error: claimError } = await claim.select("id").maybeSingle();
@@ -161,12 +183,17 @@ export async function POST(request: NextRequest) {
       vehicle_id: "stepvan",
       service_type: order.service_method === "pickup" ? "Pickup" : ["delivery", "delivered", "delivery_pickup"].includes(String(order.service_method || "").toLowerCase()) ? "Delivery" : "Installation",
       payment_status: "unpaid",
-      job_status: "scheduled",
+      job_status: scheduledValue(order) ? "scheduled" : "paid",
       complete: false,
       archived: false,
+      ...paidFields,
     }).select("id").single();
 
     if (jobError || !newJob) {
+      if (jobError?.code === "23505" && order.source_quote_id) {
+        const recovered = await linkExistingJob(admin, order, tireOrder);
+        if (recovered) return NextResponse.json({ jobId: recovered, existing: true });
+      }
       await admin.from("customer_orders").update({ order_status: "new", reviewed_at: null, approved_at: null })
         .eq("id", order.id).eq("reviewed_at", lockTimestamp).is("approved_job_id", null);
       throw new Error(jobError?.message || "No job was returned.");
@@ -175,6 +202,7 @@ export async function POST(request: NextRequest) {
     const { error: linkError } = await admin.from("customer_orders").update({ approved_job_id: newJob.id })
       .eq("id", order.id).eq("reviewed_at", lockTimestamp).is("approved_job_id", null);
     if (linkError) throw new Error(`The job was created, but the order could not be linked: ${linkError.message}`);
+    if (order.source_quote_id) await linkPaidQuote(admin, order.source_quote_id, newJob.id);
 
     return NextResponse.json({ jobId: newJob.id, created: true });
   } catch (error) {

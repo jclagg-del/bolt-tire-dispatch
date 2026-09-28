@@ -9,7 +9,7 @@ export async function GET() {
   const { data: orders, error } = await admin.from("customer_orders").select(`
     id, customer, submitted_at, submitted_by, contact_name, contact_number, requested_date, requested_time, job_number, mo_number, goodyear_order, service_method, facility_id, facility_name, address,
     vehicle_year, vehicle_make, vehicle_model, vehicle_color, license_plate, tire_position,
-    qty, tire_size, tire_product_number, notes, order_status, tires_ordered, approved_job_id
+    qty, tire_size, tire_product_number, notes, order_status, tires_ordered, approved_job_id, payment_status
   `).in("customer", ["Kingdom Support Services", "HPR"]).order("submitted_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

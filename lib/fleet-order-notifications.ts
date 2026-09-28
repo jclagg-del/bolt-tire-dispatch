@@ -47,13 +47,13 @@ function serviceLabel(value: unknown) {
   return labels[String(value || "")] || String(value || "Not provided");
 }
 
-export async function sendFleetOrderNotification(kind: NotificationKind, order: FleetOrderNotification) {
+export async function sendFleetOrderNotification(kind: NotificationKind, order: FleetOrderNotification, idempotencyKey?: string) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
 
   const recipient = process.env.NEW_ORDER_NOTIFICATION_EMAIL || "office@bolttire.com";
-  const organization = order.customer === "HPR" ? "HPR" : "Kingdom Support Services";
-  const organizationCode = organization === "HPR" ? "HPR" : "KSS";
+  const organization = order.customer || "Kingdom Support Services";
+  const organizationCode = organization === "Kingdom Support Services" ? "KSS" : organization;
   const labels: Record<NotificationKind, string> = {
     new: "NEW ORDER",
     changed: "ORDER CHANGED",
@@ -67,7 +67,7 @@ export async function sendFleetOrderNotification(kind: NotificationKind, order: 
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
     body: JSON.stringify({
       from: process.env.KINGDOM_NOTIFICATION_FROM || "Bolt Tire <no-reply@bolttire.com>",
       reply_to: "office@bolttire.com",

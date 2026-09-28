@@ -38,14 +38,23 @@ type CustomerOrder = {
   job_complete: boolean;
   job_completed_at: string | null;
   purchase?: PurchaseDetails;
+  source_quote_id?: string | null;
+  payment_status?: string;
+  amount_paid?: number | null;
+  tax_exempt?: boolean;
+  discount_code_label?: string | null;
+  discount_amount?: number;
+  tire_items?: Array<{ quantity: number; size: string; brand: string; model: string; part: string }> | null;
 };
 
 type TireOrderDetails = {
   supplier: string;
   deliveryDate: string;
+  serviceMethod?: string;
 };
 
 function formatDate(dateValue: string) {
+  if (!dateValue) return "To be arranged";
   const [year, month, day] = dateValue.split("-").map(Number);
 
   return new Intl.DateTimeFormat("en-US", {
@@ -58,6 +67,7 @@ function formatDate(dateValue: string) {
 }
 
 function formatTime(timeValue: string) {
+  if (!timeValue) return "";
   const [hours, minutes] = timeValue.split(":").map(Number);
 
   const date = new Date();
@@ -148,7 +158,14 @@ export default function OrdersPage() {
         order_status,
         tires_ordered,
         approved_job_id,
-        submitted_at
+        submitted_at,
+        source_quote_id,
+        payment_status,
+        amount_paid,
+        tax_exempt,
+        discount_code_label,
+        discount_amount,
+        tire_items
       `)
       .order("submitted_at", { ascending: false });
 
@@ -325,6 +342,7 @@ export default function OrdersPage() {
 
   const deleteOrder = async (order: CustomerOrder) => {
     if (workingId !== null) return;
+    if (order.payment_status === "paid") { setErrorMessage("Paid orders must be retained for payment records. Rejecting an order does not refund the card payment; contact the office to arrange any refund."); return; }
 
     const approvedMessage = order.approved_job_id
       ? "\n\nThe approved job will remain in Jobs."
@@ -388,6 +406,7 @@ export default function OrdersPage() {
           orderId: order.id,
           tireSupplier: tireOrder?.supplier.trim() || null,
           estimatedDeliveryDate: tireOrder?.deliveryDate || null,
+          serviceMethod: tireOrder?.serviceMethod || null,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -636,6 +655,8 @@ function OrderSection({
                     <h3 style={customerName}>
                       {order.customer}
                     </h3>
+                    {order.payment_status === "paid" && <p style={{ color: "#166534", fontWeight: 800 }}>Paid online · ${Number(order.amount_paid || 0).toFixed(2)}</p>}
+                    {order.discount_code_label && <p style={{ fontSize: 13 }}>Discount code {order.discount_code_label} · ${Number(order.discount_amount || 0).toFixed(2)} off tires{order.tax_exempt ? " · Sales-tax exempt: tires and services" : ""}</p>}
 
                     <div style={contactName}>
                       Contact: {order.contact_name}
@@ -679,7 +700,7 @@ function OrderSection({
 
                   <Detail
                     label="Order Type"
-                    value={order.service_method === "pickup" ? "Pickup" : order.service_method === "delivery" ? "Delivery" : order.service_method === "delivery_pickup" ? "Delivery / Pickup" : "Installed"}
+                    value={!order.service_method && order.source_quote_id ? "Tires only — choose delivery or pickup" : order.service_method === "pickup" ? "Pickup" : order.service_method === "delivery" ? "Delivery" : order.service_method === "delivery_pickup" ? "Delivery / Pickup" : "Installed"}
                   />
 
                   <Detail
@@ -694,7 +715,7 @@ function OrderSection({
 
                   <Detail
                     label="Tires"
-                    value={`${order.qty} × ${order.tire_size}`}
+                    value={order.tire_items?.length ? order.tire_items.map(item => `${item.quantity} × ${item.size} ${item.brand} ${item.model} · Part ${item.part}`).join(" / ") : `${order.qty} × ${order.tire_size}`}
                   />
 
                   <Detail
@@ -752,9 +773,15 @@ function OrderSection({
                     {order.purchase?.status === "placed" ? "View supplier confirmation" : order.purchase ? "Check supplier order" : "Order tires by product number"}
                   </button>
                   {(!order.tire_product_number || !order.job_number) && <p style={{ color: "#92400e", fontSize: 13 }}>A product number and job number are needed to order.</p>}
+                  {(order.tire_items?.length || 0) > 1 && <p>Different front/rear tires: order each listed part in Tire Shop, then record the supplier and delivery date below.</p>}
                   {order.purchase?.status === "placed" && <p style={{ color: "#166534", fontSize: 13 }}>{order.purchase.supplier} confirmation: {order.purchase.confirmation} · Expected delivery: {order.purchase.deliveryDate ? formatDate(order.purchase.deliveryDate) : "Not provided by supplier"}</p>}
                   {order.purchase && order.purchase.status !== "placed" && <p style={{ color: "#92400e", fontSize: 13 }}>A supplier order is pending or needs review. Check its status before ordering again.</p>}
                 </div>}
+                {order.source_quote_id && !order.service_method && order.order_status === "new" && <label style={orderFieldLabel}>Tires-only fulfillment
+                  <select style={orderFieldInput} value={draft.serviceMethod || ""} onChange={event => updateTireOrderDraft(order.id, { serviceMethod: event.target.value })} disabled={working}>
+                    <option value="">Choose delivery or pickup</option><option value="delivery">Delivery</option><option value="pickup">Pickup</option>
+                  </select>
+                </label>}
                 <label style={checkboxRow}>
                   <input
                     type="checkbox"

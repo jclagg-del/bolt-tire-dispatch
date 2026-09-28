@@ -1,6 +1,7 @@
 import {NextResponse} from "next/server";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {shopCustomerError} from "@/lib/shop-customer";
+import {lookupDiscount} from "@/lib/discounts-server";
 
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
   const key=process.env.STRIPE_SECRET_KEY;
@@ -15,6 +16,12 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   if(q.purchase_source==="website"){
     const customerError=shopCustomerError({...q,name:q.contact_name||q.customer});
     if(customerError)return NextResponse.json({error:`${customerError} Return to the tire shop to complete your information before payment.`},{status:400});
+    if(q.discount_code_id){
+      try{
+        const discount=await lookupDiscount(q.discount_code_label);
+        if(!discount||discount.id!==q.discount_code_id||Number(discount.percent)!==Number(q.discount_percent)||discount.tax_exempt!==q.tax_exempt||discount.organization!==q.discount_organization)throw new Error("Discount settings changed. Return to checkout and apply the code again.");
+      }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Discount approval could not be verified."},{status:409})}
+    }
   }
   const o=(q.quote_options||[]).find((x:{id:string})=>x.id===optionId);
   if(!o)return NextResponse.json({error:"Choose a valid tire option"},{status:400});

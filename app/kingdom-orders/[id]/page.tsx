@@ -14,6 +14,7 @@ type EditableOrder = {
   license_plate: string | null; job_number: string | null; mo_number: string | null;
   tire_position: string | null; qty: number; tire_size: string; tire_product_number: string | null;
   notes: string | null; order_status: string;
+  payment_status?: string;
   job: null | { complete: boolean; completed_at: string | null };
 };
 
@@ -53,7 +54,7 @@ export default function KingdomOrderEditPage() {
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (!order || order.job?.complete) return;
+    if (!order || order.job?.complete || order.payment_status === "paid") return;
     setWorking(true); setMessage("");
     const response = await fetch(`/api/public/kingdom/orders/${order.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(order) });
     const result = await response.json(); setWorking(false);
@@ -76,7 +77,9 @@ export default function KingdomOrderEditPage() {
       {order.job?.complete ? <div style={completeBanner}>This job is completed and can no longer be changed or cancelled.</div> : null}
       {order.order_status === "cancellation_requested" ? <div style={cancelBanner}>Cancellation has been requested. Bolt Tire will review it.</div> : null}
       {message ? <div style={notice}>{message}</div> : null}
+      {order.payment_status === "paid" && <div style={completeBanner}>Paid online. Contact Bolt Tire for changes to this purchase. Cancellation requests are reviewed by our office and do not automatically refund your card.</div>}
 
+      <fieldset disabled={order.payment_status === "paid"} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <label style={label}>Organization<select value={order.customer} onChange={(event) => change("customer", event.target.value)} style={input}><option value="Kingdom Support Services">Kingdom Support Services</option><option value="HPR">HPR</option></select></label>
       <label style={checkRow}><input type="checkbox" checked={order.goodyear_order} onChange={(event) => change("goodyear_order", event.target.checked)} /> Goodyear order?</label>
       <div style={choices}><label style={choice}><input type="radio" checked={order.service_method === "installed"} onChange={() => change("service_method", "installed")} /> Installed</label><label style={choice}><input type="radio" checked={order.service_method === "delivery"} onChange={() => change("service_method", "delivery")} /> Delivery</label><label style={choice}><input type="radio" checked={order.service_method === "pickup"} onChange={() => change("service_method", "pickup")} /> Pickup</label></div>
@@ -93,7 +96,8 @@ export default function KingdomOrderEditPage() {
       <h2 style={sectionTitle}>References</h2><div style={grid2}><Field label="Job / PO Number" value={order.job_number || ""} onChange={(value) => change("job_number", value)} /><Field label="MO Number" value={order.mo_number || ""} onChange={(value) => change("mo_number", value)} /></div>
       <h2 style={sectionTitle}>Tires</h2><div style={grid2}><Field label="Tire Position" value={order.tire_position || ""} onChange={(value) => change("tire_position", value)} /><Field label="Quantity" type="number" value={String(order.qty)} onChange={(value) => change("qty", Number(value))} /><Field label="Tire Size" value={order.tire_size} onChange={(value) => change("tire_size", value)} /><Field label="Product Number" value={order.tire_product_number || ""} onChange={(value) => change("tire_product_number", value)} /></div>
       <label style={label}>Notes<textarea value={order.notes || ""} onChange={(event) => change("notes", event.target.value)} style={textarea} /></label>
-      <div style={actions}><button type="submit" disabled={working || order.job?.complete} style={saveButton}>{working ? "Saving..." : "Save Changes"}</button><button type="button" onClick={requestCancellation} disabled={working || order.job?.complete || order.order_status === "cancellation_requested"} style={cancelButton}>{order.order_status === "cancellation_requested" ? "Cancellation Requested" : "Request Cancellation"}</button></div>
+      </fieldset>
+      <div style={actions}><button type="submit" disabled={working || order.job?.complete || order.payment_status === "paid"} style={saveButton}>{working ? "Saving..." : "Save Changes"}</button><button type="button" onClick={requestCancellation} disabled={working || order.job?.complete || order.order_status === "cancellation_requested"} style={cancelButton}>{order.order_status === "cancellation_requested" ? "Cancellation Requested" : "Request Cancellation"}</button></div>
     </form>}
   </div></main></KingdomPortalGate>;
 }

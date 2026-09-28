@@ -33,6 +33,7 @@ export async function PATCH(request: Request, { params }: Context) {
     return NextResponse.json({ cancelled: true, notificationSent });
   }
 
+  if (order.payment_status === "paid") return NextResponse.json({ error: "This order was paid online. Please contact Bolt Tire to change tire quantities, products, or service so the payment can be adjusted correctly." }, { status: 409 });
   const requestedServiceMethod = String(body.service_method || "").toLowerCase();
   const serviceMethod =
     requestedServiceMethod === "delivered"
