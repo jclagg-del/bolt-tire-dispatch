@@ -1,4 +1,5 @@
 import "server-only";
+import { firstHealthyTireImage, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
 
 const baseUrls = Array.from(new Set([
   process.env.TIRE_LIBRARY_BASE_URL?.trim(),
@@ -96,6 +97,8 @@ type TireLibraryPatternDetail = {
   image_url?: string | null;
   image_360_url?: string | null;
   image_360_thumbnail_url?: string | null;
+  make_name?: string | null;
+  tire_make?: { name?: string | null } | null;
 };
 
 export type TireLibraryVehicleFitment = {
@@ -278,39 +281,61 @@ async function activeRebatesByPattern() {
   return byPattern;
 }
 
-function basePatternName(value: string | null | undefined) {
-  return String(value || "")
-    .replace(/\s*\([^)]*\)\s*/g, " ")
-    .replace(/[\s-]+(?:LT|P-Metric|LT-Metric)$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
+// Search outside the requested size for a photo only, never for SKU/specification data.
+async function tireLibraryModelImage(brand: string, model: string): Promise<string | null> {
+  const make = tireImageBrand(brand) === "advanta" ? "Argus Advanta" : brand;
+  const search = model.toLowerCase().startsWith(brand.toLowerCase()) ? model.slice(brand.length).trim() : model;
+  if (!tireImageBrand(brand) || !tireImageModel(brand, model)) return null;
+  const params = new URLSearchParams({ make_name: make, search, per_page: "100" });
+  const catalog = await tireLibraryRequest<{ results?: TireLibraryPage }>(`tires/catalog?${params}`);
+  const sameModel = (catalog.results?.data || []).filter(item =>
+    tireImageKey(item.make_name || "", item.model_name || "") === tireImageKey(brand, model));
+  let image = await firstHealthyTireImage(sameModel.map(item => item.thumbnail_image));
+  if (image) return image;
+  const patterns = await tireLibraryRequest<{ results?: TireLibraryPage<TireLibraryPatternDetail> }>(`tire-patterns/catalog?${params}`);
+  const exact = (patterns.results?.data || []).filter(item =>
+    tireImageKey(item.make_name || "", item.name || "") === tireImageKey(brand, model));
+  image = await firstHealthyTireImage(exact.flatMap(item => [item.image_url, item.image_360_thumbnail_url]));
+  if (image) return image;
+  for (const item of sameModel.slice(0, 2)) {
+    const detail = await tireLibraryTireDetails(item.id);
+    if (detail.imageUrl) return detail.imageUrl;
+  }
+  return null;
 }
 
-async function tireLibraryPatternImage(id: number, name?: string | null) {
-  if (!Number.isInteger(id) || id < 1) return "";
-  const pattern = await tireLibraryRequest<TireLibraryPatternDetail>(`tire-patterns/${id}`);
-  const direct = safeUrl(pattern.image_url) || safeUrl(pattern.image_360_thumbnail_url) || safeUrl(pattern.image_360_url);
-  if (direct) return direct;
-  const search = basePatternName(name || pattern.name);
-  if (!search) return "";
-  const related = await tireLibraryRequest<TireLibraryPatternDetail[]>(`tire-patterns?search=${encodeURIComponent(search)}`);
-  const searchKey = normalizeModel(search);
-  const candidate = related.find((item) => normalizeModel(basePatternName(item.name)) === searchKey && safeUrl(item.image_url))
-    || related.find((item) => safeUrl(item.image_url));
-  return safeUrl(candidate?.image_url) || safeUrl(candidate?.image_360_thumbnail_url) || safeUrl(candidate?.image_360_url);
+async function recoverTireImages<T extends EnrichableTire>(products: T[], candidates = new Map<string, string[]>(), useLibrary = true, identities: EnrichableTire[] = products): Promise<T[]> {
+  const byModel = new Map<string, string[]>(candidates);
+  for (const [index, product] of products.entries()) {
+    const identity = identities[index];
+    const key = tireImageKey(identity.brand, identity.model);
+    byModel.set(key, [...(byModel.get(key) || []), ...(product.imageUrl ? [product.imageUrl] : [])]);
+  }
+  const recovered = new Map<string, Promise<string | null>>();
+  return Promise.all(products.map(async (product, index) => {
+    const identity = identities[index];
+    const key = tireImageKey(identity.brand, identity.model);
+    let image = await firstHealthyTireImage([product.imageUrl, ...(byModel.get(key) || [])]);
+    if (!image && useLibrary) {
+      if (!recovered.has(key)) recovered.set(key, tireLibraryModelImage(identity.brand, identity.model).catch(() => null));
+      image = await recovered.get(key)!;
+    }
+    return { ...product, imageUrl: image, imageVerified: Boolean(image) };
+  }));
 }
 
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
-  if (!apiKey() || !products.length) return products;
+  if (!products.length) return products;
+  if (!apiKey()) return recoverTireImages(products, new Map(), false);
   try {
     const supplierImageByPattern = new Map<string, string>();
     for (const product of products) {
       const image = safeUrl(product.imageUrl);
       if (!image) continue;
-      const key = `${normalizeBrand(product.brand)}:${normalizeModel(basePatternName(product.model), product.brand)}`;
+      const key = tireImageKey(product.brand, product.model);
       if (!supplierImageByPattern.has(key)) supplierImageByPattern.set(key, image);
     }
-    const sizes = Array.from(new Set(products.map((product) => product.size).filter(Boolean))).slice(0, 4);
+    const sizes = Array.from(new Set(products.map((product) => sizeParts(product.size)).filter(Boolean).map(parts => `${parts!.width}${parts!.aspect}${parts!.rim}`))).slice(0, 4);
     const [catalogs, rebatesByPattern] = await Promise.all([
       Promise.all(sizes.map(searchBySize)).then((groups) => groups.flat()),
       activeRebatesByPattern().catch(() => new Map<number, Array<{ code: string; description: string; url: string }>>()),
@@ -342,20 +367,28 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     const detailPairs = await Promise.all(prioritizedEntries.slice(0, 60).map(async ([key, match]) => {
       try {
         const detail = await tireLibraryTireDetails(match.id);
-        if (!detail.imageUrl && match.tire_model_id) {
-          detail.imageUrl = await tireLibraryPatternImage(match.tire_model_id, match.model_name).catch(() => "");
-        }
         return [key, detail] as const;
       } catch {
         return [key, null] as const;
       }
     }));
     const detailsByModel = new Map(detailPairs);
-    return products.map((product, index) => {
+    const photoCandidates = new Map<string, string[]>();
+    for (const item of catalogs) {
+      const key = tireImageKey(item.make_name || "", item.model_name || "");
+      if (item.thumbnail_image) photoCandidates.set(key, [...(photoCandidates.get(key) || []), item.thumbnail_image]);
+    }
+    const enriched = products.map((product, index) => {
       const match = matches[index];
       if (!match) return product;
       const detail = detailsByModel.get(Number(match.tire_model_id || match.id));
-      const supplierPatternImage = supplierImageByPattern.get(`${normalizeBrand(product.brand)}:${normalizeModel(basePatternName(product.model), product.brand)}`) || "";
+      const photoKey = tireImageKey(product.brand, product.model);
+      const photoMatch = tireImageBrand(product.brand) === tireImageBrand(match.make_name || "") &&
+        (photoKey === tireImageKey(match.make_name || "", match.model_name || "") ||
+          Boolean(match.item_number && [product.atdProductNumber, product.manufacturerProductNumber].map(normalize).includes(normalize(match.item_number))));
+      const libraryImages = photoMatch ? [detail?.imageUrl, match.thumbnail_image, imageByModel.get(Number(match.tire_model_id || match.id))].filter((url): url is string => Boolean(url)) : [];
+      photoCandidates.set(photoKey, [...(photoCandidates.get(photoKey) || []), ...libraryImages]);
+      const supplierPatternImage = supplierImageByPattern.get(tireImageKey(product.brand, product.model)) || "";
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
       const rebates: Array<{ code: string; description: string; url?: string }> = [...(product.rebates || [])];
       for (const rebate of libraryRebates) if (!rebates.some((candidate) => candidate.code === rebate.code)) rebates.push(rebate);
@@ -364,7 +397,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         brand: detail?.brand || match.make_name || product.brand,
         model: detail?.model || match.model_name || product.model,
         description: detail?.description || product.description,
-        imageUrl: safeUrl(product.imageUrl) || supplierPatternImage || detail?.imageUrl || safeUrl(match.thumbnail_image) || imageByModel.get(Number(match.tire_model_id || match.id)) || null,
+        imageUrl: safeUrl(product.imageUrl) || supplierPatternImage || libraryImages[0] || null,
         category: detail?.terrain || detail?.season || detail?.category || match.terrain || match.season || match.category || product.category,
         loadSpeed: detail?.loadSpeed || [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
         warranty: detail?.warranty || match.warranty || product.warranty,
@@ -388,9 +421,10 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         tireLibraryMatched: true,
       };
     });
+    return recoverTireImages(enriched, photoCandidates, true, products);
   } catch (error) {
     console.warn("Tire Library enrichment skipped:", error instanceof Error ? error.message : error);
-    return products;
+    return recoverTireImages(products, new Map(), false);
   }
 }
 
@@ -497,17 +531,12 @@ export async function tireLibraryTireDetails(id: number) {
     utqg: tire.utqg || "",
     snowRated: Boolean(tire.three_pmsf),
     runFlat: Boolean(tire.run_flat),
-    imageUrl:
-      safeUrl(tire.tire_model?.image_url) ||
-      safeUrl(tire.angle_image) ||
-      safeUrl(tire.front_image) ||
-      safeUrl(tire.side_image) ||
-      safeUrl(tire.side2_image) ||
-      safeUrl(tire.image_0100) ||
-      safeUrl(tire.image_0200) ||
-      safeUrl(tire.image_0301) ||
-      safeUrl(tire.image_0302) ||
-      safeUrl(tire.thumbnail_image),
+    imageUrl: await firstHealthyTireImage([
+      tire.tire_model?.image_url, tire.angle_image, tire.front_image,
+      tire.side_image, tire.side2_image, tire.image_0100, tire.image_0200,
+      tire.image_0301, tire.image_0302, tire.thumbnail_image,
+      tire.tire_model?.image_360_thumbnail_url,
+    ]),
     image360Url: safeUrl(tire.tire_model?.image_360_url),
     videoUrl: safeUrl(tire.tire_model?.video_url),
     manufacturerUrl: safeUrl(tire.tire_model?.manufacturer_url),

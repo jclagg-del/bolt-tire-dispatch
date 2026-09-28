@@ -550,7 +550,8 @@ export default function TireShoppingBeta({
       const details = result.details || {};
       setProducts((items) => items.map((item) => item.id === tire.id ? {
         ...item,
-        imageUrl: details.imageUrl || item.imageUrl,
+        // Keep the verified search photo; detail data must not replace it with an untested link.
+        imageUrl: item.imageUrl || details.imageUrl,
         libraryDescription: details.description || "",
         features: details.features || "",
         benefits: details.benefits || "",

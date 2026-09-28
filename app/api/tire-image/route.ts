@@ -1,28 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { allowedTireImage } from "@/lib/tire-image-health";
 
 export const dynamic = "force-dynamic";
 
-const allowedHosts = [
-  "tireweb.tirelibrary.com",
-  "images.atdonline.com",
-  "storage.googleapis.com",
-];
-
-function allowedImage(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && allowedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
-  } catch {
-    return false;
-  }
-}
-
 export async function GET(request: NextRequest) {
   const source = String(request.nextUrl.searchParams.get("url") || "");
-  if (!allowedImage(source)) return NextResponse.json({ error: "Unsupported tire image host" }, { status: 400 });
+  if (!allowedTireImage(source)) return NextResponse.json({ error: "Unsupported tire image host" }, { status: 400 });
 
   try {
     const response = await fetch(source, {
+      redirect: "error",
+      signal: AbortSignal.timeout(8000),
       headers: {
         Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "User-Agent": "Bolt Tire product catalog",
