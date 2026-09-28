@@ -135,9 +135,9 @@ test('USAF size stock check omits warehouse restriction and retains every return
   assert.deepEqual(result.tires[0].availability.map(w => w.branch), ['07', '4853']);
 });
 
-function routeFixture({ supplierError = false, production = true, authenticated = true } = {}) {
+function routeFixture({ supplierError = false, production = true, authenticated = true, customer = 'Kingdom Support Services' } = {}) {
   let saved = null, placements = 0;
-  const order = { id: 42, customer: 'Kingdom Support Services', job_number: '3094589', mo_number: 'MO123', qty: 2, tire_product_number: '110822702', tire_size: '2256017', order_status: 'new', approved_job_id: null, tires_ordered: false };
+  const order = { id: 42, customer, job_number: '3094589', mo_number: 'MO123', qty: 2, tire_product_number: '110822702', tire_size: '2256017', order_status: 'new', approved_job_id: null, tires_ordered: false };
   const admin = { from(table) {
     let operation = 'select', values;
     const query = {
@@ -161,10 +161,31 @@ function routeFixture({ supplierError = false, production = true, authenticated 
   const api = loader({
     '@/lib/supabase/admin': { requireApiUser: async () => authenticated ? { id: 'staff' } : null, createAdminClient: () => admin },
     '@/lib/atd': { atdEnvironment: production ? 'production' : 'sandbox', searchAtdByPartNumber: async () => [{ atdProductNumber: '110822702' }], previewAtdOrder: async () => preview, placeAtdOrder: async input => { placements++; assert.equal(input.customerPoNumber, order.job_number); assert.equal(input.quantity, 2); if (supplierError) throw new Error('timeout'); return { order: { ...preview.order, confirmationnumber: 'ATD123' } }; } },
+    '@/lib/usaf': { usaForceOrderingStatus: () => ({ configured: true, production, test: !production }) },
+    '@/lib/usaf-ordering': {
+      searchUsafOrderProduct: async (part,quantity) => { assert.equal(part,order.tire_product_number); assert.equal(quantity,order.qty); return [{atdProductNumber:part,lineCode:'GY',warehouses:[{code:'4853',quantity:12}]}]; },
+      previewUsafOrder: async input => { assert.equal(input.po,order.job_number); assert.equal(input.mo,order.mo_number); assert.equal(input.branch,'4853'); return {supplier:'U.S. AutoForce',...preview}; },
+      placeUsafOrder: async input => { placements++; assert.equal(input.po,order.job_number); assert.equal(input.mo,order.mo_number); assert.equal(input.quantity,order.qty); assert.equal(input.part,order.tire_product_number); if(supplierError)throw new Error('timeout');return {supplier:'U.S. AutoForce',order:{...preview.order,confirmationnumber:'USAF123'}}; },
+    },
   })('app/api/orders/purchase/route.ts');
   const request = extra => api.POST(new Request('http://localhost/api/orders/purchase', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'place', orderId: 42, supplier: 'ATD', productNumber: '110822702', expectedTotal: 200, expectedPo: order.job_number, expectedQuantity: 2, expectedDeliveryDate: '2026-09-23', ...extra }) }));
   return { request, order, get saved() { return saved; }, get placements() { return placements; } };
 }
+test('KSS and HPR card flows search, review and place once with USAF or ATD, saving supplier/ETA without redirects',async()=>{
+ for(const customer of ['Kingdom Support Services','HPR'])for(const supplier of ['USAF','ATD']){
+  const fixture=routeFixture({customer});const selection={supplier,lineCode:'GY',branch:'4853'};
+  const search=await fixture.request({...selection,action:'search'});assert.equal(search.status,200);assert.equal((await search.json()).sandbox,false);assert.equal(fixture.placements,0);
+  const review=await fixture.request({...selection,action:'preview'});assert.equal(review.status,200);assert.equal(fixture.placements,0);
+  const response=await fixture.request(selection);assert.equal(response.status,200);assert.equal(response.headers.get('location'),null);
+  const result=await response.json();assert.equal(result.completed.supplier,supplier==='USAF'?'U.S. AutoForce':'ATD');assert.equal(result.completed.deliveryDate,'2026-09-23');assert.equal(fixture.order.tires_ordered,true);
+  assert.equal((await fixture.request(selection)).status,200);assert.equal(fixture.placements,1);
+ }
+});
+test('USAF card purchases remain blocked with test access or uncertain results',async()=>{
+ const selection={supplier:'USAF',lineCode:'GY',branch:'4853'};
+ const testAccess=routeFixture({production:false});assert.equal((await testAccess.request(selection)).status,409);assert.equal(testAccess.placements,0);
+ const uncertain=routeFixture({supplierError:true});assert.equal((await uncertain.request(selection)).status,502);assert.equal((await uncertain.request(selection)).status,409);assert.equal(uncertain.placements,1);
+});
 test('confirmed purchases persist and retries return confirmation without purchasing twice', async () => {
   const fixture = routeFixture();
   const first = await fixture.request({});

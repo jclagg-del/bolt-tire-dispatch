@@ -770,8 +770,9 @@ function OrderSection({
 
                 {order.order_status === "new" && <div style={{ marginTop: 16 }}>
                   <button type="button" style={openJobButton} disabled={working || Boolean(purchasingOrder) || (order.tires_ordered && !order.purchase) || !order.tire_product_number || !order.job_number} onClick={() => setPurchasingOrder(order)}>
-                    {order.purchase?.status === "placed" ? "View supplier confirmation" : order.purchase ? "Check supplier order" : "Order tires by product number"}
+                    {order.purchase?.status === "placed" ? "View supplier confirmation" : order.purchase ? "Check supplier order" : "Order tires"}
                   </button>
+                  {!order.purchase && !order.tires_ordered && <p style={{ fontSize: 13, color: "#475569", margin: "8px 0" }}>Order from U.S. AutoForce or ATD here. The requested part, quantity and job/PO number are filled in for you. Supplier and estimated delivery save to this card after confirmation.</p>}
                   {(!order.tire_product_number || !order.job_number) && <p style={{ color: "#92400e", fontSize: 13 }}>A product number and job number are needed to order.</p>}
                   {(order.tire_items?.length || 0) > 1 && <p>Different front/rear tires: order each listed part in Tire Shop, then record the supplier and delivery date below.</p>}
                   {order.purchase?.status === "placed" && <p style={{ color: "#166534", fontSize: 13 }}>{order.purchase.supplier} confirmation: {order.purchase.confirmation} · Expected delivery: {order.purchase.deliveryDate ? formatDate(order.purchase.deliveryDate) : "Not provided by supplier"}</p>}
