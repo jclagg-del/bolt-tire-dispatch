@@ -22,6 +22,59 @@ function loader(stubs = {}) {
 }
 const valid = { name: 'Test Customer', phone: '(201) 555-0123', email: 'customer@example.com', vehicle: '2020 Ford Transit', address: '123 Example Street' };
 const { shopCustomerError, normalizeShopCustomer } = loader()('lib/shop-customer.ts');
+const {matchesTireStock}=loader()('lib/tire-stock-filter.ts');
+test('only authenticated staff catalog requests include unavailable USAF tires',async()=>{
+ let authenticated=false;
+ const searches=[];
+ const route=loader({
+  '@/lib/supabase/admin':{requireApiUser:async()=>authenticated?{id:'staff'}:null},
+  '@/lib/atd':{atdEnvironment:'production',searchAtdBySize:async()=>[],searchAtdByPartNumber:async()=>[]},
+  '@/lib/usaf-catalog':{searchUsafBySize:async(...args)=>{searches.push(args);return [];},searchUsafByPartNumber:async(...args)=>{searches.push(args);return [];}},
+  '@/lib/ntw':{ntwEnvironment:'sandbox',searchNtwBySize:async()=>[],searchNtwByPartNumber:async()=>[]},
+  '@/lib/inventory-match-audit':{auditSupplierMatches:async()=>{}},
+  '@/lib/tire-library':{enrichWithTireLibrary:async p=>p,sanitizeVehicleFitments:()=>[{position:'both'}],tireLibraryFitmentSize:()=> '2755520'},
+ })('app/api/atd/route.ts');
+ const request=body=>route.POST(new Request('https://example.test/api/atd',{method:'POST',body:JSON.stringify(body)}));
+ assert.equal((await request({action:'size',query:'2755520',includeOutOfStock:true})).status,200);
+ assert.deepEqual(searches.pop(),['2755520',false,'customer',false]);
+ assert.equal((await request({action:'size',query:'2755520',internal:true})).status,401);
+ assert.equal(searches.length,0);
+ authenticated=true;
+ for(const action of ['size','part-number','fitment-products']){
+  assert.equal((await request({action,query:'2755520',internal:true})).status,200);
+  assert.deepEqual(searches.pop(),['2755520',true,'staff',true]);
+ }
+});
+test('stock filter explicitly includes unavailable tires only when checked',()=>{
+ const local={availability:{local:2,localPlus:0,nationwide:0}};
+ const distant={availability:{local:0,localPlus:0,nationwide:8}};
+ const empty={availability:{local:0,localPlus:0,nationwide:0}};
+ assert.equal(matchesTireStock(local,true,false),true);
+ assert.equal(matchesTireStock(distant,true,false),false);
+ assert.equal(matchesTireStock(distant,false,false),true);
+ assert.equal(matchesTireStock(empty,false,false),false);
+ assert.equal(matchesTireStock(empty,false,true),true);
+ assert.equal(matchesTireStock(empty,true,true),true);
+});
+
+test('staff checkbox shows and labels unavailable tires, prefers stocked offers, and stays off the public shop',()=>{
+ const base={brand:'GENERAL',model:'Grabber H/T',size:'275/55R20',loadSpeed:'117 T',loadRange:'XL',sidewall:'BSW',category:'Highway',warranty:'70000',snowRated:false,runFlat:false,hasRebate:false,rebates:[],serviceCategory:'passenger',fitmentPosition:'both',imageUrl:null,availability:{local:0,localPlus:0,nationwide:0},quotePrice:200,cost:150,installedPrice:300,estimatedTotals:{4:1200}};
+ const empty={...base,id:'empty',supplier:'ATD',atdProductNumber:'empty',manufacturerProductNumber:'empty'};
+ const cheap={...base,id:'cheap',supplier:'ATD',atdProductNumber:'stocked',manufacturerProductNumber:'stocked'};
+ const stocked={...cheap,id:'USAF-stocked',supplier:'USAF',quotePrice:220,cost:200,availability:{local:4,localPlus:0,nationwide:4},estimatedTotals:{4:1280}};
+ for(const internal of [true,false]) for(const showOutOfStock of [false,true]){
+  let index=0;
+  const Page=loader({'next/navigation':{useRouter:()=>({})},'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;const overrides={0:'2755520',1:[empty,cheap,stocked],3:true,6:!internal,12:'size',47:showOutOfStock};return [Object.hasOwn(overrides,n)?overrides[n]:typeof initial==='function'?initial():initial,()=>{}]}}})('components/TireShoppingBeta.tsx').default;
+  const html=renderToStaticMarkup(React.createElement(Page,{internal}));
+  assert.equal((html.match(/<article /g)||[]).length,internal&&showOutOfStock?2:1);
+  if(internal){
+   assert.match(html,/Show out-of-stock tires/);
+   assert.ok(html.includes('$220.00'));
+   if(showOutOfStock){assert.match(html,/Out of stock — availability not confirmed/);assert.match(html,/<button[^>]*disabled=""[^>]*>Out of stock<\/button>/);}
+   else assert.doesNotMatch(html,/Out of stock —/);
+  }else assert.doesNotMatch(html,/Show out-of-stock tires|Out of stock —|Supplier cost/);
+ }
+});
 test('all five checkout fields are required; whitespace and invalid phone/email are rejected', () => {
   assert.equal(shopCustomerError(valid), null);
   for (const field of Object.keys(valid)) for (const value of ['', '   ', null, undefined, {}]) {

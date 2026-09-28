@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       const query = String(body.query || "");
       const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
         searchAtdBySize(query, includeCost),
-        searchUsafBySize(query, includeCost),
+        searchUsafBySize(query, includeCost, includeCost ? "staff" : "customer", includeCost),
         ntwEnvironment === "production" || includeCost ? optionalNtw(() => searchNtwBySize(query, includeCost)) : Promise.resolve([]),
       ]);
       const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts, ...ntwProducts]);
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       const query = String(body.query || "");
       const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
         searchAtdByPartNumber(query, true),
-        searchUsafByPartNumber(query, true),
+        searchUsafByPartNumber(query, true, "staff", true),
         optionalNtw(() => searchNtwByPartNumber(query, true)),
       ]);
       const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts, ...ntwProducts]);
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         const size = tireLibraryFitmentSize(fitment);
         const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
           searchAtdBySize(size, includeCost),
-          searchUsafBySize(size, includeCost),
+          searchUsafBySize(size, includeCost, includeCost ? "staff" : "customer", includeCost),
           ntwEnvironment === "production" || includeCost ? optionalNtw(() => searchNtwBySize(size, includeCost)) : Promise.resolve([]),
         ]);
         const minimumLoad = Number(fitment.load_rating || 0);

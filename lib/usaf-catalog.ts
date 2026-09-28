@@ -33,13 +33,16 @@ async function pricingSettings() {
   return { ...fallbackBusinessSettings, ...(data || {}) } as BusinessSettings;
 }
 
-export async function searchUsafBySize(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer") {
+export async function searchUsafBySize(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer", includeOutOfStock = false) {
   const sizeKey = query.replace(/\D/g, "");
   if (sizeKey.length < 5) return [];
   const admin = createAdminClient();
+  const includeUnavailable = includeCost && audience === "staff" && includeOutOfStock;
+  let catalogQuery = admin.from("usaf_inventory").select("part_number,brand,model,sales_class,tire_type,tire_size,ply_rating,utqg,sidewall,load_range,tread_depth,warranty,upc,discontinued,run_flat,snowflake,cost,map_price,retail_price,total_quantity,warehouse_inventory").eq("tire_size_key", sizeKey).eq("discontinued", false);
+  if (!includeUnavailable) catalogQuery = catalogQuery.gt("total_quantity", 0);
   const [{ data, error }, settings] = await Promise.all([
     // Include the transfer network; nearby filtering is a separate shop option.
-    admin.from("usaf_inventory").select("part_number,brand,model,sales_class,tire_type,tire_size,ply_rating,utqg,sidewall,load_range,tread_depth,warranty,upc,discontinued,run_flat,snowflake,cost,map_price,retail_price,total_quantity,warehouse_inventory").eq("tire_size_key", sizeKey).eq("discontinued", false).gt("total_quantity", 0).order("cost").limit(1000),
+    catalogQuery.order("cost").limit(1000),
     pricingSettings(),
   ]);
   if (error) {
@@ -56,7 +59,7 @@ export async function searchUsafBySize(query: string, includeCost: boolean, audi
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     const { warehouses, localQuantity, regionalQuantity, availableQuantity } = usafCatalogInventory(Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : []);
-    if (!availableQuantity) return null;
+    if (!availableQuantity && !includeUnavailable) return null;
     return {
       id: `USAF-${row.part_number}`,
       supplier: "USAF",
@@ -94,9 +97,10 @@ export async function searchUsafBySize(query: string, includeCost: boolean, audi
   }).filter((product): product is NonNullable<typeof product> => product !== null);
 }
 
-export async function searchUsafByPartNumber(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer") {
+export async function searchUsafByPartNumber(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer", includeOutOfStock = false) {
   const key = query.trim().replace(/[^a-zA-Z0-9]/g, "");
   if (!key) return [];
+  const includeUnavailable = includeCost && audience === "staff" && includeOutOfStock;
   const admin = createAdminClient();
   const [{ data, error }, settings] = await Promise.all([
     admin.from("usaf_inventory").select("part_number,brand,model,sales_class,tire_type,tire_size,ply_rating,utqg,sidewall,load_range,tread_depth,warranty,upc,discontinued,run_flat,snowflake,cost,map_price,retail_price,total_quantity,warehouse_inventory").or(`part_number.eq.${key},upc.eq.${key}`).eq("discontinued", false).limit(20),
@@ -116,7 +120,7 @@ export async function searchUsafByPartNumber(query: string, includeCost: boolean
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     const { warehouses, localQuantity, regionalQuantity, availableQuantity } = usafCatalogInventory(Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : []);
-    if (!availableQuantity) return null;
+    if (!availableQuantity && !includeUnavailable) return null;
     return { id: `USAF-${row.part_number}`, supplier: "USAF" as const, atdProductNumber: row.part_number, manufacturerProductNumber: row.upc || row.part_number, brand: row.brand, model: row.model, description: row.sales_class || row.model, size: row.tire_size, category: row.tire_type || "Tire", serviceCategory: truck ? "truck" as const : "passenger" as const, fitmentPosition: "both" as const, loadSpeed: [row.load_range && `Load ${row.load_range}`, row.ply_rating && `${row.ply_rating} ply`].filter(Boolean).join(" · "), warranty: row.warranty || "", snowRated: row.snowflake, loadRange: row.load_range || "", treadDepth: row.tread_depth || "", utqg: row.utqg || "", sidewall: row.sidewall || "", maxLoad: "", rimRange: "", oeMarking: "", imageUrl: null, discontinued: row.discontinued, runFlat: row.run_flat, hasRebate: false, rebates: [], quotePrice, installedPrice: estimatedTotals[1], estimatedTotals, ...(includeCost ? { cost, map: Number(row.map_price || 0), msrp: Number(row.retail_price || 0), ...markupPricing(cost, markup, minimumProfit, truck ? "truck" : "passenger") } : {}), availability: { local: localQuantity, localPlus: regionalQuantity, nationwide: availableQuantity }, warehouseInventory: warehouses };
   }).filter((product): product is NonNullable<typeof product> => product !== null);
 }

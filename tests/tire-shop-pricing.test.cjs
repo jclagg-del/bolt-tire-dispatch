@@ -125,4 +125,14 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
     assert.equal(product.warehouseInventory[0].warehouse, '07');
     assert.deepEqual(product.availability, {local:0,localPlus:0,nationwide:8});
   }
+  row.warehouse_inventory = [];
+  row.total_quantity = 0;
+  for (const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
+    assert.deepEqual(await search('224060',true),[]);
+    assert.deepEqual(await search('224060',false,'customer',true),[]);
+    assert.deepEqual(await search('224060',true,'customer',true),[]);
+    const [unavailable] = await search('224060',true,'staff',true);
+    assert.equal(unavailable.atdProductNumber,'224060');
+    assert.deepEqual(unavailable.availability,{local:0,localPlus:0,nationwide:0});
+  }
 });

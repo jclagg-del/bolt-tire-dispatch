@@ -191,6 +191,7 @@ body{
 .tire-beta-brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px}.tire-beta-position{border-radius:999px;padding:5px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tire-beta-position.front{background:#dbeafe;color:#1d4ed8}.tire-beta-position.rear{background:#ede9fe;color:#6d28d9}.tire-beta-staggered-note{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff7ed;border:1px solid #fdba74;border-radius:13px;padding:12px 15px;color:#9a3412}.tire-beta-staggered-note span{font-size:12px}
 .tire-beta-product h2 { margin: 3px 0 5px; font-size: 22px; }
 .tire-beta-product-main p { color: #166534; font-weight: 800; margin: 11px 0 0; }
+.tire-beta-product-main p.tire-beta-out-of-stock { color: #92400e; }
 .tire-beta-tags, .tire-beta-stock { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
 .tire-beta-tags span { padding: 5px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 800; }
 .tire-beta-tags .rebate-tag{background:#dcfce7;color:#166534}.tire-beta-rebates{display:grid;gap:7px;margin-top:11px}.tire-beta-rebates>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #86efac;border-radius:10px;background:#f0fdf4;color:#14532d;font-size:12px}.tire-beta-rebates a{color:#166534;font-weight:900;text-decoration:underline}.tire-beta-rebates small{color:#4d7c5a}

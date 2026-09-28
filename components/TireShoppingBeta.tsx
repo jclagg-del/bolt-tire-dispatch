@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
 import { sameTireVariant, supplierOffers, uniqueTireCards } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
+import { hasTireStock, matchesTireStock } from "@/lib/tire-stock-filter";
 import SelectedQuoteTires from "@/components/SelectedQuoteTires";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
@@ -187,6 +188,7 @@ export default function TireShoppingBeta({
   const [warehouseError, setWarehouseError] = useState("");
   const [warehouseDetails, setWarehouseDetails] = useState<WarehouseDetail[]>([]);
   const [detailLoading, setDetailLoading] = useState("");
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
   useEffect(() => {
     if (!internal) return;
     const saved = readShoppingSession<{
@@ -194,6 +196,7 @@ export default function TireShoppingBeta({
       category: string; selectedBrands: string[]; minPrice: string; maxPrice: string;
       minWarranty: string; loadRange: string; speedRating: string; availableOnly: boolean;
       snowOnly: boolean; runFlatOnly: boolean; rebateOnly: boolean; sort: string;
+      showOutOfStock?: boolean;
       mode: "size" | "vehicle" | "part"; partNumber: string; vehicle: typeof vehicle;
       years: string[]; makes: string[]; models: string[]; trims: string[]; fitmentOptions: FitmentOption[];
     }>(sessionStorage, shopSessionKey);
@@ -202,6 +205,7 @@ export default function TireShoppingBeta({
     setCategory(saved.category); setSelectedBrands(saved.selectedBrands); setMinPrice(saved.minPrice); setMaxPrice(saved.maxPrice);
     setMinWarranty(saved.minWarranty); setLoadRange(saved.loadRange); setSpeedRating(saved.speedRating);
     setAvailableOnly(saved.availableOnly); setSnowOnly(saved.snowOnly); setRunFlatOnly(saved.runFlatOnly); setRebateOnly(saved.rebateOnly);
+    setShowOutOfStock(saved.showOutOfStock === true);
     setSort(saved.sort); setMode(saved.mode); setPartNumber(saved.partNumber); setVehicle(saved.vehicle);
     setYears(saved.years); setMakes(saved.makes); setModels(saved.models); setTrims(saved.trims); setFitmentOptions(saved.fitmentOptions);
     setSearched(true); setResumingQuote(!!readShoppingSession(sessionStorage, quoteDraftKey));
@@ -373,8 +377,8 @@ export default function TireShoppingBeta({
         .filter(
           (tire) =>
             (category === "All" || tire.category === category) &&
-            (!availableOnly ||
-              tire.availability.local + tire.availability.localPlus > 0) &&
+            (internal ? matchesTireStock(tire, availableOnly, showOutOfStock) :
+              !availableOnly || tire.availability.local + tire.availability.localPlus > 0) &&
             (!snowOnly || tire.snowRated) &&
             matchesBrands(tire.brand, selectedBrands) &&
             (!minPrice || installedTotal(tire, quantity) >= Number(minPrice)) &&
@@ -389,6 +393,8 @@ export default function TireShoppingBeta({
             (!rebateOnly || tire.hasRebate),
         )
         .sort((a, b) => {
+          // Never let a cheaper unavailable offer hide the stocked supplier.
+          if (internal && hasTireStock(a) !== hasTireStock(b)) return hasTireStock(a) ? -1 : 1;
           if (sort === "availability")
             return (
               b.availability.local +
@@ -401,6 +407,8 @@ export default function TireShoppingBeta({
         })),
     [
       availableOnly,
+      internal,
+      showOutOfStock,
       selectedBrands,
       category,
       loadRange,
@@ -432,6 +440,7 @@ export default function TireShoppingBeta({
       saveShoppingSession(sessionStorage, shopSessionKey, {
         query, products, selected, quantity, category, selectedBrands, minPrice, maxPrice,
         minWarranty, loadRange, speedRating, availableOnly, snowOnly, runFlatOnly, rebateOnly,
+        showOutOfStock,
         sort, mode, partNumber, vehicle, years, makes, models, trims, fitmentOptions,
       });
     sessionStorage.setItem(
@@ -941,6 +950,7 @@ export default function TireShoppingBeta({
                 setLoadRange("All");
                 setSpeedRating("All");
                 setAvailableOnly(true);
+                setShowOutOfStock(false);
                 setSnowOnly(false);
                 setRunFlatOnly(false);
                 setRebateOnly(false);
@@ -1041,10 +1051,20 @@ export default function TireShoppingBeta({
             <input
               type="checkbox"
               checked={availableOnly}
-              onChange={(event) => setAvailableOnly(event.target.checked)}
+              onChange={(event) => {
+                setAvailableOnly(event.target.checked);
+                if (event.target.checked) setShowOutOfStock(false);
+              }}
             />{" "}
             Available nearby
           </label>
+          {internal && <label className="tire-beta-check">
+            <input type="checkbox" checked={showOutOfStock} onChange={(event) => {
+              setShowOutOfStock(event.target.checked);
+              if (event.target.checked) setAvailableOnly(false);
+            }} />{" "}
+            Show out-of-stock tires
+          </label>}
           <label className="tire-beta-check">
             <input
               type="checkbox"
@@ -1075,7 +1095,7 @@ export default function TireShoppingBeta({
             <div>
               <strong>{results.length} tires</strong>
               <span>
-                {searched ? " from live inventory" : " — enter a size above"}
+                {searched ? internal && showOutOfStock ? " from supplier catalog (including out of stock)" : " from live inventory" : " — enter a size above"}
               </span>
             </div>
             <div className="tire-beta-result-controls">
@@ -1348,8 +1368,8 @@ export default function TireShoppingBeta({
                         </nav>
                       ) : null}
                     </details>
-                    <p>
-                      {tire.availability.local
+                    <p className={internal && !hasTireStock(tire) ? "tire-beta-out-of-stock" : undefined}>
+                      {internal && !hasTireStock(tire) ? "Out of stock — availability not confirmed" : tire.availability.local
                         ? "Available locally"
                         : tire.availability.localPlus
                           ? internal
@@ -1509,9 +1529,10 @@ export default function TireShoppingBeta({
                       <button
                         className="tire-beta-direct-order"
                         type="button"
+                        disabled={!supplierAvailability.some(hasTireStock)}
                         onClick={() => chooseSupplier(tire)}
                       >
-                        Choose supplier
+                        {supplierAvailability.some(hasTireStock) ? "Choose supplier" : "Out of stock"}
                       </button>
                     ) : null}
                   </div>
@@ -1607,14 +1628,14 @@ export default function TireShoppingBeta({
                 <p>Select where you want to order this exact tire. Connected suppliers with a matching product are available below.</p>
                 {(["ATD", "USAF", "K&M", "NTW"] as const).map((supplier) => {
                   const match = supplierMatches(orderProduct).find((item) => item.supplier === supplier);
-                  const connected = (supplier === "ATD" || supplier === "USAF") && Boolean(match);
+                  const connected = (supplier === "ATD" || supplier === "USAF") && Boolean(match && hasTireStock(match));
                   return <button type="button" key={supplier} disabled={!connected} onClick={() => {
                     if (!match) return;
                     if (supplier === "USAF") { setUsafOrderProduct(match); setOrderProduct(null); setOrderChoosingSupplier(false); }
                     else beginOrder(match);
                   }}>
                     <span><strong>{supplier === "USAF" ? "U.S. AutoForce" : supplier}</strong><small>{match ? `${match.atdProductNumber} · $${Number(match.cost || 0).toFixed(2)} each` : "No matching product in this search"}</small></span>
-                    <b>{connected ? "Select" : match && supplier === "NTW" && match.qaOnly ? "QA inventory only" : "Not connected"}</b>
+                    <b>{connected ? "Select" : match && !hasTireStock(match) ? "Out of stock" : match && supplier === "NTW" && match.qaOnly ? "QA inventory only" : "Not connected"}</b>
                   </button>;
                 })}
               </div>
