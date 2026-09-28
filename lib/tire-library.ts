@@ -1,5 +1,5 @@
 import "server-only";
-import { firstHealthyTireImage, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
+import { firstHealthyTireImage, rankTireImages, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
 
 const baseUrls = Array.from(new Set([
   process.env.TIRE_LIBRARY_BASE_URL?.trim(),
@@ -290,21 +290,21 @@ async function tireLibraryModelImage(brand: string, model: string): Promise<stri
   const catalog = await tireLibraryRequest<{ results?: TireLibraryPage }>(`tires/catalog?${params}`);
   const sameModel = (catalog.results?.data || []).filter(item =>
     tireImageKey(item.make_name || "", item.model_name || "") === tireImageKey(brand, model));
-  let image = await firstHealthyTireImage(sameModel.map(item => item.thumbnail_image));
+  const details = await Promise.all(sameModel.slice(0, 2).map(item => tireLibraryTireDetails(item.id).catch(() => null)));
+  let image = await firstHealthyTireImage([
+    ...details.map(item => item?.preferredImageUrl),
+    ...rankTireImages([...details.map(item => item?.imageUrl), ...sameModel.map(item => item.thumbnail_image)]),
+  ]);
   if (image) return image;
   const patterns = await tireLibraryRequest<{ results?: TireLibraryPage<TireLibraryPatternDetail> }>(`tire-patterns/catalog?${params}`);
   const exact = (patterns.results?.data || []).filter(item =>
     tireImageKey(item.make_name || "", item.name || "") === tireImageKey(brand, model));
   image = await firstHealthyTireImage(exact.flatMap(item => [item.image_url, item.image_360_thumbnail_url]));
   if (image) return image;
-  for (const item of sameModel.slice(0, 2)) {
-    const detail = await tireLibraryTireDetails(item.id);
-    if (detail.imageUrl) return detail.imageUrl;
-  }
   return null;
 }
 
-async function recoverTireImages<T extends EnrichableTire>(products: T[], candidates = new Map<string, string[]>(), useLibrary = true, identities: EnrichableTire[] = products, photoDetails = new Map<string, number>()): Promise<T[]> {
+async function recoverTireImages<T extends EnrichableTire>(products: T[], candidates = new Map<string, string[]>(), useLibrary = true, identities: EnrichableTire[] = products, photoDetails = new Map<string, number>(), preferredImages = new Map<string, string>()): Promise<T[]> {
   const byModel = new Map<string, string[]>(candidates);
   for (const [index, product] of products.entries()) {
     const identity = identities[index];
@@ -315,11 +315,11 @@ async function recoverTireImages<T extends EnrichableTire>(products: T[], candid
   return Promise.all(products.map(async (product, index) => {
     const identity = identities[index];
     const key = tireImageKey(identity.brand, identity.model);
-    let image = await firstHealthyTireImage([product.imageUrl, ...(byModel.get(key) || [])]);
+    let image = await firstHealthyTireImage([preferredImages.get(key), ...rankTireImages([product.imageUrl, ...(byModel.get(key) || [])])]);
     if (!image && useLibrary) {
       if (!recovered.has(key)) recovered.set(key, (async () => {
-        // Large searches cap the metadata detail pass. Still check the confirmed
-        // exact-model/SKU record when its thumbnail is broken or missing.
+        // Retry the confirmed exact-model/SKU record when its earlier detail
+        // request failed and the thumbnail is broken or missing.
         const detailId = photoDetails.get(key);
         if (detailId) {
           const detail = await tireLibraryTireDetails(detailId).catch(() => null);
@@ -373,17 +373,21 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       ...representativeEntries.filter(needsImage),
       ...representativeEntries.filter((entry) => !needsImage(entry)),
     ];
-    const detailPairs = await Promise.all(prioritizedEntries.slice(0, 60).map(async ([key, match]) => {
-      try {
-        const detail = await tireLibraryTireDetails(match.id);
-        return [key, detail] as const;
-      } catch {
-        return [key, null] as const;
+    // Every matched pattern gets its alternate views, including large searches.
+    // Bound concurrency instead of permanently excluding models after the first 60.
+    const detailPairs: Array<readonly [number, Awaited<ReturnType<typeof tireLibraryTireDetails>> | null]> = [];
+    let nextDetail = 0;
+    await Promise.all(Array.from({ length: Math.min(8, prioritizedEntries.length) }, async () => {
+      while (nextDetail < prioritizedEntries.length) {
+        const [key, match] = prioritizedEntries[nextDetail++];
+        const detail = await tireLibraryTireDetails(match.id).catch(() => null);
+        detailPairs.push([key, detail]);
       }
     }));
     const detailsByModel = new Map(detailPairs);
     const photoCandidates = new Map<string, string[]>();
     const photoDetails = new Map<string, number>();
+    const preferredImages = new Map<string, string>();
     const photoIdentities = [...products];
     for (const item of catalogs) {
       const key = tireImageKey(item.make_name || "", item.model_name || "");
@@ -403,6 +407,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       }
       const libraryImages = photoMatch ? [detail?.imageUrl, match.thumbnail_image, imageByModel.get(Number(match.tire_model_id || match.id))].filter((url): url is string => Boolean(url)) : [];
       if (photoMatch) photoDetails.set(photoKey, match.id);
+      if (photoMatch && detail?.preferredImageUrl) preferredImages.set(photoKey, detail.preferredImageUrl);
       photoCandidates.set(photoKey, [...(photoCandidates.get(photoKey) || []), ...libraryImages]);
       const supplierPatternImage = supplierImageByPattern.get(tireImageKey(product.brand, product.model)) || "";
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
@@ -437,7 +442,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         tireLibraryMatched: true,
       };
     });
-    return recoverTireImages(enriched, photoCandidates, true, photoIdentities, photoDetails);
+    return recoverTireImages(enriched, photoCandidates, true, photoIdentities, photoDetails, preferredImages);
   } catch (error) {
     console.warn("Tire Library enrichment skipped:", error instanceof Error ? error.message : error);
     return recoverTireImages(products, new Map(), false);
@@ -533,6 +538,7 @@ export function sanitizeVehicleFitments(value: unknown): Array<TireLibraryVehicl
 export async function tireLibraryTireDetails(id: number) {
   if (!Number.isInteger(id) || id < 1) throw new Error("A valid Tire Library tire ID is required");
   const tire = await tireLibraryRequest<TireLibraryTireDetail>(`tires/${id}?rebate_status=Active`);
+  const preferredImageUrl = await firstHealthyTireImage([tire.angle_image, tire.front_image]);
   return {
     id: tire.id,
     brand: tire.tire_make?.name || tire.make_name || "",
@@ -547,12 +553,12 @@ export async function tireLibraryTireDetails(id: number) {
     utqg: tire.utqg || "",
     snowRated: Boolean(tire.three_pmsf),
     runFlat: Boolean(tire.run_flat),
-    imageUrl: await firstHealthyTireImage([
-      tire.tire_model?.image_url, tire.angle_image, tire.front_image,
-      tire.side_image, tire.side2_image, tire.image_0100, tire.image_0200,
+    preferredImageUrl,
+    imageUrl: preferredImageUrl || await firstHealthyTireImage(rankTireImages([
+      tire.tire_model?.image_url, tire.image_0100, tire.image_0200,
       tire.image_0301, tire.image_0302, tire.thumbnail_image,
-      tire.tire_model?.image_360_thumbnail_url,
-    ]),
+      tire.tire_model?.image_360_thumbnail_url, tire.side_image, tire.side2_image,
+    ])),
     image360Url: safeUrl(tire.tire_model?.image_360_url),
     videoUrl: safeUrl(tire.tire_model?.video_url),
     manufacturerUrl: safeUrl(tire.tire_model?.manufacturer_url),

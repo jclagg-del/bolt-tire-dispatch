@@ -8,6 +8,47 @@ const product=(extra={})=>({id:'USAF-123',brand:'GOODYEAR',model:'Wrangler Stead
 async function withFetch(handler,run){const old=global.fetch,oldKey=process.env.TIRE_LIBRARY_API_KEY;global.fetch=handler;process.env.TIRE_LIBRARY_API_KEY='isolated-test-only';try{await run(loader());}finally{global.fetch=old;if(oldKey===undefined)delete process.env.TIRE_LIBRARY_API_KEY;else process.env.TIRE_LIBRARY_API_KEY=oldKey;}}
 const json=value=>new Response(JSON.stringify(value),{headers:{'content-type':'application/json'}});
 
+test('photo ranking favors supplied angle and tread views over profiles without inventing URLs',()=>{
+ const urls=['https://images.atdonline.com/tire_sidewall.jpg',good,'https://images.atdonline.com/tire_tread.jpg','https://images.atdonline.com/tire_quarterview.jpg'];
+ assert.deepEqual(loader()('lib/tire-image-health.ts').rankTireImages([...urls,urls[2],null]),[urls[3],urls[2],urls[1],urls[0]]);
+});
+
+test('a healthy profile is replaced by an exact-model angle, falling back to front then the existing photo',async()=>{
+ const angle='https://storage.googleapis.com/autosync_tires/angle.webp';
+ const front='https://storage.googleapis.com/autosync_tires/front.webp';
+ for(const failed of [[],[angle],[angle,front]]){
+  await withFetch(async(url)=>{
+   url=String(url);
+   if(url.includes('/tires/search?'))return json({data:[{id:1,tire_model_id:10,item_number:'123',make_name:'Goodyear',model_name:'Wrangler Steadfast HT',thumbnail_image:good}]});
+   if(url.includes('/rebate?'))return json({data:[]});
+   if(url.includes('/tires/1?'))return json({id:1,tire_model:{image_url:good},angle_image:angle,front_image:front});
+   return new Response(null,{status:failed.includes(url)?404:200,headers:{'content-type':'image/jpeg'}});
+  },async load=>{
+   const [result]=await load('lib/tire-library.ts').enrichWithTireLibrary([product({imageUrl:good})]);
+   assert.equal(result.imageUrl,failed.length===0?angle:failed.length===1?front:good);
+   assert.equal(result.cost,200);assert.equal(result.atdProductNumber,'123');assert.equal(result.imageVerified,true);
+  });
+ }
+});
+
+test('alternate views are applied after the first 60 models and detail requests stay bounded',async()=>{
+ const source=Array.from({length:65},(_,i)=>product({id:String(i+1),atdProductNumber:String(i+1),model:`Pattern ${i+1}`,imageUrl:good}));
+ const catalog=source.map((p,i)=>({id:i+1,tire_model_id:i+1,item_number:p.atdProductNumber,make_name:'GOODYEAR',model_name:p.model,thumbnail_image:good}));
+ const angle='https://storage.googleapis.com/autosync_tires/alternate.webp';
+ let active=0,peak=0,count=0;
+ await withFetch(async(url)=>{
+  url=String(url);
+  if(url.includes('/tires/search?'))return json({data:catalog});
+  if(url.includes('/rebate?'))return json({data:[]});
+  const id=url.match(/\/tires\/(\d+)\?/);
+  if(id){active++;count++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,1));active--;return json({id:Number(id[1]),angle_image:angle});}
+  return new Response(null,{headers:{'content-type':'image/jpeg'}});
+ },async load=>{
+  const result=await load('lib/tire-library.ts').enrichWithTireLibrary(source);
+  assert.equal(count,65);assert.ok(peak<=8);assert.equal(result[64].imageUrl,angle);
+ });
+});
+
 test('large searches recover detail photos beyond the metadata cap using the exact SKU tread variant',async()=>{
  const source=Array.from({length:61},(_,i)=>product({id:String(i+1),atdProductNumber:String(i+1),model:i===60?'Wrangler Territory AT':`Pattern ${i+1}`}));
  const catalog=source.map((p,i)=>({id:i+1,tire_model_id:i+1,item_number:p.atdProductNumber,make_name:'GOODYEAR',model_name:i===60?'Wrangler Territory AT (Tread Design B)':p.model,thumbnail_image:i===60?bad:good}));

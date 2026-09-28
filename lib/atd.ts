@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 import { markupPricing } from "@/lib/tire-shop-pricing";
+import { rankTireImages } from "@/lib/tire-image-health";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
 export const atdEnvironment = (process.env.ATD_ENVIRONMENT || "sandbox").trim().toLowerCase();
@@ -57,11 +58,8 @@ type AtdProduct = {
 type InventoryProduct = { local?: number; localplus?: number; nationwide?: number; onhand?: number; atdproductnumber: string };
 
 function firstImage(product: AtdProduct) {
-  for (const group of Object.values(product.images || {})) {
-    const image = group?.image?.[0]?.url || group?.images?.[0]?.url;
-    if (image) return image;
-  }
-  return null;
+  return rankTireImages(Object.values(product.images || {}).flatMap(group =>
+    [...(group?.image || []), ...(group?.images || [])].map(image => image.url)))[0] || null;
 }
 
 function customerPrice(cost: number, productGroup: string, settings: BusinessSettings) {

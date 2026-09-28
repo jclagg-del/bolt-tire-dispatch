@@ -1,6 +1,19 @@
 import "server-only";
 
 const hosts = new Set(["tireweb.tirelibrary.com", "images.atdonline.com", "storage.googleapis.com"]);
+
+// Rank only supplied URLs; never invent another angle by rewriting a filename.
+export function rankTireImages(candidates: Array<string | null | undefined>): string[] {
+  const rank = (url: string) => {
+    let name = url.split("?")[0].toLowerCase();
+    try { name = decodeURIComponent(name); } catch { /* Keep the original filename. */ }
+    if (/(?:^|[\W_])(?:angle(?:d)?|quarter(?:view)?|three[_ -]?quarter|3q)(?:[\W_]|$)/.test(name)) return 0;
+    if (/(?:^|[\W_])(?:tread|front(?:view)?|face)(?:[\W_]|$)/.test(name)) return 1;
+    if (/(?:^|[\W_])(?:side(?:wall|view)?|profile)(?:[\W_]|$)/.test(name)) return 3;
+    return 2;
+  };
+  return [...new Set(candidates.filter((url): url is string => Boolean(url)))].sort((a, b) => rank(a) - rank(b));
+}
 export function allowedTireImage(value: string): boolean {
   try {
     const url = new URL(value);
