@@ -356,15 +356,16 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const image = safeUrl(item.thumbnail_image);
       if (image && !imageByModel.has(key)) imageByModel.set(key, image);
     }
-    const representativeBySku = new Map<number, TireLibrarySearchResult>();
+    const representativeByModel = new Map<number, TireLibrarySearchResult>();
     for (const match of matches) {
       if (!match) continue;
-      if (!representativeBySku.has(match.id)) representativeBySku.set(match.id, match);
+      const key = Number(match.tire_model_id || match.id);
+      if (!representativeByModel.has(key)) representativeByModel.set(key, match);
     }
-    const representativeEntries = Array.from(representativeBySku.entries());
-    const needsImage = ([key, representative]: [number, TireLibrarySearchResult]) =>
-      !imageByModel.get(Number(representative.tire_model_id || representative.id)) && matches.some((match, index) =>
-        match?.id === key &&
+    const representativeEntries = Array.from(representativeByModel.entries());
+    const needsImage = ([key]: [number, TireLibrarySearchResult]) =>
+      !imageByModel.get(key) && matches.some((match, index) =>
+        Number(match?.tire_model_id || match?.id) === key &&
         !safeUrl(match?.thumbnail_image) &&
         !safeUrl(products[index]?.imageUrl),
       );
@@ -372,8 +373,9 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       ...representativeEntries.filter(needsImage),
       ...representativeEntries.filter((entry) => !needsImage(entry)),
     ];
-    // Photos may be shared by pattern, but specifications belong to an exact SKU.
-    // Never reuse a different speed/load/sidewall variant's detail record.
+    // Fetch shared photos/model descriptions once per pattern. SKU specifications
+    // come from each exact catalog row; details are used only for that same SKU.
+    // This avoids an extra supplier request for every size/load/speed variant.
     const detailPairs: Array<readonly [number, Awaited<ReturnType<typeof tireLibraryTireDetails>> | null]> = [];
     let nextDetail = 0;
     await Promise.all(Array.from({ length: Math.min(8, prioritizedEntries.length) }, async () => {
@@ -383,7 +385,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         detailPairs.push([key, detail]);
       }
     }));
-    const detailsBySku = new Map(detailPairs);
+    const detailsByModel = new Map(detailPairs);
     const photoCandidates = new Map<string, string[]>();
     const photoDetails = new Map<string, number>();
     const preferredImages = new Map<string, string>();
@@ -395,10 +397,10 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     const enriched = products.map((product, index) => {
       const match = matches[index];
       if (!match) return product;
-      const detail = detailsBySku.get(match.id);
+      const detail = detailsByModel.get(Number(match.tire_model_id || match.id));
       const exactSku = normalizeBrand(product.brand) === normalizeBrand(match.make_name) && Boolean(match.item_number &&
         [product.atdProductNumber, product.manufacturerProductNumber].map(normalize).includes(normalize(match.item_number)));
-      const skuDetail = exactSku ? detail : null;
+      const skuDetail = exactSku && detail?.id === match.id ? detail : null;
       const skuMatch = exactSku ? match : null;
       let photoKey = tireImageKey(product.brand, product.model);
       const photoMatch = tireImageBrand(product.brand) === tireImageBrand(match.make_name || "") &&

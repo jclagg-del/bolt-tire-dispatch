@@ -18,8 +18,10 @@ test('same-model tires retain exact SKU speed, load, sidewall and dimensions rat
   const id=url.match(/\/tires\/(\d+)\?/);if(id)return json({...catalog.find(v=>v.id===Number(id[1])),tire_model:{name:'Grabber H/T',image_url:good}});
   return new Response(null,{headers:{'content-type':'image/jpeg'}});
  },async load=>{
-  const result=await load('lib/tire-library.ts').enrichWithTireLibrary(variants.map(v=>product({id:String(v.id),brand:'GENERAL',model:'Grabber H/T',size:'2755520',atdProductNumber:v.item_number})));
+  const result=await load('lib/tire-library.ts').enrichWithTireLibrary(variants.map(v=>product({id:String(v.id),brand:'GENERAL',model:'Grabber H/T',size:'2755520',atdProductNumber:v.item_number,sidewall:v.sidewall,weight:v.weight})));
   for(let i=0;i<variants.length;i++){assert.equal(result[i].loadSpeed,`${variants[i].load_rating} ${variants[i].speed_rating}`);assert.equal(result[i].loadRange,variants[i].load_range);assert.equal(result[i].sidewall,variants[i].sidewall);assert.equal(result[i].weight,variants[i].weight);assert.equal(result[i].tireLibraryId,variants[i].id);}
+  const missing=await load('lib/tire-library.ts').enrichWithTireLibrary(variants.map(v=>product({id:String(v.id),brand:'GENERAL',model:'Grabber H/T',atdProductNumber:v.item_number})));
+  assert.equal(missing[1].weight,undefined);assert.equal(missing[1].sidewall,undefined); // Don't copy the representative tire's values.
  });
 });
 
