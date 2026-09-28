@@ -5,6 +5,15 @@ type ShopPrice = {
   cost?: number;
 };
 
+export type PricingAudience = "staff" | "customer";
+
+// MAP is the customer's tire price, not a floor under an additional markup.
+// A missing/invalid MAP retains the configured markup-based fallback.
+export function customerMapPrice(map: unknown, fallback: number): number {
+  const value = Number(map);
+  return Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : fallback;
+}
+
 // Use the same quantity-specific estimate for display, sorting and filtering.
 export function installedTotal(tire: ShopPrice, quantity: number): number {
   return Number(tire.estimatedTotals?.[String(quantity)] ?? tire.installedPrice * quantity);

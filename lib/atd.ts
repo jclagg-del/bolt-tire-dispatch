@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
-import { markupPricing } from "@/lib/tire-shop-pricing";
+import { customerMapPrice, markupPricing, type PricingAudience } from "@/lib/tire-shop-pricing";
 import { rankTireImages } from "@/lib/tire-image-health";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
@@ -62,14 +62,15 @@ function firstImage(product: AtdProduct) {
     [...(group?.image || []), ...(group?.images || [])].map(image => image.url)))[0] || null;
 }
 
-function customerPrice(cost: number, productGroup: string, settings: BusinessSettings) {
+function customerPrice(cost: number, productGroup: string, settings: BusinessSettings, map?: number, audience: PricingAudience = "staff") {
   const truck = productGroup.toLowerCase().includes("truck");
   const markupPercent = truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent;
   const minimumProfit = truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit;
   const tireProfit = Math.max(cost * (markupPercent / 100), minimumProfit);
   const installationPerTire = (truck ? settings.truck_four_install : settings.passenger_four_install) / 4;
   const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
-  const quotePrice = Math.ceil(cost + tireProfit);
+  const markupPrice = Math.ceil(cost + tireProfit);
+  const quotePrice = audience === "customer" ? customerMapPrice(map, markupPrice) : markupPrice;
   return { quotePrice, installedPrice: quotePrice + installationPerTire + disposal + settings.ny_state_tire_fee };
 }
 
@@ -105,11 +106,11 @@ async function inventoryFor(products: AtdProduct[]) {
   }
 }
 
-function presentProducts(products: AtdProduct[], inventory: Map<string, InventoryProduct>, includeCost: boolean, settings: BusinessSettings) {
+function presentProducts(products: AtdProduct[], inventory: Map<string, InventoryProduct>, includeCost: boolean, settings: BusinessSettings, audience: PricingAudience = includeCost ? "staff" : "customer") {
   return products.filter((product) => !product.replaced).map((product) => {
     const stock = inventory.get(product.atdproductnumber);
     const cost = Number(product.price?.cost || 0);
-    const customerPricing = customerPrice(cost, product.productgroup || "", settings);
+    const customerPricing = customerPrice(cost, product.productgroup || "", settings, product.price?.map, audience);
     const truck = (product.productgroup || "").toLowerCase().includes("truck");
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1,2,3,4,5,6].map((quantity) => [quantity, customerPricing.quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
@@ -155,8 +156,9 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
 
 type PresentedProduct=ReturnType<typeof presentProducts>[number];
 
-async function searchAtdByKeyword(keywords: string, includeCost: boolean, searchType: "size" | "part"):Promise<PresentedProduct[]> {
-  const cacheKey=`${searchType}:${keywords}:${includeCost?"staff":"public"}`;
+async function searchAtdByKeyword(keywords: string, includeCost: boolean, searchType: "size" | "part", audience: PricingAudience):Promise<PresentedProduct[]> {
+  // Separate customer MAP prices from staff prices and pre-MAP cached results.
+  const cacheKey=`map-v1:${searchType}:${keywords}:${includeCost?"staff":"public"}:${audience}`;
   try{
     const response = await atdRequest<{ products?: AtdProduct[] }>("product/product-by-keyword", {
       locationnumber: locationNumber,
@@ -172,7 +174,7 @@ async function searchAtdByKeyword(keywords: string, includeCost: boolean, search
     const products = Array.from(
       new Map((response.products || []).map((product) => [product.atdproductnumber, product])).values(),
     );
-    const presented=presentProducts(products,await inventoryFor(products),includeCost,await pricingSettings());
+    const presented=presentProducts(products,await inventoryFor(products),includeCost,await pricingSettings(),audience);
     if(presented.length)await createAdminClient().from("atd_search_cache").upsert({cache_key:cacheKey,products:presented,cached_at:new Date().toISOString()}).then(()=>{});
     if(!presented.length){const{data}=await createAdminClient().from("atd_search_cache").select("products,cached_at").eq("cache_key",cacheKey).maybeSingle();if(Array.isArray(data?.products)&&data.products.length&&Date.now()-new Date(data.cached_at).getTime()<24*60*60*1000)return data.products as PresentedProduct[]}
     return presented;
@@ -183,12 +185,12 @@ async function searchAtdByKeyword(keywords: string, includeCost: boolean, search
   }
 }
 
-export async function searchAtdBySize(query: string, includeCost: boolean):Promise<PresentedProduct[]> {
-  return searchAtdByKeyword(query.replace(/[^0-9]/g, ""), includeCost, "size");
+export async function searchAtdBySize(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer"):Promise<PresentedProduct[]> {
+  return searchAtdByKeyword(query.replace(/[^0-9]/g, ""), includeCost, "size", audience);
 }
 
-export async function searchAtdByPartNumber(query: string, includeCost: boolean):Promise<PresentedProduct[]> {
-  return searchAtdByKeyword(query.trim().replace(/[^a-zA-Z0-9-]/g, ""), includeCost, "part");
+export async function searchAtdByPartNumber(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer"):Promise<PresentedProduct[]> {
+  return searchAtdByKeyword(query.trim().replace(/[^a-zA-Z0-9-]/g, ""), includeCost, "part", audience);
 }
 
 export async function fitmentList(action: string, selection: Record<string, string>) {

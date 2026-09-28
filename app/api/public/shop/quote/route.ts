@@ -32,10 +32,11 @@ export async function POST(request: Request) {
 
     const requested = Array.isArray(body.selections) && body.selections.length > 1 ? body.selections.slice(0, 2) : [{ productId, size: query, position: "both" }];
     const verified = await Promise.all(requested.map(async (selection: {productId:string;size:string;position:string}) => {
-      // Server-side verification may include cost; it is stored for staff ordering and never returned to the shopper.
+      // Retain private cost for staff, but charge the same MAP-based customer
+      // price used by the public catalog, never the staff markup price.
       const products = (await Promise.all([
-        searchAtdBySize(String(selection.size || query), true),
-        searchUsafBySize(String(selection.size || query), true),
+        searchAtdBySize(String(selection.size || query), true, "customer"),
+        searchUsafBySize(String(selection.size || query), true, "customer"),
       ])).flat();
       const product = products.find((item) => item.id === String(selection.productId));
       return product ? { ...product, requestedPosition: selection.position } : null;

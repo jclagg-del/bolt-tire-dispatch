@@ -9,6 +9,39 @@ mod._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/tire-sho
 }).outputText, __filename);
 const { installedTotal, tireGrossProfit, supplierCostLabel, markupPricing } = mod.exports;
 
+test('customer price is exact MAP above or below markup; invalid MAP retains markup', () => {
+  assert.equal(mod.exports.customerMapPrice(200.99,215),200.99);
+  assert.equal(mod.exports.customerMapPrice('302.00',281),302);
+  for(const value of [undefined,null,'',0,-1,NaN,Infinity,'unavailable']) assert.equal(mod.exports.customerMapPrice(value,215),215);
+});
+
+test('ATD size, part, fitment and checkout use customer MAP without changing staff prices or leaking cost', async () => {
+  const envKeys=['ATD_USERNAME','ATD_PASSWORD','ATD_CLIENT_ID'];
+  const previous=envKeys.map(k=>process.env[k]);const oldFetch=global.fetch;
+  envKeys.forEach(k=>process.env[k]='unit-test-only');
+  const settings={tire_shop_passenger_markup_percent:25,tire_shop_passenger_min_profit:50,passenger_four_install:200,passenger_disposal_fee:5,ny_state_tire_fee:2.5};
+  const product={atdproductnumber:'123',brand:'General',style:'Example',productgroup:'passenger tires',price:{cost:154.39,map:200.99},productspec:{size:'235/60R18'}};
+  const cacheKeys=[];
+  const admin={from(table){const q={select(){return q},eq(){return q},maybeSingle:async()=>({data:table==='business_settings'?settings:null}),upsert(value){cacheKeys.push(value.cache_key);return Promise.resolve({error:null})}};return q;}};
+  const stubs={'server-only':{},'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/business-settings':{fallbackBusinessSettings:settings,installationDefault:()=>200},'@/lib/tire-shop-pricing':mod.exports,'@/lib/tire-image-health':{rankTireImages:()=>[]}};
+  const atd=new Module(__filename,module);atd.require=id=>Object.hasOwn(stubs,id)?stubs[id]:require(id);
+  atd._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/atd.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,__filename);
+  global.fetch=async url=>Response.json(String(url).includes('product-availability')?{products:[{atdproductnumber:'123',local:4}]}:String(url).includes('product-by-fitment')?{fitments:[{fitmentresults:[{position:{both:{products:[product]}}}]}]}:{products:[product]});
+  try {
+    for(const search of [atd.exports.searchAtdBySize,atd.exports.searchAtdByPartNumber]) {
+      const [customer]=await search('2356018',false);const [staff]=await search('2356018',true);const [checkout]=await search('2356018',true,'customer');
+      assert.equal(customer.quotePrice,200.99);assert.equal(staff.quotePrice,205);assert.equal(checkout.quotePrice,200.99);
+      assert.deepEqual(checkout.estimatedTotals,customer.estimatedTotals);assert.equal(customer.estimatedTotals['4'],200.99*4+200+5*4+2.5*4);
+      for(const key of ['cost','map','msrp','suggestedPrice'])assert.equal(Object.hasOwn(customer,key),false);
+    }
+    assert.equal((await atd.exports.searchAtdByFitment({},false))[0].quotePrice,200.99);
+    assert.ok(cacheKeys.includes('map-v1:size:2356018:staff:customer'));
+    assert.ok(cacheKeys.includes('map-v1:size:2356018:staff:staff'));
+    product.price.map=0;assert.equal((await atd.exports.searchAtdBySize('2356018',false))[0].quotePrice,205);
+    product.price.map=300.99;assert.equal((await atd.exports.searchAtdBySize('2356018',false))[0].quotePrice,300.99);
+  } finally {global.fetch=oldFetch;envKeys.forEach((k,i)=>{if(previous[i]===undefined)delete process.env[k];else process.env[k]=previous[i];});}
+});
+
 const tires = [
   { model: 'Weatherready', installedPrice: 280, quotePrice: 251, cost: 200, estimatedTotals: { 1: 280, 4: 1341, 2: 700 } },
   { model: 'Territory', installedPrice: 350, quotePrice: 212, cost: 190, estimatedTotals: { 1: 350, 4: 1235, 2: 720 } },
@@ -72,6 +105,20 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
     assert.deepEqual(customer.estimatedTotals,staff.estimatedTotals);
     for (const field of ['cost','map','suggestedPrice','pricingMarkupPercent','pricingMinimumProfit','pricingCategory']) assert.equal(Object.hasOwn(customer,field),false);
   }
+  row.map_price = 250.99;
+  for(const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
+    const [customer]=await search('224060',false);
+    const [staff]=await search('224060',true);
+    const [checkout]=await search('224060',true,'customer');
+    assert.equal(customer.quotePrice,250.99);
+    assert.equal(staff.quotePrice,281);
+    assert.equal(checkout.quotePrice,customer.quotePrice);
+    assert.equal(checkout.cost,220.99);
+    assert.deepEqual(checkout.estimatedTotals,customer.estimatedTotals);
+    assert.equal(customer.estimatedTotals['4'],250.99*4+329+12*4+2.5*4);
+  }
+  row.map_price = 0;
+  assert.equal((await catalog.exports.searchUsafBySize('224060',false))[0].quotePrice,281);
   row.warehouse_inventory = [{warehouse:'07',quantity:8}];
   for (const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
     const [product] = await search('224060', true);

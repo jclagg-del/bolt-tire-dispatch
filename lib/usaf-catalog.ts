@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 import { usafCatalogInventory } from "@/lib/usaf-warehouses";
-import { markupPricing } from "@/lib/tire-shop-pricing";
+import { customerMapPrice, markupPricing, type PricingAudience } from "@/lib/tire-shop-pricing";
 
 type UsaForceRow = {
   part_number: string;
@@ -33,7 +33,7 @@ async function pricingSettings() {
   return { ...fallbackBusinessSettings, ...(data || {}) } as BusinessSettings;
 }
 
-export async function searchUsafBySize(query: string, includeCost: boolean) {
+export async function searchUsafBySize(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer") {
   const sizeKey = query.replace(/\D/g, "");
   if (sizeKey.length < 5) return [];
   const admin = createAdminClient();
@@ -51,7 +51,8 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
     const markup = truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent;
     const minimumProfit = truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit;
     const cost = Number(row.cost || 0);
-    const quotePrice = Math.max(Number(row.map_price || 0), Math.ceil(cost + Math.max(cost * markup / 100, minimumProfit)));
+    const markupPrice = Math.ceil(cost + Math.max(cost * markup / 100, minimumProfit));
+    const quotePrice = audience === "customer" ? customerMapPrice(row.map_price, markupPrice) : Math.max(Number(row.map_price || 0), markupPrice);
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     const { warehouses, localQuantity, regionalQuantity, availableQuantity } = usafCatalogInventory(Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : []);
@@ -93,7 +94,7 @@ export async function searchUsafBySize(query: string, includeCost: boolean) {
   }).filter((product): product is NonNullable<typeof product> => product !== null);
 }
 
-export async function searchUsafByPartNumber(query: string, includeCost: boolean) {
+export async function searchUsafByPartNumber(query: string, includeCost: boolean, audience: PricingAudience = includeCost ? "staff" : "customer") {
   const key = query.trim().replace(/[^a-zA-Z0-9]/g, "");
   if (!key) return [];
   const admin = createAdminClient();
@@ -110,7 +111,8 @@ export async function searchUsafByPartNumber(query: string, includeCost: boolean
     const markup = truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent;
     const minimumProfit = truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit;
     const cost = Number(row.cost || 0);
-    const quotePrice = Math.max(Number(row.map_price || 0), Math.ceil(cost + Math.max(cost * markup / 100, minimumProfit)));
+    const markupPrice = Math.ceil(cost + Math.max(cost * markup / 100, minimumProfit));
+    const quotePrice = audience === "customer" ? customerMapPrice(row.map_price, markupPrice) : Math.max(Number(row.map_price || 0), markupPrice);
     const disposal = truck ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const estimatedTotals = Object.fromEntries([1, 2, 3, 4, 5, 6].map((quantity) => [quantity, quotePrice * quantity + installationDefault(settings, quantity, truck ? "truck" : "passenger") + disposal * quantity + settings.ny_state_tire_fee * quantity]));
     const { warehouses, localQuantity, regionalQuantity, availableQuantity } = usafCatalogInventory(Array.isArray(row.warehouse_inventory) ? row.warehouse_inventory : []);
