@@ -304,7 +304,7 @@ async function tireLibraryModelImage(brand: string, model: string): Promise<stri
   return null;
 }
 
-async function recoverTireImages<T extends EnrichableTire>(products: T[], candidates = new Map<string, string[]>(), useLibrary = true, identities: EnrichableTire[] = products): Promise<T[]> {
+async function recoverTireImages<T extends EnrichableTire>(products: T[], candidates = new Map<string, string[]>(), useLibrary = true, identities: EnrichableTire[] = products, photoDetails = new Map<string, number>()): Promise<T[]> {
   const byModel = new Map<string, string[]>(candidates);
   for (const [index, product] of products.entries()) {
     const identity = identities[index];
@@ -317,7 +317,16 @@ async function recoverTireImages<T extends EnrichableTire>(products: T[], candid
     const key = tireImageKey(identity.brand, identity.model);
     let image = await firstHealthyTireImage([product.imageUrl, ...(byModel.get(key) || [])]);
     if (!image && useLibrary) {
-      if (!recovered.has(key)) recovered.set(key, tireLibraryModelImage(identity.brand, identity.model).catch(() => null));
+      if (!recovered.has(key)) recovered.set(key, (async () => {
+        // Large searches cap the metadata detail pass. Still check the confirmed
+        // exact-model/SKU record when its thumbnail is broken or missing.
+        const detailId = photoDetails.get(key);
+        if (detailId) {
+          const detail = await tireLibraryTireDetails(detailId).catch(() => null);
+          if (detail?.imageUrl) return detail.imageUrl;
+        }
+        return tireLibraryModelImage(identity.brand, identity.model).catch(() => null);
+      })());
       image = await recovered.get(key)!;
     }
     return { ...product, imageUrl: image, imageVerified: Boolean(image) };
@@ -374,6 +383,8 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     }));
     const detailsByModel = new Map(detailPairs);
     const photoCandidates = new Map<string, string[]>();
+    const photoDetails = new Map<string, number>();
+    const photoIdentities = [...products];
     for (const item of catalogs) {
       const key = tireImageKey(item.make_name || "", item.model_name || "");
       if (item.thumbnail_image) photoCandidates.set(key, [...(photoCandidates.get(key) || []), item.thumbnail_image]);
@@ -382,11 +393,16 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const match = matches[index];
       if (!match) return product;
       const detail = detailsByModel.get(Number(match.tire_model_id || match.id));
-      const photoKey = tireImageKey(product.brand, product.model);
+      let photoKey = tireImageKey(product.brand, product.model);
       const photoMatch = tireImageBrand(product.brand) === tireImageBrand(match.make_name || "") &&
         (photoKey === tireImageKey(match.make_name || "", match.model_name || "") ||
           Boolean(match.item_number && [product.atdProductNumber, product.manufacturerProductNumber].map(normalize).includes(normalize(match.item_number))));
+      if (photoMatch) {
+        photoIdentities[index] = { ...product, brand: match.make_name || product.brand, model: match.model_name || product.model };
+        photoKey = tireImageKey(photoIdentities[index].brand, photoIdentities[index].model);
+      }
       const libraryImages = photoMatch ? [detail?.imageUrl, match.thumbnail_image, imageByModel.get(Number(match.tire_model_id || match.id))].filter((url): url is string => Boolean(url)) : [];
+      if (photoMatch) photoDetails.set(photoKey, match.id);
       photoCandidates.set(photoKey, [...(photoCandidates.get(photoKey) || []), ...libraryImages]);
       const supplierPatternImage = supplierImageByPattern.get(tireImageKey(product.brand, product.model)) || "";
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
@@ -421,7 +437,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         tireLibraryMatched: true,
       };
     });
-    return recoverTireImages(enriched, photoCandidates, true, products);
+    return recoverTireImages(enriched, photoCandidates, true, photoIdentities, photoDetails);
   } catch (error) {
     console.warn("Tire Library enrichment skipped:", error instanceof Error ? error.message : error);
     return recoverTireImages(products, new Map(), false);

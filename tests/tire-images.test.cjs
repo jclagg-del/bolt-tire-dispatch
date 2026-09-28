@@ -8,6 +8,24 @@ const product=(extra={})=>({id:'USAF-123',brand:'GOODYEAR',model:'Wrangler Stead
 async function withFetch(handler,run){const old=global.fetch,oldKey=process.env.TIRE_LIBRARY_API_KEY;global.fetch=handler;process.env.TIRE_LIBRARY_API_KEY='isolated-test-only';try{await run(loader());}finally{global.fetch=old;if(oldKey===undefined)delete process.env.TIRE_LIBRARY_API_KEY;else process.env.TIRE_LIBRARY_API_KEY=oldKey;}}
 const json=value=>new Response(JSON.stringify(value),{headers:{'content-type':'application/json'}});
 
+test('large searches recover detail photos beyond the metadata cap using the exact SKU tread variant',async()=>{
+ const source=Array.from({length:61},(_,i)=>product({id:String(i+1),atdProductNumber:String(i+1),model:i===60?'Wrangler Territory AT':`Pattern ${i+1}`}));
+ const catalog=source.map((p,i)=>({id:i+1,tire_model_id:i+1,item_number:p.atdProductNumber,make_name:'GOODYEAR',model_name:i===60?'Wrangler Territory AT (Tread Design B)':p.model,thumbnail_image:i===60?bad:good}));
+ let fetchedLast=false;
+ await withFetch(async(url)=>{
+  url=String(url);
+  if(url.includes('/tires/search?'))return json({data:catalog});
+  if(url.includes('/rebate?'))return json({data:[]});
+  const id=url.match(/\/tires\/(\d+)\?/);
+  if(id){if(Number(id[1])===61)fetchedLast=true;return json({id:Number(id[1]),tire_model:{image_url:good}});}
+  if(url.includes('/catalog?'))throw new Error('Exact SKU detail should resolve the image');
+  return new Response(null,{status:url===bad?404:200,headers:{'content-type':'image/jpeg'}});
+ },async load=>{
+  const result=await load('lib/tire-library.ts').enrichWithTireLibrary(source);
+  assert.equal(fetchedLast,true);assert.equal(result[60].imageUrl,good);assert.equal(result[60].atdProductNumber,'61');
+ });
+});
+
 test('image checks skip 404 and non-image responses, deduplicate requests, and block unsafe hosts and redirects',async()=>{
  const calls=[];
  await withFetch(async(url,options)=>{calls.push(url);assert.equal(options.redirect,'manual');assert.ok(!options.headers?.['x-api-key']);if(url===bad)return new Response(null,{status:404});if(url.endsWith('redirect.jpg'))return new Response(null,{status:302,headers:{location:'http://127.0.0.1/private'}});return new Response(null,{headers:{'content-type':url===good?'image/jpeg':'text/html'}});},async load=>{
