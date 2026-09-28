@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
-import { supplierOffers } from "@/lib/tire-supplier-offers";
+import { sameTireVariant, supplierOffers, uniqueTireCards } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import SelectedQuoteTires from "@/components/SelectedQuoteTires";
 import UsafPurchase from "@/components/UsafPurchase";
@@ -369,7 +369,7 @@ export default function TireShoppingBeta({
   );
   const results = useMemo(
     () =>
-      products
+      uniqueTireCards(products
         .filter(
           (tire) =>
             (category === "All" || tire.category === category) &&
@@ -398,7 +398,7 @@ export default function TireShoppingBeta({
           if (sort === "margin")
             return tireGrossProfit(b) - tireGrossProfit(a);
           return installedTotal(a, quantity) - installedTotal(b, quantity);
-        }),
+        })),
     [
       availableOnly,
       selectedBrands,
@@ -419,8 +419,8 @@ export default function TireShoppingBeta({
 
   function toggleSelected(tire: Product) {
     setSelected((items) => {
-      if (items.some((item) => item.id === tire.id))
-        return items.filter((item) => item.id !== tire.id);
+      if (items.some((item) => sameTireVariant(item, tire)))
+        return items.filter((item) => !sameTireVariant(item, tire));
       if (items.length >= 3) return items;
       return [...items, tire];
     });
@@ -1148,7 +1148,7 @@ export default function TireShoppingBeta({
             </div>
           ) : (
             results.map((tire) => {
-              const isSelected = selected.some((item) => item.id === tire.id);
+              const isSelected = selected.some((item) => sameTireVariant(item, tire));
               const supplierAvailability = supplierMatches(tire);
               return (
                 <article

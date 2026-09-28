@@ -213,7 +213,7 @@ function findMatch(product: EnrichableTire, catalog: TireLibrarySearchResult[]) 
   const model = normalizeModel(product.model, product.brand);
   const exactIdentifier = catalog.find((item) => {
     const itemNumber = normalize(item.item_number);
-    return Boolean(itemNumber && productIds.includes(itemNumber));
+    return Boolean(itemNumber && productIds.includes(itemNumber) && brand === normalizeBrand(item.make_name));
   });
   if (exactIdentifier) return exactIdentifier;
   return catalog.find((item) => {
@@ -221,7 +221,7 @@ function findMatch(product: EnrichableTire, catalog: TireLibrarySearchResult[]) 
     const libraryModel = normalizeModel(item.model_name, item.make_name);
     const sameBrand = brand === libraryBrand || (Math.min(brand.length, libraryBrand.length) >= 4 && (brand.includes(libraryBrand) || libraryBrand.includes(brand)));
     if (!sameBrand || !model || !libraryModel) return false;
-    return model === libraryModel || (Math.min(model.length, libraryModel.length) >= 5 && (model.includes(libraryModel) || libraryModel.includes(model)));
+    return model === libraryModel;
   });
 }
 
@@ -356,16 +356,15 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const image = safeUrl(item.thumbnail_image);
       if (image && !imageByModel.has(key)) imageByModel.set(key, image);
     }
-    const representativeByModel = new Map<number, TireLibrarySearchResult>();
+    const representativeBySku = new Map<number, TireLibrarySearchResult>();
     for (const match of matches) {
       if (!match) continue;
-      const key = Number(match.tire_model_id || match.id);
-      if (!representativeByModel.has(key)) representativeByModel.set(key, match);
+      if (!representativeBySku.has(match.id)) representativeBySku.set(match.id, match);
     }
-    const representativeEntries = Array.from(representativeByModel.entries());
-    const needsImage = ([key]: [number, TireLibrarySearchResult]) =>
-      !imageByModel.get(key) && matches.some((match, index) =>
-        Number(match?.tire_model_id || match?.id) === key &&
+    const representativeEntries = Array.from(representativeBySku.entries());
+    const needsImage = ([key, representative]: [number, TireLibrarySearchResult]) =>
+      !imageByModel.get(Number(representative.tire_model_id || representative.id)) && matches.some((match, index) =>
+        match?.id === key &&
         !safeUrl(match?.thumbnail_image) &&
         !safeUrl(products[index]?.imageUrl),
       );
@@ -373,8 +372,8 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       ...representativeEntries.filter(needsImage),
       ...representativeEntries.filter((entry) => !needsImage(entry)),
     ];
-    // Every matched pattern gets its alternate views, including large searches.
-    // Bound concurrency instead of permanently excluding models after the first 60.
+    // Photos may be shared by pattern, but specifications belong to an exact SKU.
+    // Never reuse a different speed/load/sidewall variant's detail record.
     const detailPairs: Array<readonly [number, Awaited<ReturnType<typeof tireLibraryTireDetails>> | null]> = [];
     let nextDetail = 0;
     await Promise.all(Array.from({ length: Math.min(8, prioritizedEntries.length) }, async () => {
@@ -384,7 +383,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         detailPairs.push([key, detail]);
       }
     }));
-    const detailsByModel = new Map(detailPairs);
+    const detailsBySku = new Map(detailPairs);
     const photoCandidates = new Map<string, string[]>();
     const photoDetails = new Map<string, number>();
     const preferredImages = new Map<string, string>();
@@ -396,7 +395,11 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     const enriched = products.map((product, index) => {
       const match = matches[index];
       if (!match) return product;
-      const detail = detailsByModel.get(Number(match.tire_model_id || match.id));
+      const detail = detailsBySku.get(match.id);
+      const exactSku = normalizeBrand(product.brand) === normalizeBrand(match.make_name) && Boolean(match.item_number &&
+        [product.atdProductNumber, product.manufacturerProductNumber].map(normalize).includes(normalize(match.item_number)));
+      const skuDetail = exactSku ? detail : null;
+      const skuMatch = exactSku ? match : null;
       let photoKey = tireImageKey(product.brand, product.model);
       const photoMatch = tireImageBrand(product.brand) === tireImageBrand(match.make_name || "") &&
         (photoKey === tireImageKey(match.make_name || "", match.model_name || "") ||
@@ -420,25 +423,25 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         description: detail?.description || product.description,
         imageUrl: safeUrl(product.imageUrl) || supplierPatternImage || libraryImages[0] || null,
         category: detail?.terrain || detail?.season || detail?.category || match.terrain || match.season || match.category || product.category,
-        loadSpeed: detail?.loadSpeed || [match.load_rating, match.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
-        warranty: detail?.warranty || match.warranty || product.warranty,
-        snowRated: Boolean(detail?.snowRated || match.three_pmsf || product.snowRated),
-        loadRange: detail?.loadRange || match.load_range || product.loadRange,
-        treadDepth: detail?.treadDepth || match.tread_depth || product.treadDepth,
-        utqg: detail?.utqg || match.utqg || product.utqg,
-        runFlat: Boolean(detail?.runFlat || match.run_flat || product.runFlat),
-        sidewall: detail?.sidewall || product.sidewall,
-        maxLoad: detail?.maxLoad || product.maxLoad,
-        maxLoadDual: detail?.maxLoadDual || product.maxLoadDual,
-        maxPressure: detail?.maxPressure || product.maxPressure,
-        revolutionsPerMile: detail?.revolutionsPerMile || product.revolutionsPerMile,
-        diameter: detail?.diameter || product.diameter,
-        sectionWidth: detail?.sectionWidth || product.sectionWidth,
-        weight: detail?.weight || product.weight,
+        loadSpeed: skuDetail?.loadSpeed || [skuMatch?.load_rating, skuMatch?.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
+        warranty: skuDetail?.warranty || skuMatch?.warranty || product.warranty,
+        snowRated: skuDetail?.snowRated ?? skuMatch?.three_pmsf ?? product.snowRated,
+        loadRange: skuDetail?.loadRange || skuMatch?.load_range || product.loadRange,
+        treadDepth: skuDetail?.treadDepth || skuMatch?.tread_depth || product.treadDepth,
+        utqg: skuDetail?.utqg || skuMatch?.utqg || product.utqg,
+        runFlat: skuDetail?.runFlat ?? skuMatch?.run_flat ?? product.runFlat,
+        sidewall: skuDetail?.sidewall || product.sidewall,
+        maxLoad: skuDetail?.maxLoad || product.maxLoad,
+        maxLoadDual: skuDetail?.maxLoadDual || product.maxLoadDual,
+        maxPressure: skuDetail?.maxPressure || product.maxPressure,
+        revolutionsPerMile: skuDetail?.revolutionsPerMile || product.revolutionsPerMile,
+        diameter: skuDetail?.diameter || product.diameter,
+        sectionWidth: skuDetail?.sectionWidth || product.sectionWidth,
+        weight: skuDetail?.weight || product.weight,
         hasRebate: Boolean(rebates.length || product.hasRebate),
         rebates,
-        tireLibraryId: match.id,
-        tireLibraryItemNumber: match.item_number || null,
+        tireLibraryId: exactSku ? match.id : undefined,
+        tireLibraryItemNumber: exactSku ? match.item_number || null : null,
         tireLibraryMatched: true,
       };
     });
@@ -551,8 +554,8 @@ export async function tireLibraryTireDetails(id: number) {
     loadRange: tire.load_range || "",
     treadDepth: tire.tread_depth || "",
     utqg: tire.utqg || "",
-    snowRated: Boolean(tire.three_pmsf),
-    runFlat: Boolean(tire.run_flat),
+    snowRated: tire.three_pmsf,
+    runFlat: tire.run_flat,
     preferredImageUrl,
     imageUrl: preferredImageUrl || await firstHealthyTireImage(rankTireImages([
       tire.tire_model?.image_url, tire.image_0100, tire.image_0200,

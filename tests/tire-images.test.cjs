@@ -8,6 +8,32 @@ const product=(extra={})=>({id:'USAF-123',brand:'GOODYEAR',model:'Wrangler Stead
 async function withFetch(handler,run){const old=global.fetch,oldKey=process.env.TIRE_LIBRARY_API_KEY;global.fetch=handler;process.env.TIRE_LIBRARY_API_KEY='isolated-test-only';try{await run(loader());}finally{global.fetch=old;if(oldKey===undefined)delete process.env.TIRE_LIBRARY_API_KEY;else process.env.TIRE_LIBRARY_API_KEY=oldKey;}}
 const json=value=>new Response(JSON.stringify(value),{headers:{'content-type':'application/json'}});
 
+test('same-model tires retain exact SKU speed, load, sidewall and dimensions rather than the first model record',async()=>{
+ const variants=[{id:1,item_number:'04493920000',speed_rating:'T',load_rating:'117',load_range:'XL',sidewall:'BSW',weight:'37.7',utqg:'720 B B'},
+ {id:2,item_number:'04493930000',speed_rating:'H',load_rating:'117',load_range:'XL',sidewall:'BSW',weight:'38',utqg:'720 B A'},
+ {id:3,item_number:'LT-OTHER',speed_rating:'S',load_rating:'120/117',load_range:'E',sidewall:'OWL',weight:'50',utqg:''}];
+ const catalog=variants.map(v=>({...v,tire_model_id:99,make_name:'GENERAL',model_name:'Grabber H/T',thumbnail_image:good}));
+ await withFetch(async url=>{
+  url=String(url);if(url.includes('/tires/search?'))return json({data:catalog});if(url.includes('/rebate?'))return json({data:[]});
+  const id=url.match(/\/tires\/(\d+)\?/);if(id)return json({...catalog.find(v=>v.id===Number(id[1])),tire_model:{name:'Grabber H/T',image_url:good}});
+  return new Response(null,{headers:{'content-type':'image/jpeg'}});
+ },async load=>{
+  const result=await load('lib/tire-library.ts').enrichWithTireLibrary(variants.map(v=>product({id:String(v.id),brand:'GENERAL',model:'Grabber H/T',size:'2755520',atdProductNumber:v.item_number})));
+  for(let i=0;i<variants.length;i++){assert.equal(result[i].loadSpeed,`${variants[i].load_rating} ${variants[i].speed_rating}`);assert.equal(result[i].loadRange,variants[i].load_range);assert.equal(result[i].sidewall,variants[i].sidewall);assert.equal(result[i].weight,variants[i].weight);assert.equal(result[i].tireLibraryId,variants[i].id);}
+ });
+});
+
+test('model-only photo matches never copy another SKU specifications or expose its detail record',async()=>{
+ await withFetch(async url=>{
+  url=String(url);if(url.includes('/tires/search?'))return json({data:[{id:1,item_number:'OTHER',tire_model_id:99,make_name:'GOODYEAR',model_name:'Wrangler Steadfast HT',load_rating:'999',speed_rating:'Z',load_range:'E',thumbnail_image:good}]});
+  if(url.includes('/rebate?'))return json({data:[]});if(url.includes('/tires/1?'))return json({id:1,load_rating:'999',speed_rating:'Z',load_range:'E',sidewall:'OWL',tire_model:{image_url:good}});
+  return new Response(null,{headers:{'content-type':'image/jpeg'}});
+ },async load=>{
+  const [result]=await load('lib/tire-library.ts').enrichWithTireLibrary([product({loadSpeed:'115 H',loadRange:'XL',sidewall:'BSW'})]);
+  assert.equal(result.loadSpeed,'115 H');assert.equal(result.loadRange,'XL');assert.equal(result.sidewall,'BSW');assert.equal(result.imageUrl,good);assert.equal(result.tireLibraryId,undefined);
+ });
+});
+
 test('photo ranking favors supplied angle and tread views over profiles without inventing URLs',()=>{
  const urls=['https://images.atdonline.com/tire_sidewall.jpg',good,'https://images.atdonline.com/tire_tread.jpg','https://images.atdonline.com/tire_quarterview.jpg'];
  assert.deepEqual(loader()('lib/tire-image-health.ts').rankTireImages([...urls,urls[2],null]),[urls[3],urls[2],urls[1],urls[0]]);

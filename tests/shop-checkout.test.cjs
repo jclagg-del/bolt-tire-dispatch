@@ -95,3 +95,18 @@ test('staff and public size searches start empty while saved quote searches rema
   const source=fs.readFileSync(path.join(__dirname,'../components/TireShoppingBeta.tsx'),'utf8');
   assert.match(source,/setQuery\(saved.query\)/);
 });
+
+test('staff and customer shops render two distinct Grabber variants instead of four supplier cards',()=>{
+ const base={brand:'GENERAL',model:'Grabber H/T',size:'275/55R20',loadRange:'XL',sidewall:'BSW',category:'Highway',warranty:'70000',snowRated:false,runFlat:false,hasRebate:false,rebates:[],serviceCategory:'passenger',fitmentPosition:'both',imageUrl:null,availability:{local:4,localPlus:20,nationwide:24}};
+ const t={...base,id:'04493920000',supplier:'ATD',atdProductNumber:'04493920000',manufacturerProductNumber:'04493920000',loadSpeed:'117 T',quotePrice:215.99,cost:150,installedPrice:300,estimatedTotals:{4:1200}};
+ const h={...t,id:'04493930000',atdProductNumber:'04493930000',manufacturerProductNumber:'04493930000',loadSpeed:'117 H',quotePrice:219.99};
+ const products=[t,h,{...t,id:'USAF-t',supplier:'USAF',manufacturerProductNumber:'051342174898'},{...h,id:'USAF-h',supplier:'USAF',manufacturerProductNumber:'051342175024'}];
+ for(const internal of [false,true]){
+  let index=0;
+  const Page=loader({'next/navigation':{useRouter:()=>({})},'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;const overrides={0:'2755520',1:products,3:true,12:'size'};return [Object.hasOwn(overrides,n)?overrides[n]:typeof initial==='function'?initial():initial,()=>{}]}}})('components/TireShoppingBeta.tsx').default;
+  const html=renderToStaticMarkup(React.createElement(Page,{internal}));
+  assert.equal((html.match(/<article /g)||[]).length,2);assert.ok(html.includes('117 T'));assert.ok(html.includes('117 H'));assert.ok(html.includes('2 tires'));
+  if(internal){assert.ok(html.includes('U.S. AutoForce'));assert.ok(html.includes('ATD'));assert.equal((html.match(/Choose supplier<\/button>/g)||[]).length,2);}
+  else{assert.doesNotMatch(html,/Supplier cost|Cost \$150/);assert.equal((html.match(/Customize &amp; buy/g)||[]).length,2);}
+ }
+});
