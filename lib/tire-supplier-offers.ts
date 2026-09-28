@@ -15,6 +15,10 @@ type SupplierProduct = {
   fitmentPosition?: string;
 };
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+export function normalizeTireSidewall(value: string): string {
+  const key = normalize(value);
+  return ["bw", "bsw", "blk", "blackwall", "blacksidewall"].includes(key) ? "bsw" : key;
+}
 const identifiers = (tire: SupplierProduct) => [tire.atdProductNumber, tire.manufacturerProductNumber].map(normalize).filter(Boolean);
 const lightTruck = (tire: SupplierProduct) => /^lt/i.test(tire.size.trim())
   || /^(?:load\s*)?[c-h]$/i.test(tire.loadRange.trim())
@@ -28,7 +32,7 @@ export function sameTireVariant(a: SupplierProduct, b: SupplierProduct): boolean
       a.size.replace(/\D/g, "") !== b.size.replace(/\D/g, "") || lightTruck(a) !== lightTruck(b) ||
       (a.fitmentPosition || "both") !== (b.fitmentPosition || "both")) return false;
   for (const field of ["loadSpeed", "loadRange", "sidewall", "oeMarking"] as const) {
-    const spec = (value: string) => field === "loadSpeed" ? value.toLowerCase().replace(/\s/g, "") : normalize(value);
+    const spec = (value: string) => field === "loadSpeed" ? value.toLowerCase().replace(/\s/g, "") : field === "sidewall" ? normalizeTireSidewall(value) : normalize(value);
     if (a[field] && b[field] && spec(a[field]!) !== spec(b[field]!)) return false;
   }
   if (typeof a.runFlat === "boolean" && typeof b.runFlat === "boolean" && a.runFlat !== b.runFlat) return false;

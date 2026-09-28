@@ -45,6 +45,13 @@ test('different parts are not merged simply because names and visible specificat
  assert.deepEqual(supplierOffers(usaf,[usaf,other]).map(p=>p.id),[usaf.id]);
 });
 
+test('supplier abbreviations for black sidewall do not create duplicate exact-part cards',()=>{
+ const a={...atd,sidewall:'BSW'};
+ for(const sidewall of ['BW','BLK','Black Sidewall']) assert.equal(uniqueTireCards([a,{...usaf,sidewall}]).length,1);
+ assert.equal(uniqueTireCards([a,{...usaf,sidewall:'OWL'}]).length,2);
+ assert.equal(uniqueTireCards([{...atd,loadSpeed:'100 Y'},{...usaf,loadSpeed:'100 (Y)'}]).length,2);
+});
+
 test('conflicting LT/load/speed/sidewall/OE/runflat/fitment variants stay separate even with a reused supplier identifier',()=>{
  const origin={...usaf,sidewall:'BSW',oeMarking:'MO',runFlat:false,fitmentPosition:'front'};
  for(const override of [{size:'LT275/55R20'},{size:'2855520'},{loadSpeed:'117 H'},{loadRange:'E'},{sidewall:'OWL'},{oeMarking:'BMW'},{runFlat:true},{fitmentPosition:'rear'}]){
