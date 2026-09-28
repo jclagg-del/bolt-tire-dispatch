@@ -310,7 +310,7 @@ export default function PublicQuote() {
           Payment was cancelled. No charge was made.
         </div>
       ) : null}
-      <section className="quote-comparison-grid">
+      <section className={`quote-comparison-grid ${q.quote_options.some(option => hasSplitFitment(q, option)) ? "split-fitment" : ""}`}>
         {options.map((o) => (
           <article
             className={`quote-compare-card ${o.recommended ? "recommended" : ""}`}

@@ -23,6 +23,56 @@ function loader(stubs = {}) {
 const valid = { name: 'Test Customer', phone: '(201) 555-0123', email: 'customer@example.com', vehicle: '2020 Ford Transit', address: '123 Example Street' };
 const { shopCustomerError, normalizeShopCustomer } = loader()('lib/shop-customer.ts');
 const {matchesTireStock}=loader()('lib/tire-stock-filter.ts');
+test('split quote editor and customer quote include both axle quantities and use full-width comparison layout',()=>{
+ const quoteLib=loader()('lib/quotes.ts');
+ const base={customer:'Test',contact_name:'',phone:'',email:'',vehicle:'',tire_size:'285/45R22',quantity:'2',rear_tire_size:'325/40R22',rear_quantity:'2',address:'',notes:'',service_category:'passenger',installation_cost:'299',service_call_fee:'0',disposal_fee:'28',ny_state_tire_fee:'10',sales_tax_rate:'8',tax_exempt:false,expires_at:''};
+ const option={...quoteLib.emptyQuoteOptions[0],id:'test-option',brand:'CONTINENTAL',model:'PremiumContact 6',price_per_tire:'470',rear_brand:'CONTINENTAL',rear_model:'PremiumContact 6',rear_price_per_tire:'495'};
+ const navigation={useRouter:()=>({}),useSearchParams:()=>new URLSearchParams(),useParams:()=>({token:'test'})};
+ for(const taxExempt of [false,true]){
+  const form={...base,tax_exempt:taxExempt};
+  let index=0;
+  const Editor=loader({'next/navigation':navigation,'@/components/AppHeader':()=>null,'@/components/QuoteCustomerInput':()=>null,'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;const state={0:form,1:[option],7:true};return [Object.hasOwn(state,n)?state[n]:initial,()=>{}];}}})('app/quotes/new/page.tsx').default;
+  const editor=renderToStaticMarkup(React.createElement(Editor));
+  assert.match(editor,/quote-option-grid split-fitment/);
+  assert.ok(editor.includes('$940.00'));assert.ok(editor.includes('$990.00'));
+  const expected=taxExempt?'2267.00':'2447.56';
+  assert.ok(editor.includes(`$${expected}`));
+  index=0;
+  const quote={...form,quantity:2,rear_quantity:2,quote_number:123,quote_options:[option],payment_status:'unpaid',selected_option_id:null};
+  const Public=loader({'next/navigation':navigation,'@/components/EmbeddedStripeCheckout':()=>null,react:{...React,useState:initial=>[index++===0?quote:initial,()=>{}]}})('app/q/[token]/page.tsx').default;
+  const customer=renderToStaticMarkup(React.createElement(Public));
+  assert.match(customer,/quote-comparison-grid split-fitment/);
+  assert.ok(customer.includes(`$${expected}`));
+  assert.ok(customer.includes('285/45R22'));assert.ok(customer.includes('325/40R22'));
+ }
+ const css=fs.readFileSync(path.join(__dirname,'../app/globals.css'),'utf8');
+ assert.match(css,/\.quote-option-grid\.split-fitment, \.quote-comparison-grid\.split-fitment\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/);
+ assert.match(css,/@media\(max-width:760px\)\{\.quote-split-cards\{grid-template-columns:1fr\}/);
+});
+
+test('rear quantity, split toggle and pricing category changes recalculate fees using all tires',()=>{
+ const settings=loader()('lib/business-settings.ts').fallbackBusinessSettings;
+ const state={0:{customer:'Test',quantity:'2',rear_quantity:'2',rear_tire_size:'325/40R22',service_category:'passenger',sales_tax_rate:'8'},7:true};
+ let index=0;
+ const Page=loader({'next/navigation':{useRouter:()=>({}),useSearchParams:()=>new URLSearchParams()},'@/components/AppHeader':{default:()=>null},'@/components/QuoteCustomerInput':{default:()=>null},'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;if(!Object.hasOwn(state,n))state[n]=initial;return [state[n],value=>{state[n]=typeof value==='function'?value(state[n]):value;}];},useRef:()=>({current:null}),useEffect:()=>{},useMemo:fn=>fn()}})('app/quotes/new/page.tsx').default;
+ function tree(){index=0;return Page();}
+ function find(node,predicate){if(!node||typeof node!=='object')return null;if(predicate(node))return node;for(const child of React.Children.toArray(node.props?.children)){const result=find(child,predicate);if(result)return result;}return null;}
+ const field=label=>find(tree(),n=>n.props?.label===label);
+ field('Rear quantity').props.onChange('4');
+ assert.equal(state[0].disposal_fee,(6*settings.passenger_disposal_fee).toFixed(2));
+ assert.equal(state[0].ny_state_tire_fee,(6*settings.ny_state_tire_fee).toFixed(2));
+ find(tree(),n=>n.type==='select'&&n.props.value==='passenger').props.onChange({target:{value:'truck'}});
+ assert.equal(state[0].installation_cost,settings.truck_six_install.toFixed(2));
+ field('Rear quantity').props.onChange('2');
+ assert.equal(state[0].installation_cost,settings.truck_four_install.toFixed(2));
+ const toggle=()=>find(tree(),n=>n.type==='label'&&n.props.className==='quote-split-toggle').props.children[0];
+ toggle().props.onChange({target:{checked:false}});
+ assert.equal(state[0].rear_quantity,'');assert.equal(state[0].installation_cost,settings.truck_two_install.toFixed(2));
+ toggle().props.onChange({target:{checked:true}});
+ assert.equal(state[0].rear_quantity,'2');assert.equal(state[0].installation_cost,settings.truck_four_install.toFixed(2));
+ field('Front / primary quantity').props.onChange('4');
+ assert.equal(state[0].installation_cost,settings.truck_six_install.toFixed(2));
+});
 test('only authenticated staff catalog requests include unavailable USAF tires',async()=>{
  let authenticated=false;
  const searches=[];

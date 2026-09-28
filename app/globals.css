@@ -59,6 +59,8 @@ body{
 .quote-field.quote-check input { width: auto; }
 .quote-full { grid-column: 1 / -1; }
 .quote-option-grid, .quote-comparison-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; align-items: start; }
+.quote-option-grid.split-fitment, .quote-comparison-grid.split-fitment { grid-template-columns: minmax(0, 1fr); }
+.quote-option-grid.split-fitment > *, .quote-split-cards > * { min-width: 0; }
 .quote-option-card, .quote-compare-card { background: white; border: 1px solid #e2e8f0; border-radius: 15px; padding: 16px; display: grid; gap: 11px; box-shadow: 0 2px 8px rgba(15,23,42,.04); }
 .quote-option-card.recommended, .quote-compare-card.recommended { border: 2px solid #2563eb; }
 .quote-compare-card.selected { box-shadow: 0 0 0 3px #86efac; }
