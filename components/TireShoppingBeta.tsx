@@ -131,7 +131,7 @@ export default function TireShoppingBeta({
   internal?: boolean;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("2756518");
+  const [query, setQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -726,7 +726,7 @@ export default function TireShoppingBeta({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") search();
                 }}
-                placeholder="2756518"
+                placeholder="Enter tire size"
               />
               <button
                 type="button"

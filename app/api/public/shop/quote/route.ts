@@ -4,20 +4,20 @@ import { searchUsafBySize } from "@/lib/usaf-catalog";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { availableShopTimes } from "@/lib/shop-availability";
+import { normalizeShopCustomer, shopCustomerError } from "@/lib/shop-customer";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const name = String(body.name || "").trim();
-    const phone = String(body.phone || "").trim();
-    const email = String(body.email || "").trim();
+    const { name, phone, email, vehicle, address } = normalizeShopCustomer(body);
+    const customerError = shopCustomerError(body);
+    if (customerError) return NextResponse.json({ error: customerError }, { status: 400 });
     const query = String(body.query || "").replace(/[^0-9]/g, "");
     const productId = String(body.productId || "");
     const quantity = Math.min(6, Math.max(1, Number(body.quantity) || 4));
     const installationSelected = body.service !== "tires_only";
     const requestedDate = String(body.requestedDate || "").trim();
     const requestedTime = String(body.requestedTime || "").trim().substring(0, 5);
-    if (!name || (!phone && !email)) return NextResponse.json({ error: "Enter your name and a phone number or email." }, { status: 400 });
     if (!query || !productId) return NextResponse.json({ error: "Choose a valid tire." }, { status: 400 });
     if (installationSelected) {
       if (!String(body.address || "").trim() || !requestedDate || !requestedTime) return NextResponse.json({ error: "Choose an appointment and enter the service address." }, { status: 400 });
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const disposalEach = category === "truck" ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const { data: quote, error } = await admin.from("quotes").insert({
       status: "approved", customer: name, contact_name: name, phone: phone || null, email: email || null,
-      vehicle: String(body.vehicle || "").trim() || null, address: String(body.address || "").trim() || null,
+      vehicle, address,
       tire_size: front.size || query, quantity: staggered ? 2 : quoteQuantity,
       rear_tire_size: staggered ? rear?.size || null : null, rear_quantity: staggered ? 2 : null, service_category: category,
       installation_cost: installationSelected ? installationDefault(settings, quoteQuantity, category) : 0, service_call_fee: 0,

@@ -1,5 +1,6 @@
 import {NextResponse} from "next/server";
 import {createAdminClient} from "@/lib/supabase/admin";
+import {shopCustomerError} from "@/lib/shop-customer";
 
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
   const key=process.env.STRIPE_SECRET_KEY;
@@ -11,6 +12,10 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   const{data:q}=await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("public_token",token).single();
   if(!q)return NextResponse.json({error:"Quote not found"},{status:404});
   if(q.payment_status==="paid")return NextResponse.json({error:"This order is already paid"},{status:409});
+  if(q.purchase_source==="website"){
+    const customerError=shopCustomerError({...q,name:q.contact_name||q.customer});
+    if(customerError)return NextResponse.json({error:`${customerError} Return to the tire shop to complete your information before payment.`},{status:400});
+  }
   const o=(q.quote_options||[]).find((x:{id:string})=>x.id===optionId);
   if(!o)return NextResponse.json({error:"Choose a valid tire option"},{status:400});
 
