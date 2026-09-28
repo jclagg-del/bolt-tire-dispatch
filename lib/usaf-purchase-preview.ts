@@ -3,6 +3,14 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 export type UsafPurchaseInput = { part: string; quantity: number; po: string; mo: string; lineCode: string; branch: string; mode: "test" | "production" };
 export type UsafSignedPreview = UsafPurchaseInput & { userId: string; expiresAt: number; total: number; deliveryDate: string | null };
 
+// Inventory lookup is read-only and does not need a PO or purchase confirmation.
+export function validateUsafLookup(value: Record<string, unknown>) {
+  const part = String(value.part || "").trim();
+  const lineCode = String(value.lineCode || "").trim();
+  if (!part || part.length > 28 || typeof value.quantity !== "number" || !Number.isInteger(value.quantity) || value.quantity < 1 || value.quantity > 24 || lineCode.length > 4) throw new Error("Enter a product number and a quantity from 1 to 24.");
+  return { part, quantity: value.quantity, lineCode };
+}
+
 export function validateUsafPurchase(value: Record<string, unknown>): UsafPurchaseInput {
   const { mode, quantity } = value;
   if (mode !== "test" && mode !== "production") throw new Error("Choose a valid ordering environment.");

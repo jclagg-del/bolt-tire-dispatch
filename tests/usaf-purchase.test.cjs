@@ -124,3 +124,24 @@ test('auth, staff membership, environment, price and explicit confirmation are m
   assert.equal((await f.request({ action: 'place', token, confirmation: 'SEND TEST ORDER' })).status, 409);
   assert.equal(f.placements, 0);
 });
+
+test('automatic lookup needs no PO and never saves or places an order', async () => {
+  const f=fixture();f.mode='production';
+  assert.equal((await f.request({action:'search',mode:'production',part:input.part,quantity:4})).status,200);
+  assert.equal(f.placements,0);assert.equal(f.saved,undefined);
+  assert.equal((await f.request({action:'search',mode:'test',part:input.part,quantity:4})).status,409);
+  assert.equal((await f.request({action:'search',mode:'production',part:input.part,quantity:0})).status,400);
+  assert.equal((await fixture({authenticated:false}).request({action:'search',mode:'test',part:input.part,quantity:4})).status,401);
+  assert.equal((await fixture({staff:false}).request({action:'search',mode:'test',part:input.part,quantity:4})).status,403);
+});
+
+test('production place-button confirmation works without a checkbox and still deduplicates', async () => {
+  const f=fixture();f.mode='production';
+  const preview=await f.request({...input,mode:'production',po:'3024060',action:'preview'});
+  assert.equal(preview.status,200);assert.equal(f.placements,0);
+  const request={action:'place',token:preview.body.token,confirmation:'PLACE LIVE ORDER'};
+  assert.equal((await f.request(request)).status,200);
+  assert.equal((await f.request(request)).status,200);
+  assert.equal(f.placements,1);
+  assert.equal(f.saved.response.testOnly,false);
+});

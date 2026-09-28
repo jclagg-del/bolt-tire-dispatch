@@ -3,7 +3,7 @@ import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { usaForceOrderingStatus } from "@/lib/usaf";
 import { searchUsafOrderProduct, previewUsafOrder, placeUsafOrder } from "@/lib/usaf-ordering";
 import { supplierOrderDetails } from "@/lib/customer-order-purchasing";
-import { readUsafPreview, signUsafPreview, usafPurchaseId, validateUsafPurchase } from "@/lib/usaf-purchase-preview";
+import { readUsafPreview, signUsafPreview, usafPurchaseId, validateUsafPurchase, validateUsafLookup } from "@/lib/usaf-purchase-preview";
 
 export const maxDuration = 120;
 
@@ -19,6 +19,11 @@ export async function POST(request: Request) {
     const mode = connection.production ? "production" : connection.test ? "test" : "unavailable";
     if (body.action === "configuration") return NextResponse.json({ configured: connection.configured, mode });
     if (!["search", "preview", "place"].includes(body.action)) return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+    if (body.action === "search") {
+      if (!connection.configured || mode === "unavailable" || mode !== body.mode) return NextResponse.json({ error: "The supplier connection changed. Reopen the order window." }, { status: 409 });
+      const lookup = validateUsafLookup(body);
+      return NextResponse.json({ mode, products: await searchUsafOrderProduct(lookup.part, lookup.quantity, lookup.lineCode) });
+    }
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
     const input = body.action === "place" ? readUsafPreview(String(body.token || ""), key, user.id) : validateUsafPurchase(body);
     const requestId = usafPurchaseId(input.mode, input.po);
@@ -28,7 +33,6 @@ export async function POST(request: Request) {
     if (existing?.status === "placed") return NextResponse.json({ completed: supplierOrderDetails(existing.response), mode: existing.response?.mode || input.mode, saved: true, receipt: { part: existing.atd_product_number, quantity: existing.quantity, po: existing.customer_po_number, description: existing.response?.product?.model || "" } });
     if (existing) return NextResponse.json({ error: "This PO already has a submission awaiting confirmation. Check Supplier Orders and contact USAF before trying another PO; do not order again.", uncertain: true }, { status: 409 });
     if (!connection.configured || mode === "unavailable" || mode !== input.mode) return NextResponse.json({ error: "The supplier environment changed or is not configured. Reopen the order window. No purchase was sent." }, { status: 409 });
-    if (body.action === "search") return NextResponse.json({ mode, products: await searchUsafOrderProduct(input.part, input.quantity, input.lineCode) });
     const preview = await previewUsafOrder(input);
     const details = supplierOrderDetails(preview);
     if (details.total === null || !Number.isFinite(details.total) || details.total <= 0) throw new Error("USAF did not provide a valid total.");
