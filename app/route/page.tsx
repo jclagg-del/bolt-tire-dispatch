@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
+import RouteStopList from "@/components/RouteStopList";
+import { applyRouteOrder, type SavedRouteOrder } from "@/lib/route-order";
 
 type Job = {
   id: string | number;
@@ -122,6 +124,11 @@ export default function RoutePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>(fallbackVehicles);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [savingTech, setSavingTech] = useState<string | null>(null);
+  const [routeOrders, setRouteOrders] = useState<Record<string, SavedRouteOrder>>({});
+  const [routeOrderReady, setRouteOrderReady] = useState(false);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const routeSaveLock = useRef(false);
+  const [routeMessage, setRouteMessage] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [completingId, setCompletingId] = useState<string | number | null>(null);
@@ -209,9 +216,54 @@ export default function RoutePage() {
 
   const loadPage = async () => {
     setLoading(true);
-    await Promise.all([fetchVehicles(), fetchAssignments(), fetchJobs()]);
+    await Promise.all([fetchVehicles(), fetchAssignments(), fetchJobs(), fetchRouteOrders()]);
     setLoading(false);
   };
+
+  async function routeRequest(method: "GET" | "PUT", body?: unknown) {
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch(`/api/route-order?date=${todayKey}`, {
+      method, cache: "no-store",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token || ""}` },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Route order could not be saved.");
+    return result;
+  }
+
+  async function fetchRouteOrders() {
+    try {
+      const result = await routeRequest("GET");
+      setRouteOrders(Object.fromEntries((result.orders as SavedRouteOrder[]).map(order => [order.vehicle_id, order])));
+      setRouteOrderReady(true);
+    } catch (error) {
+      setRouteOrderReady(false);
+      setRouteMessage(error instanceof Error ? error.message : "Could not load saved route order. Refresh to retry.");
+    }
+  }
+
+  async function saveRouteOrder(vehicleId: string, jobIds: string[]) {
+    if (!routeOrderReady || routeSaveLock.current) return;
+    routeSaveLock.current = true;
+    setSavingRoute(true);
+    setRouteMessage("Saving route order…");
+    const previous = routeOrders[vehicleId];
+    setRouteOrders(current => ({ ...current, [vehicleId]: { vehicle_id: vehicleId, job_ids: jobIds, revision: previous?.revision || 0 } }));
+    try {
+      const result = await routeRequest("PUT", { date: todayKey, vehicleId, jobIds, revision: previous?.revision || 0 });
+      setRouteOrders(current => ({ ...current, [vehicleId]: result.order }));
+      setRouteMessage("Route order saved. Appointment times are unchanged.");
+    } catch (error) {
+      setRouteOrders(current => { const next = { ...current }; if (previous) next[vehicleId] = previous; else delete next[vehicleId]; return next; });
+      // A lost response can mean the save succeeded. Reload before another edit.
+      await Promise.all([fetchJobs(), fetchRouteOrders()]);
+      setRouteMessage(error instanceof Error ? error.message : "Could not save route order. Please refresh.");
+    } finally {
+      routeSaveLock.current = false;
+      setSavingRoute(false);
+    }
+  }
 
   useEffect(() => {
     loadPage();
@@ -243,8 +295,9 @@ export default function RoutePage() {
       grouped[vehicleId].push(job);
     });
 
+    for (const vehicleId of Object.keys(grouped)) grouped[vehicleId] = applyRouteOrder(grouped[vehicleId], routeOrders[vehicleId]?.job_ids);
     return grouped;
-  }, [todaysJobs, vehicles]);
+  }, [todaysJobs, vehicles, routeOrders]);
 
   const saveTechnician = async (vehicleId: string, technicianName: string) => {
     setSavingTech(vehicleId);
@@ -360,11 +413,12 @@ export default function RoutePage() {
           <div style={eyebrow}>Route</div>
           <h1 style={title}>Today&apos;s Route</h1>
           <p style={subtitle}>
-            Jobs are split by vehicle. Assign a technician to each vehicle for the day.
+            Drag the handle on a job card to change its stop order within that vehicle, or use the arrows. Changes save for today across devices; appointment times stay unchanged.
           </p>
         </div>
 
         {errorText ? <div style={errorBanner}>Error: {errorText}</div> : null}
+        <p role="status" aria-live="polite">{routeMessage}</p>
 
         <div style={columnsWrap}>
           {vehicles.map((vehicle) => {
@@ -413,7 +467,7 @@ export default function RoutePage() {
 
                 <div style={columnBody}>
                   {vehicleJobs.length > 0 ? (
-                    vehicleJobs.map((job, index) => (
+                    <RouteStopList jobs={vehicleJobs} disabled={!routeOrderReady || savingRoute || !!completingId || showCompleteModal} onReorder={ids => saveRouteOrder(vehicle.id, ids)} renderJob={(job, index) => (
                       <RouteCard
                         key={job.id}
                         job={job}
@@ -421,7 +475,7 @@ export default function RoutePage() {
                         isCompleting={completingId === job.id}
                         onComplete={() => openCompleteModal(job)}
                       />
-                    ))
+                    )} />
                   ) : (
                     <div style={empty}>No {vehicle.name} jobs today</div>
                   )}

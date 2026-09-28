@@ -15,6 +15,8 @@ mod.require = id => {
   if (id === '@/components/AppHeader') return { default: () => null };
   if (id === '@/lib/quo') return { getQuoCallUrl: () => null, getQuoTextUrl: () => null };
   if (id === '@/lib/job-completion') return {};
+  if (id === '@/lib/route-order') return {};
+  if (id === '@/components/RouteStopList') return { default: () => null };
   return require(id);
 };
 mod._compile(ts.transpileModule(source, {
