@@ -8,6 +8,7 @@ import { sameTireVariant, supplierOffers, uniqueTireCards } from "@/lib/tire-sup
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import { hasTireStock, matchesTireStock } from "@/lib/tire-stock-filter";
 import SelectedQuoteTires from "@/components/SelectedQuoteTires";
+import TireResultControls from "@/components/TireResultControls";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 
@@ -1098,30 +1099,7 @@ export default function TireShoppingBeta({
                 {searched ? internal && showOutOfStock ? " from supplier catalog (including out of stock)" : " from live inventory" : " — enter a size above"}
               </span>
             </div>
-            <div className="tire-beta-result-controls">
-              <label>
-                Quantity{" "}
-                <select
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
-                >
-                  {[1, 2, 3, 4, 5, 6].map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <select
-                aria-label="Sort tires"
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-              >
-                <option value="price">Lowest installed price</option>
-                <option value="availability">Best availability</option>
-                {internal && <option value="margin">Best gross profit</option>}
-              </select>
-            </div>
+            <TireResultControls internal={internal} quantity={quantity} sort={sort} onQuantityChange={setQuantity} onSortChange={setSort} />
           </div>
           {internal && searched && (
             <section className="tire-beta-quote-selection">
