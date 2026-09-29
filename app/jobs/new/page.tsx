@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import JobTireOrdering from "@/components/JobTireOrdering";
 import {
   BusinessSettings,
   fallbackBusinessSettings,
@@ -96,6 +97,7 @@ const fallbackVehicles: VehicleOption[] = [
 export default function NewJobPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [savedJobId, setSavedJobId] = useState<string | number | null>(null);
   const [disposalFeeOverridden, setDisposalFeeOverridden] = useState(false);
   const [stateFeeOverridden, setStateFeeOverridden] = useState(false);
   const [installationOverridden, setInstallationOverridden] = useState(false);
@@ -287,7 +289,7 @@ export default function NewJobPage() {
     return () => clearTimeout(timer);
   }, [form.customer]);
 
-  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>, stayForPurchase = false) => {
     e?.preventDefault();
     if (saving) return;
 
@@ -353,13 +355,18 @@ export default function NewJobPage() {
       complete: false,
     };
 
-    const { error } = await supabase.from("jobs").insert([payload]);
+    // Ordering saves first; subsequent saves update that same job, never insert it twice.
+    const save = savedJobId != null ? supabase.from("jobs").update(payload).eq("id", savedJobId) : supabase.from("jobs").insert([payload]);
+    const { data: saved, error } = await save.select("id").single();
 
-    if (error) {
-      alert(`Error saving job: ${error.message}`);
+    if (error || !saved) {
+      alert(`Error saving job: ${error?.message || "The saved job could not be confirmed."}`);
       setSaving(false);
       return;
     }
+
+    setSavedJobId(saved.id);
+    if (stayForPurchase) { setSaving(false); return saved.id as string | number; }
 
     router.push("/");
     router.refresh();
@@ -635,15 +642,9 @@ export default function NewJobPage() {
 
           <div style={sectionTitle}>Tire Ordering</div>
 
-          <div style={form.tires_ordered ? orderedStatusCard : notOrderedStatusCard}>
-            <label style={checkboxLabel}>
-              <input type="checkbox" checked={form.tires_ordered} onChange={(e) => setForm((prev) => ({ ...prev, tires_ordered: e.target.checked }))} style={checkbox} />
-              <span>
-                <strong>{form.tires_ordered ? "Tires Ordered" : "Tires Not Ordered"}</strong>
-                <span style={checkboxHelp}>Check this box after ordering the tires.</span>
-              </span>
-            </label>
-          </div>
+          <JobTireOrdering form={form} disabled={saving} onPrepare={async () => (await handleSubmit(undefined, true)) ?? null}
+            onManualChange={ordered => setForm(current => ({ ...current, tires_ordered: ordered }))}
+            onComplete={details => setForm(current => ({ ...current, tires_ordered: true, tire_supplier: details.supplier, estimated_delivery_date: details.deliveryDate || "" }))} />
 
           <div style={twoColumnGrid}>
             <Field>

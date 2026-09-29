@@ -6,6 +6,12 @@ export function purchasingRequestId(orderId: number) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+// Separate namespace from customer requests; a repeated PO/part is not identity.
+export function jobPurchasingRequestId(jobId: string | number) {
+  const hex = createHash("sha256").update(`job-tire-purchase:${String(jobId).toLowerCase()}`).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 type Json = Record<string, unknown>;
 function object(value: unknown): Json {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Json : {};

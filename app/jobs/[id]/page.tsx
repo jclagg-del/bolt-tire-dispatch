@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
+import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
@@ -310,7 +311,7 @@ export default function EditJobPage() {
     setForm((current) => current ? { ...current, tires_received: e.target.checked } : current);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (stayForPurchase = false) => {
     if (!form || !id || saving) return;
 
     setSaving(true);
@@ -351,9 +352,13 @@ export default function EditJobPage() {
           : null,
         tire_product_number:
           form.tire_product_number.trim() || null,
-        tires_ordered: form.tires_ordered,
-        tire_supplier: form.tire_supplier.trim() || null,
-        estimated_delivery_date: form.estimated_delivery_date || null,
+        // Preparing an order must not clear a purchase another staff member
+        // recorded since this form was opened. The purchase route checks it.
+        ...(!stayForPurchase ? {
+          tires_ordered: form.tires_ordered,
+          tire_supplier: form.tire_supplier.trim() || null,
+          estimated_delivery_date: form.estimated_delivery_date || null,
+        } : {}),
         tires_received: form.tires_received,
         installation_cost: form.installation_cost.trim()
           ? Number(form.installation_cost)
@@ -388,6 +393,7 @@ export default function EditJobPage() {
       return;
     }
 
+    if (stayForPurchase) return id;
     router.push("/jobs");
     router.refresh();
   };
@@ -616,7 +622,7 @@ export default function EditJobPage() {
             <div style={heroActions}>
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={() => handleSave()}
                 style={saveButton}
                 disabled={saving}
               >
@@ -816,17 +822,9 @@ export default function EditJobPage() {
 
           <div style={sectionTitle}>Tire Ordering</div>
 
-          <div style={form.tires_ordered ? orderedStatusCard : notOrderedStatusCard}>
-            <label style={checkboxLabel}>
-              <input type="checkbox" checked={form.tires_ordered} onChange={handleTiresOrderedChange} style={checkbox} />
-              <span>
-                <strong>{form.tires_ordered ? "Tires Ordered" : "Tires Not Ordered"}</strong>
-                <span style={checkboxHelp}>
-                  {form.tires_ordered ? "The tires for this job have been ordered." : "Check this box after ordering the tires."}
-                </span>
-              </span>
-            </label>
-          </div>
+          <JobTireOrdering form={form} disabled={saving || Boolean(form.complete)} onPrepare={async () => (await handleSave(true)) ?? null}
+            onManualChange={ordered => setForm(current => current ? { ...current, tires_ordered: ordered } : current)}
+            onComplete={details => setForm(current => current ? { ...current, tires_ordered: true, tire_supplier: details.supplier, estimated_delivery_date: details.deliveryDate || "" } : current)} />
 
           <div style={twoColumnGrid}>
             <Field>

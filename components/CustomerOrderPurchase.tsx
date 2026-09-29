@@ -13,7 +13,7 @@ export type PurchaseDetails = {
   shipments: Array<{ quantity: number; warehouse: string; deliveryDate: string | null; status: string; shipMethod: string }>;
 };
 type Product = { atdProductNumber: string; lineCode?: string; brand: string; model: string; size: string; loadSpeed: string; cost?: number | null; warehouses?: Array<{ code: string; name: string; local: boolean; quantity: number; deliveryDate: string | null }> };
-type Order = { id: number; customer: string; job_number: string | null; mo_number: string | null; tire_product_number: string | null; tire_size: string; qty: number };
+type Order = { id: number | string; customer: string; job_number: string | null; mo_number: string | null; tire_product_number: string | null; tire_size: string; qty: number };
 
 export async function purchaseApi(body: Record<string, unknown>) {
   let { data: { session } } = await supabase.auth.getSession();
@@ -33,9 +33,9 @@ function date(value: string | null) {
 }
 function money(value: number | null) { return value == null ? "Unavailable" : `$${value.toFixed(2)}`; }
 
-export default function CustomerOrderPurchase({ order, onClose, onComplete, api = purchaseApi }: { order: Order; onClose: () => void; onComplete: (details: PurchaseDetails) => void; api?: typeof purchaseApi }) {
+export default function CustomerOrderPurchase({ order, onClose, onComplete, api = purchaseApi, jobContext = false, initialSupplier = "USAF" }: { order: Order; onClose: () => void; onComplete: (details: PurchaseDetails) => void; api?: typeof purchaseApi; jobContext?: boolean; initialSupplier?: "USAF" | "ATD" }) {
   const [products, setProducts] = useState<Product[]>([]);
-  const [supplier, setSupplier] = useState("USAF");
+  const [supplier, setSupplier] = useState(initialSupplier);
   const [lineCode, setLineCode] = useState("");
   const [lookupLineCode, setLookupLineCode] = useState("");
   const [branch, setBranch] = useState("");
@@ -60,7 +60,7 @@ export default function CustomerOrderPurchase({ order, onClose, onComplete, api 
     api({ action: "configuration" }).then(configuration => {
       if (!active) return null;
       setSandbox(!configuration.connections[supplier].production);
-      return api({ action: "search", orderId: order.id, supplier, lineCode: lookupLineCode });
+      return api({ action: "search", ...(jobContext ? { jobId: order.id } : { orderId: order.id }), supplier, lineCode: lookupLineCode });
     }).then(result => {
       if (!active) return;
       if (!result) return;
@@ -85,7 +85,7 @@ export default function CustomerOrderPurchase({ order, onClose, onComplete, api 
     if (inFlight.current || !product || completed) return;
     inFlight.current = true; setBusy(true); setPlacing(action === "place"); setError("");
     try {
-      const result = await api({ action, orderId: order.id, supplier, lineCode, branch, productNumber: product, expectedTotal: preview?.total, expectedPo: order.job_number, expectedQuantity: order.qty, expectedDeliveryDate: preview?.deliveryDate });
+      const result = await api({ action, ...(jobContext ? { jobId: order.id } : { orderId: order.id }), supplier, lineCode, branch, productNumber: product, expectedTotal: preview?.total, expectedPo: order.job_number, expectedQuantity: order.qty, expectedDeliveryDate: preview?.deliveryDate });
       if (result.completed) {
         setCompleted(result.completed); setWarning(result.warning || ""); onComplete(result.completed);
       } else { setPreview(result.preview); setSandbox(Boolean(result.sandbox)); }
@@ -105,11 +105,11 @@ export default function CustomerOrderPurchase({ order, onClose, onComplete, api 
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }
     }}>
-      <div className="atd-order-head"><div><span>{order.customer}</span><h2 id="customer-purchase-title">Order tires for this request</h2><p>Job / PO: <strong>{order.job_number || "Missing"}</strong> · MO: {order.mo_number || "—"}</p></div><button ref={closeButton} type="button" onClick={onClose} disabled={busy} aria-label="Close order window">×</button></div>
+      <div className="atd-order-head"><div><span>{order.customer}</span><h2 id="customer-purchase-title">Order tires for this {jobContext ? "job" : "request"}</h2><p>Job / PO: <strong>{order.job_number || "Missing"}</strong> · MO: {order.mo_number || "—"}</p></div><button ref={closeButton} type="button" onClick={onClose} disabled={busy} aria-label="Close order window">×</button></div>
       <div className="atd-order-policy"><strong>{order.qty} × {order.tire_size}</strong><span>Requested product #{order.tire_product_number || "Missing"}</span><span>The job number is sent to the supplier as the purchase order number. Tires ship to your Bolt Tire account address.</span></div>
       {error && <div role="alert" className="atd-order-error">{error}</div>}
-      {completed ? <div className="atd-order-success" role="status"><strong>{completed.supplier} order confirmed</strong><span>Confirmation: {completed.confirmation}</span><span>Expected delivery: {date(completed.deliveryDate)}</span><span>Tires are marked ordered. Supplier and delivery details have been filled into this card. Approve &amp; Create Job will carry them into the job.</span>{warning && <p role="alert">{warning}</p>}<button type="button" onClick={onClose}>Done — back to order card</button></div> : <>
-        <label className="customer-order-purchase-field" style={{ marginTop: 16 }}>Supplier<select disabled={busy} value={supplier} onChange={event => { setLookupLineCode(""); setLineCode(""); setSupplier(event.target.value); setSandbox(false); }}><option value="USAF">U.S. AutoForce</option><option value="ATD">ATD</option></select></label>
+      {completed ? <div className="atd-order-success" role="status"><strong>{completed.supplier} order confirmed</strong><span>Confirmation: {completed.confirmation}</span><span>Expected delivery: {date(completed.deliveryDate)}</span><span>{jobContext ? "The job form now shows tires ordered, supplier, and estimated delivery. Review any saving warning below before closing." : "Tires are marked ordered. Supplier and delivery details have been filled into this card. Approve & Create Job will carry them into the job."}</span>{warning && <p role="alert">{warning}</p>}<button type="button" onClick={onClose}>{jobContext ? "Done — back to job" : "Done — back to order card"}</button></div> : <>
+        <label className="customer-order-purchase-field" style={{ marginTop: 16 }}>Supplier<select disabled={busy} value={supplier} onChange={event => { setLookupLineCode(""); setLineCode(""); setSupplier(event.target.value as "USAF" | "ATD"); setSandbox(false); }}><option value="USAF">U.S. AutoForce</option><option value="ATD">ATD</option></select></label>
         {busy && !preview && <p role="status">{placing ? `Submitting your order to ${supplierLabel}…` : "Checking the supplier…"}</p>}
         {sandbox && <p role="alert">{supplierLabel} is using test access. You can check the connection, but production access is required to place real orders.</p>}
         {!busy && !error && !products.length && <p>No exact {supplierLabel} match for this product number. Check the number or choose the other supplier.</p>}
