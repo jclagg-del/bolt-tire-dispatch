@@ -24,13 +24,25 @@ const lightTruck = (tire: SupplierProduct) => /^lt/i.test(tire.size.trim())
   || /^(?:load\s*)?[c-h]$/i.test(tire.loadRange.trim())
   || /\d+\s*\/\s*\d+/.test(tire.loadSpeed);
 
+// Supplier metric sizes may append ply rating: LT285/60R20/10. The /10
+// is not part of the rim diameter. Parse only known formats; unfamiliar
+// annotations stay intact so they cannot silently collapse distinct variants.
+export function tireSizeIdentity(value: string): { dimensions: string; ply: string | null } {
+  const text = value.toUpperCase().replace(/\s/g, "");
+  const metric = text.match(/^(?:LT|P|ST|T)?(\d{3})\/?(\d{2})(?:ZR|R)?(\d{2}(?:\.5)?)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
+  if (!metric) return { dimensions: text, ply: null };
+  return { dimensions: `${metric[1]}/${metric[2]}R${metric[3]}`, ply: metric[4] || null };
+}
+
 // Exact identifiers are required; identical model/size/specs alone can still
 // describe different OE, sidewall, or construction variants.
 export function sameTireVariant(a: SupplierProduct, b: SupplierProduct): boolean {
   if (a.id === b.id && (a.fitmentPosition || "both") === (b.fitmentPosition || "both")) return true;
+  const sizeA = tireSizeIdentity(a.size), sizeB = tireSizeIdentity(b.size);
   if (normalize(a.brand) !== normalize(b.brand) || !a.size || !b.size ||
-      a.size.replace(/\D/g, "") !== b.size.replace(/\D/g, "") || lightTruck(a) !== lightTruck(b) ||
+      sizeA.dimensions !== sizeB.dimensions || lightTruck(a) !== lightTruck(b) ||
       (a.fitmentPosition || "both") !== (b.fitmentPosition || "both")) return false;
+  if (sizeA.ply && sizeB.ply && sizeA.ply !== sizeB.ply) return false;
   for (const field of ["loadSpeed", "loadRange", "sidewall", "oeMarking"] as const) {
     const spec = (value: string) => field === "loadSpeed" ? value.toLowerCase().replace(/\s/g, "") : field === "sidewall" ? normalizeTireSidewall(value) : normalize(value);
     if (a[field] && b[field] && spec(a[field]!) !== spec(b[field]!)) return false;

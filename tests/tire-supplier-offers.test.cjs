@@ -7,6 +7,7 @@ const mod = new Module(__filename, module);
 mod._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/tire-supplier-offers.ts'), 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText, __filename);
 const { supplierOffers } = mod.exports;
 const {sameTireVariant,uniqueTireCards}=mod.exports;
+const {tireSizeIdentity}=mod.exports;
 const base = { brand: 'NITTO', model: 'Terra Grappler G3', size: '2755520', loadSpeed: '117 T', loadRange: 'XL', tireLibraryId: 1 };
 const usaf = { ...base, id:'USAF-224060', supplier:'USAF', atdProductNumber:'224060', manufacturerProductNumber:'4981910570769', cost:220.99 };
 const atd = { ...base, id:'ATD-224060', supplier:'ATD', size:'275/55R20XL', atdProductNumber:'224060', manufacturerProductNumber:'224060', cost:228 };
@@ -58,4 +59,42 @@ test('conflicting LT/load/speed/sidewall/OE/runflat/fitment variants stay separa
   const candidate={...origin,id:'different-id',supplier:'ATD',...override};assert.equal(sameTireVariant(origin,candidate),false,JSON.stringify(override));
  }
  assert.equal(sameTireVariant({...usaf,atdProductNumber:'00123',manufacturerProductNumber:''},{...atd,atdProductNumber:'123',manufacturerProductNumber:''}),false);
+});
+
+test('live Falken A/T4W and R/T01 metric ply suffixes produce one card per exact tire with both suppliers',()=>{
+ for(const [part,model] of [['28847593','Wildpeak A/T4W'],['28757716','Wildpeak R/T01']]){
+  const a={...atd,id:part,brand:'FALKEN',model,size:'LT285/60R20/10',loadSpeed:'125/122 R',loadRange:'E',sidewall:'BSW',atdProductNumber:part,manufacturerProductNumber:part};
+  const b={...a,id:`USAF-${part}`,supplier:'USAF',size:'2856020',loadRange:'',manufacturerProductNumber:'848983026040'};
+  for(const products of [[a,b],[b,a]]){
+   assert.equal(uniqueTireCards(products).length,1);
+   assert.deepEqual(supplierOffers(products[0],products).map(p=>p.supplier),['ATD','USAF']);
+   assert.equal(uniqueTireCards(products)[0],products[0],'Keep the sorted price/purchase target');
+  }
+ }
+});
+test('metric size matching handles the same supplier notation across brands and sizes, without ignoring ply conflicts',()=>{
+ for(const [size,compact] of [['LT275/65R18/10','2756518'],['LT245/75R17/10PR','2457517'],['LT285/60R20/12','2856020']]){
+  const a={...atd,size,loadSpeed:'125/122 R',loadRange:''};
+  const b={...usaf,size:compact,loadSpeed:'125/122 R',loadRange:''};
+  assert.equal(uniqueTireCards([a,b]).length,1,size);
+  assert.equal(uniqueTireCards([a,{...b,size:size.replace(/\/\d+(PR)?$/,'/14')}]).length,2,'Conflicting explicit ply ratings');
+ }
+ assert.deepEqual(tireSizeIdentity(' LT285/60R20/10 '),{dimensions:'285/60R20',ply:'10'});
+ assert.deepEqual(tireSizeIdentity('2856020'),{dimensions:'285/60R20',ply:null});
+ assert.notEqual(tireSizeIdentity('225/70R19.5').dimensions,tireSizeIdentity('225/70R195').dimensions);
+});
+test('ply suffix fix keeps differing parts, loads, speeds, OE, sidewalls, construction and unknown annotations separate',()=>{
+ const a={...atd,size:'LT285/60R20/10',loadSpeed:'125/122 R',loadRange:'E',sidewall:'BSW',oeMarking:'MO',runFlat:false};
+ const b={...usaf,size:'2856020',loadSpeed:'125/122 R',loadRange:'E',sidewall:'BSW',oeMarking:'MO',runFlat:false};
+ for(const overrides of [{atdProductNumber:'other',manufacturerProductNumber:'other'},{loadRange:'F'},{loadSpeed:'125/122 S'},{sidewall:'OWL'},{oeMarking:'BMW'},{runFlat:true},{size:'2856022'},{size:'285/60R20/UNKNOWN'},{size:'285/60R20/10/EXTRA'},{size:'285/60R20',loadSpeed:'116 T',loadRange:'SL'}]){
+  assert.equal(uniqueTireCards([a,{...b,...overrides}]).length,2,JSON.stringify(overrides));
+ }
+});
+test('staff and customer shops share the corrected card grouping and supplier matching',()=>{
+ const root=require('node:path').resolve(__dirname,'..');
+ const staff=fs.readFileSync(require('node:path').join(root,'app/tire-shop/page.tsx'),'utf8');
+ const customer=fs.readFileSync(require('node:path').join(root,'app/shop/page.tsx'),'utf8');
+ const shared=fs.readFileSync(require('node:path').join(root,'components/TireShoppingBeta.tsx'),'utf8');
+ assert.match(staff,/<TireShoppingBeta internal/);assert.match(customer,/<TireShoppingBeta/);
+ assert.match(shared,/uniqueTireCards\(products/);assert.match(shared,/return supplierOffers\(tire, products\)/);
 });
