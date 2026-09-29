@@ -72,8 +72,9 @@ test('approval creates one paid job with original financials; identical unrelate
  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db,requireApiUser:async()=>({id:'staff'})}})('app/api/orders/approve/route');
  const req=(extra={})=>new Request('https://example.test',{method:'POST',body:JSON.stringify({orderId:9,serviceMethod:'delivery',...extra})});
  assert.equal((await route.POST(req({serviceMethod:null}))).status,400);
- const response=await route.POST(req());assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
+ const response=await route.POST(req({scheduledDate:'2026-10-03',scheduledTime:'14:45'}));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const job=db.tables.jobs.find(j=>j.source_quote_id==='quote');assert.ok(job);assert.equal(job.payment_status,'paid');assert.equal(job.job_total,510);assert.equal(job.tax_exempt,true);assert.equal(job.price_tires,90);assert.equal(job.tires_ordered,false);assert.equal(job.tire_supplier,null);assert.equal(job.service_type,'Delivery');
+ assert.equal(job.scheduled,'2026-10-03T14:45:00');assert.equal(db.tables.customer_orders[0].requested_date,null);
  assert.equal((await route.POST(req())).status,200);assert.equal(db.tables.jobs.length,2);assert.equal(db.tables.quotes[0].converted_job_id,job.id);assert.equal(db.tables.jobs[0].source_quote_id,undefined);
 });
 test('server quote creation discounts tires only, ignores supplied prices/exemption, and snapshots benefits',async()=>{

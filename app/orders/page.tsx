@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import CustomerOrderPurchase, { purchaseApi, type PurchaseDetails } from "@/components/CustomerOrderPurchase";
 import OrderDuplicateNotice from "@/components/OrderDuplicateNotice";
 import { possibleDuplicateOrders } from "@/lib/customer-order-duplicates";
+import { orderAppointment } from "@/lib/order-appointment";
 
 type CustomerOrder = {
   id: number;
@@ -39,6 +40,7 @@ type CustomerOrder = {
   submitted_at: string;
   job_complete: boolean;
   job_completed_at: string | null;
+  job_scheduled?: string | null;
   purchase?: PurchaseDetails;
   source_quote_id?: string | null;
   payment_status?: string;
@@ -53,6 +55,8 @@ type TireOrderDetails = {
   supplier: string;
   deliveryDate: string;
   serviceMethod?: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
 };
 
 function formatDate(dateValue: string) {
@@ -187,13 +191,13 @@ export default function OrdersPage() {
 
     let completedJobs = new Map<
       number,
-      { complete: boolean; completed_at: string | null }
+      { complete: boolean; completed_at: string | null; scheduled: string | null }
     >();
 
     if (approvedJobIds.length > 0) {
       const { data: jobs, error: jobsError } = await supabase
         .from("jobs")
-        .select("id, complete, completed_at")
+        .select("id, complete, completed_at, scheduled")
         .in("id", approvedJobIds);
 
       if (jobsError) {
@@ -207,6 +211,7 @@ export default function OrdersPage() {
             {
               complete: Boolean(job.complete),
               completed_at: job.completed_at || null,
+              scheduled: job.scheduled || null,
             },
           ])
         );
@@ -235,6 +240,7 @@ export default function OrdersPage() {
           tires_ordered: order.tires_ordered || purchases[order.id]?.status === "placed",
           job_complete: Boolean(linkedJob?.complete),
           job_completed_at: linkedJob?.completed_at || null,
+          job_scheduled: linkedJob?.scheduled || null,
         };
       })
     );
@@ -390,12 +396,17 @@ export default function OrdersPage() {
       return;
     }
 
+    let scheduled: string | null;
+    try {
+      scheduled = orderAppointment(order.requested_date, order.requested_time, tireOrder?.scheduledDate, tireOrder?.scheduledTime);
+    } catch (reason) {
+      setErrorMessage(reason instanceof Error ? reason.message : "Enter a valid scheduled date and time.");
+      return;
+    }
     const relatedOrders = possibleDuplicateOrders(orders)[order.id] || [];
     const confirmed = window.confirm(order.order_status === "approved"
       ? `Check the approval for order #${order.id}? An uncertain earlier approval will not create another job.`
-      : `${relatedOrders.length ? "Possible duplicate: this job/PO number is used on another request. Continue only if this is a separate order.\n\n" : ""}Approve order #${order.id} and create its own job for ${formatDate(
-        order.requested_date
-      )} at ${formatTime(order.requested_time)}?`
+      : `${relatedOrders.length ? "Possible duplicate: this job/PO number is used on another request. Continue only if this is a separate order.\n\n" : ""}Approve order #${order.id} and create its own job ${scheduled ? `for ${formatDate(scheduled.slice(0, 10))} at ${formatTime(scheduled.slice(11, 16))}` : "with the appointment to be arranged"}?`
     );
 
     if (!confirmed) return;
@@ -415,6 +426,8 @@ export default function OrdersPage() {
           tireSupplier: tireOrder?.supplier.trim() || null,
           estimatedDeliveryDate: tireOrder?.deliveryDate || null,
           serviceMethod: tireOrder?.serviceMethod || null,
+          scheduledDate: tireOrder?.scheduledDate,
+          scheduledTime: tireOrder?.scheduledTime,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -701,6 +714,7 @@ function OrderSection({
 
                 <div style={appointmentBox}>
                   <strong>
+                    Requested: {" "}
                     {formatDate(order.requested_date)}
                   </strong>
 
@@ -708,6 +722,7 @@ function OrderSection({
                     {formatTime(order.requested_time)}
                   </span>
                 </div>
+                {order.approved_job_id && <p style={{ color: "#166534", fontWeight: 700 }}>Scheduled: {order.job_scheduled ? new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }).format(new Date(order.job_scheduled)) : "To be arranged"}</p>}
 
                 <div style={detailsGrid}>
                   <Detail
@@ -844,6 +859,22 @@ function OrderSection({
                     </datalist>
                   </div>
                 ) : null}
+
+                {order.order_status === "new" && <div style={tireOrderFields}>
+                  <label style={orderFieldLabel}>
+                    Scheduled date
+                    <input type="date" value={draft.scheduledDate ?? order.requested_date ?? ""}
+                      onChange={event => updateTireOrderDraft(order.id, { scheduledDate: event.target.value })}
+                      disabled={working} style={{ ...orderFieldInput, minWidth: 0 }} />
+                  </label>
+                  <label style={orderFieldLabel}>
+                    Scheduled time
+                    <input type="time" value={draft.scheduledTime ?? (order.requested_time || "").slice(0, 5)}
+                      onChange={event => updateTireOrderDraft(order.id, { scheduledTime: event.target.value })}
+                      disabled={working} style={{ ...orderFieldInput, minWidth: 0 }} />
+                  </label>
+                  <p style={{ gridColumn: "1 / -1", margin: 0, fontSize: 13, color: "#475569" }}>The job will use this appointment. The original request above stays unchanged. This is separate from tire delivery.</p>
+                </div>}
 
                 <div style={actions}>
                   {(approved || completed || cancellationRequested) && order.approved_job_id ? (

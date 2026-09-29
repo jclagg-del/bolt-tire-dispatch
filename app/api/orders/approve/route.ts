@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { purchasingRequestId, supplierOrderDetails } from "@/lib/customer-order-purchasing";
 import { websitePaymentFields } from "@/lib/paid-website-order";
+import { orderAppointment } from "@/lib/order-appointment";
 
 type CustomerOrder = {
   id: number;
@@ -34,10 +35,6 @@ type CustomerOrder = {
   reviewed_at: string | null;
   source_quote_id?: string | null;
 };
-
-function scheduledValue(order: CustomerOrder) {
-  return order.requested_date && order.requested_time ? `${order.requested_date}T${order.requested_time.substring(0, 5)}:00` : null;
-}
 
 function vehicleDescription(order: CustomerOrder) {
   const vehicle = [order.vehicle_year, order.vehicle_make, order.vehicle_model].filter(Boolean).join(" ");
@@ -102,7 +99,7 @@ async function linkPaidQuote(admin: ReturnType<typeof createAdminClient>, quoteI
 export async function POST(request: NextRequest) {
   if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const { orderId, tireSupplier, estimatedDeliveryDate, serviceMethod } = await request.json();
+    const { orderId, tireSupplier, estimatedDeliveryDate, serviceMethod, scheduledDate, scheduledTime } = await request.json();
     const id = Number(orderId);
     if (!Number.isInteger(id) || id < 1) return NextResponse.json({ error: "A valid order is required." }, { status: 400 });
     const tireOrder: TireOrderDetails = {
@@ -120,6 +117,12 @@ export async function POST(request: NextRequest) {
     }
     if (!["new", "approved"].includes(order.order_status)) {
       return NextResponse.json({ error: `This order cannot be approved while its status is ${order.order_status}.` }, { status: 409 });
+    }
+    let scheduled: string | null;
+    try {
+      scheduled = orderAppointment(order.requested_date, order.requested_time, scheduledDate, scheduledTime);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid appointment." }, { status: 400 });
     }
     let paidFields = {};
     if (order.source_quote_id) {
@@ -172,7 +175,7 @@ export async function POST(request: NextRequest) {
       facility_id: order.facility_id,
       facility_name: order.facility_name,
       vehicle: vehicleDescription(order) || null,
-      scheduled: scheduledValue(order),
+      scheduled,
       po_number: order.job_number,
       mo_number: order.mo_number,
       qty: order.qty,
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
       vehicle_id: "stepvan",
       service_type: order.service_method === "pickup" ? "Pickup" : ["delivery", "delivered", "delivery_pickup"].includes(String(order.service_method || "").toLowerCase()) ? "Delivery" : "Installation",
       payment_status: "unpaid",
-      job_status: scheduledValue(order) ? "scheduled" : "paid",
+      job_status: scheduled ? "scheduled" : "paid",
       complete: false,
       archived: false,
       ...paidFields,

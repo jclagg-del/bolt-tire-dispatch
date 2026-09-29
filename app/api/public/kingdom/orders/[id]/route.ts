@@ -45,6 +45,7 @@ export async function PATCH(request: Request, { params }: Context) {
   const qty = Number(body.qty);
   const requestedDate = String(body.requested_date || "").trim();
   const requestedTime = String(body.requested_time || "").trim().substring(0, 5);
+  const appointmentChanged = requestedDate !== order.requested_date || requestedTime !== String(order.requested_time || "").slice(0, 5);
   if (!String(body.submitted_by || "").trim() || !String(body.contact_name || "").trim() || !String(body.contact_number || "").trim()) {
     return NextResponse.json({ error: "Submitted by, contact name, and contact number are required." }, { status: 400 });
   }
@@ -101,7 +102,7 @@ export async function PATCH(request: Request, { params }: Context) {
       customer: updates.customer, vehicle, po_number: updates.job_number, mo_number: updates.mo_number,
       facility_id: updates.facility_id, facility_name: updates.facility_name, address: updates.address,
       contact_name: updates.contact_name, phone: updates.contact_number,
-      scheduled: `${updates.requested_date}T${updates.requested_time}:00`,
+      ...(appointmentChanged ? { scheduled: `${updates.requested_date}T${updates.requested_time}:00` } : {}),
       qty: updates.qty, size: updates.tire_size, tire_product_number: updates.tire_product_number,
       notes, service_type: serviceMethod === "pickup" ? "Pickup" : serviceMethod === "delivery" || serviceMethod === "delivery_pickup" ? "Delivery" : "Installation",
     }).eq("id", linkedJob.id);

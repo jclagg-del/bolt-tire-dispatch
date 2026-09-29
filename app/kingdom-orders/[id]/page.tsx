@@ -15,7 +15,7 @@ type EditableOrder = {
   tire_position: string | null; qty: number; tire_size: string; tire_product_number: string | null;
   notes: string | null; order_status: string;
   payment_status?: string;
-  job: null | { complete: boolean; completed_at: string | null };
+  job: null | { complete: boolean; completed_at: string | null; scheduled?: string | null };
 };
 
 type Facility = { id: number; name: string; address: string; contact_name: string | null; contact_number: string | null };
@@ -89,7 +89,9 @@ export default function KingdomOrderEditPage() {
       <Field label="Service Address" value={order.address || ""} onChange={(value) => change("address", value)} />
       <div style={grid2}><Field label="Submitted By" value={order.submitted_by || ""} onChange={(value) => change("submitted_by", value)} /><Field label="Contact Person" value={order.contact_name || ""} onChange={(value) => change("contact_name", value)} /><Field label="Contact Number" type="tel" value={order.contact_number || ""} onChange={(value) => change("contact_number", value)} /></div>
 
-      <h2 style={sectionTitle}>Appointment</h2><div style={grid2}><Field label="Requested Date" type="date" value={order.requested_date} onChange={(value) => change("requested_date", value)} /><label style={label}>Requested Time<select value={(order.requested_time || "").substring(0,5)} onChange={(event) => change("requested_time", event.target.value)} style={input}><option value="08:00">8:00 AM</option><option value="09:30">9:30 AM</option><option value="11:00">11:00 AM</option><option value="12:30">12:30 PM</option><option value="14:00">2:00 PM</option></select></label></div>
+      <h2 style={sectionTitle}>Appointment</h2>
+      {order.job?.scheduled && <p style={{ color: "#166534", fontWeight: 700 }}>Scheduled appointment: {new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }).format(new Date(order.job.scheduled))}</p>}
+      <div style={grid2}><Field label="Requested Date" type="date" value={order.requested_date} onChange={(value) => change("requested_date", value)} /><label style={label}>Requested Time<select value={(order.requested_time || "").substring(0,5)} onChange={(event) => change("requested_time", event.target.value)} style={input}><option value="08:00">8:00 AM</option><option value="09:30">9:30 AM</option><option value="11:00">11:00 AM</option><option value="12:30">12:30 PM</option><option value="14:00">2:00 PM</option></select></label></div>
 
       <h2 style={sectionTitle}>Vehicle</h2><div style={grid3}><Field label="Year" value={order.vehicle_year} onChange={(value) => change("vehicle_year", value)} /><Field label="Make" value={order.vehicle_make} onChange={(value) => change("vehicle_make", value)} /><Field label="Model" value={order.vehicle_model} onChange={(value) => change("vehicle_model", value)} /></div>
       <div style={grid2}><Field label="Color" value={order.vehicle_color || ""} onChange={(value) => change("vehicle_color", value)} /><Field label="License Plate" value={order.license_plate || ""} onChange={(value) => change("license_plate", value)} /></div>
