@@ -27,16 +27,44 @@ test('paid order snapshot keeps payment separate from supplier fulfillment and p
  const mixed=paidWebsiteOrder(staggered,rear);assert.equal(mixed.qty,4);assert.equal(mixed.tire_items.length,2);assert.equal(mixed.tire_product_number,null);assert.match(mixed.notes,/5678/);assert.equal(websitePaymentFields(staggered,rear).price_tires,100);
  assert.equal(paidWebsiteOrder({...quote,discount_organization:'KSS'},option).customer,'Kingdom Support Services');
 });
-function signedEvent(paid=true){const body=JSON.stringify({type:'checkout.session.completed',data:{object:{payment_status:paid?'paid':'unpaid',metadata:{quote_id:'quote',option_id:'option'},amount_total:51000,total_details:{amount_tax:0},payment_intent:'pi_example'}}});const t=Math.floor(Date.now()/1000);return new Request('https://example.test/webhook',{method:'POST',headers:{'stripe-signature':`t=${t},v1=${createHmac('sha256','unit-test-secret').update(`${t}.${body}`).digest('hex')}`},body});}
+function signedEvent(paid=true,type='checkout.session.completed'){const body=JSON.stringify({type,data:{object:{id:'cs_test_example',payment_status:paid?'paid':'unpaid',metadata:{quote_id:'quote',option_id:'option'},amount_total:51000,total_details:{amount_tax:0},payment_intent:'pi_example'}}});const t=Math.floor(Date.now()/1000);return new Request('https://example.test/webhook',{method:'POST',headers:{'stripe-signature':`t=${t},v1=${createHmac('sha256','unit-test-secret').update(`${t}.${body}`).digest('hex')}`},body});}
 test('signed paid webhook creates one visible paid order, not a job or supplier purchase, even on retries',async()=>{
  const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';const db=database();let notifications=0;
- const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/fleet-order-notifications':{sendFleetOrderNotification:async(kind,order,key)=>{notifications++;assert.equal(order.payment_status,'paid');assert.equal(key,'paid-website-order-quote');}}})('app/api/stripe/webhook/route');
+ const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async(sessionId,paidQuote)=>{notifications++;assert.equal(paidQuote.payment_status,'paid');assert.equal(sessionId,'cs_test_example');}}})('app/api/stripe/webhook/route');
  try{assert.equal((await route.POST(signedEvent(false))).status,200);assert.equal(db.writes.length,0);
  assert.equal((await route.POST(new Request('https://example.test',{method:'POST',body:'{}'}))).status,400);
  for(let i=0;i<3;i++)assert.equal((await route.POST(signedEvent())).status,200);
  assert.equal(db.tables.customer_orders.length,1);assert.equal(db.tables.customer_orders[0].tires_ordered,false);assert.equal(db.tables.jobs.length,0);assert.equal(db.tables.supplier_orders.length,0);assert.equal(notifications,1);
  db.failTable='quotes';assert.equal((await route.POST(signedEvent())).status,500);
  }finally{if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
+});
+test('regular website purchase emails after job creation; failed email retries without duplicate jobs',async()=>{
+ const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ const db=database({quotes:[{...quote,discount_organization:null}]});let calls=0;
+ const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async(id,q)=>{calls++;assert.equal(id,'cs_test_example');assert.equal(q.amount_paid,510);assert.equal(db.tables.jobs.length,1);if(calls===1)throw new Error('Email temporarily unavailable');}}})('app/api/stripe/webhook/route');
+ try {
+  assert.equal((await route.POST(signedEvent())).status,500);
+  assert.equal(db.tables.quotes[0].payment_status,'paid');assert.ok(db.tables.quotes[0].converted_job_id);
+  assert.equal((await route.POST(signedEvent(true,'checkout.session.async_payment_succeeded'))).status,200);
+  assert.equal(calls,2);assert.equal(db.tables.jobs.length,1);assert.equal(db.tables.customer_orders.length,0);assert.equal(db.tables.supplier_orders.length,0);
+ }finally{if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
+});
+test('paid staff quote sends a payment alert without automatically creating a job',async()=>{
+ const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ const db=database({quotes:[{...quote,purchase_source:'staff',discount_organization:null}]});let calls=0;
+ const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async()=>{calls++;}}})('app/api/stripe/webhook/route');
+ try{
+  assert.equal((await route.POST(signedEvent(false))).status,200);assert.equal(calls,0);
+  assert.equal((await route.POST(signedEvent())).status,200);assert.equal(calls,1);
+  assert.equal(db.tables.quotes[0].payment_status,'paid');assert.equal(db.tables.jobs.length,0);assert.equal(db.tables.customer_orders.length,0);
+ }finally{if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
+});
+test('previously notified organization purchase does not email again after job conversion',async()=>{
+ const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ const db=database({quotes:[{...quote,converted_job_id:5}],customer_orders:[{id:1,source_quote_id:'quote',payment_notification_sent_at:'2026-09-28T12:00:00Z'}]});
+ const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async()=>{assert.fail('Already notified');}}})('app/api/stripe/webhook/route');
+ try{assert.equal((await route.POST(signedEvent())).status,200);assert.equal(db.tables.customer_orders.length,1);}
+ finally{if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
 });
 test('approval creates one paid job with original financials; identical unrelated PO does not capture it',async()=>{
  const {paidWebsiteOrder}=loader()('lib/paid-website-order');const order={id:9,...paidWebsiteOrder(quote,option)};

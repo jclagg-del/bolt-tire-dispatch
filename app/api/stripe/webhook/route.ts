@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paidWebsiteOrder, websitePaymentFields } from "@/lib/paid-website-order";
-import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
+import { sendPaymentNotification } from "@/lib/payment-notifications";
 
 function valid(payload: string, header: string, secret: string) {
   const parts = Object.fromEntries(header.split(",").map((item) => item.split("=")));
@@ -39,7 +39,10 @@ export async function POST(request: Request) {
   const { error: paymentError } = await admin.from("quotes").update(payment).eq("id", quoteId);
   if (paymentError) throw new Error(paymentError.message);
   Object.assign(quote, payment);
-  if (quote.purchase_source !== "website" || quote.converted_job_id) return NextResponse.json({ received: true });
+  if (quote.purchase_source !== "website") {
+    await sendPaymentNotification(session.id, quote, option);
+    return NextResponse.json({ received: true });
+  }
 
   // Organization purchases wait in Orders. Payment never places a supplier order
   // or checks "Tires ordered". Unique source_quote_id makes webhook retries safe.
@@ -54,11 +57,16 @@ export async function POST(request: Request) {
     } else if (orderError) throw new Error(orderError.message);
     if (!order) throw new Error("Paid order could not be saved");
     if (!order.payment_notification_sent_at) {
-      await sendFleetOrderNotification("new", { ...orderValues, id: order.id }, `paid-website-order-${quote.id}`);
+      await sendPaymentNotification(session.id, quote, option);
       const notified = await admin.from("customer_orders").update({ payment_notification_sent_at: paidAt }).eq("id", order.id);
       if (notified.error) throw new Error(notified.error.message);
     }
     return NextResponse.json({ received: true, orderId: order.id });
+  }
+
+  if (quote.converted_job_id) {
+    await sendPaymentNotification(session.id, quote, option);
+    return NextResponse.json({ received: true, jobId: quote.converted_job_id });
   }
 
   const scheduled = quote.requested_date && quote.requested_time ? `${quote.requested_date}T${String(quote.requested_time).substring(0, 5)}:00` : null;
@@ -80,6 +88,7 @@ export async function POST(request: Request) {
   if (!jobId) throw new Error("Paid job could not be located");
   const linked = await admin.from("quotes").update({ status: "converted", converted_job_id: jobId, appointment_hold_expires_at: null, updated_at: paidAt }).eq("id", quote.id);
   if (linked.error) throw new Error(linked.error.message);
+  await sendPaymentNotification(session.id, quote, option);
   return NextResponse.json({ received: true, jobId });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Paid order could not be recorded" }, { status: 500 });
