@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import EmbeddedStripeCheckout from "@/components/EmbeddedStripeCheckout";
+import QuoteCheckoutInformation from "@/components/QuoteCheckoutInformation";
+import { quoteCheckoutDetails, quoteCheckoutDetailsError } from "@/lib/quote-checkout-details";
 type Option = {
   id: string;
   tier: string;
@@ -26,6 +28,10 @@ type Quote = {
   quote_number: number;
   customer: string;
   contact_name: string | null;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  purchase_source?: string | null;
   vehicle: string | null;
   tire_size: string | null;
   quantity: number;
@@ -134,6 +140,7 @@ export default function PublicQuote() {
     clientSecret: string;
     publishableKey: string;
   } | null>(null);
+  const [details, setDetails] = useState(quoteCheckoutDetails({}));
   useEffect(() => {
     fetch(`/api/public/quotes/${token}`)
       .then(async (r) => {
@@ -143,16 +150,27 @@ export default function PublicQuote() {
           (a: Option, b: Option) => a.sort_order - b.sort_order,
         );
         setQ(x);
+        setDetails(quoteCheckoutDetails(x));
       })
       .catch((e) => setError(e.message));
   }, [token]);
   const pay = async (id: string) => {
+    if (!q || paying || checkout) return;
+    if (q.purchase_source !== "website") {
+      const message = quoteCheckoutDetailsError(details);
+      if (message) {
+        setError(message);
+        document.getElementById("quote-checkout-information")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
     setPaying(id);
     setError("");
+    try {
     const r = await fetch(`/api/public/quotes/${token}/checkout`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ optionId: id, purchase }),
+      body: JSON.stringify({ optionId: id, purchase, ...(q.purchase_source !== "website" ? { customerDetails: details } : {}) }),
     });
     const x = await r.json();
     if (!r.ok) {
@@ -168,16 +186,21 @@ export default function PublicQuote() {
           ?.scrollIntoView({ behavior: "smooth", block: "start" }),
       100,
     );
+    } catch {
+      setError("Could not start payment. Please check your connection and try again.");
+    } finally {
+      setPaying(null);
+    }
   };
   useEffect(() => {
-    if (!q || !purchase || q.payment_status === "paid" || checkout || paying)
+    if (!q || q.purchase_source !== "website" || !purchase || q.payment_status === "paid" || checkout || paying)
       return;
     const option =
       q.quote_options.find((item) => item.id === q.selected_option_id) ||
       q.quote_options[0];
     if (option) pay(option.id);
   }, [q, purchase]);
-  if (error)
+  if (error && !q)
     return (
       <main className="public-quote-page">
         <div className="quote-error">{error}</div>
@@ -195,6 +218,7 @@ export default function PublicQuote() {
     q.quote_options.find((o) => o.id === q.selected_option_id) ||
     q.quote_options[0];
   const options = purchase && chosen ? [chosen] : q.quote_options;
+  const information = !paid && q.purchase_source !== "website" ? <QuoteCheckoutInformation value={details} onChange={value => { setDetails(value); setError(""); }} disabled={Boolean(paying || checkout)} /> : null;
   if (purchase)
     return (
       <main className="direct-checkout-page">
@@ -210,6 +234,8 @@ export default function PublicQuote() {
             </p>
           </div>
         </header>
+        {information}
+        {error && <div role="alert" className="quote-error">{error}</div>}
         {paid ? (
           <div className="quote-paid-banner">
             <strong>Thank you! Your paid order is confirmed.</strong>
@@ -265,8 +291,8 @@ export default function PublicQuote() {
               ) : (
                 <div className="direct-payment-loading">
                   <span></span>
-                  <strong>{error || "Loading secure payment…"}</strong>
-                  <p>Your checkout will appear here automatically.</p>
+                  <strong>{error || (q.purchase_source === "website" || paying ? "Loading secure payment…" : "Complete your information above to continue.")}</strong>
+                  {q.purchase_source === "website" ? <p>Your checkout will appear here automatically.</p> : <button className="quote-select-button" disabled={Boolean(paying) || !chosen} onClick={() => chosen && pay(chosen.id)}>{paying ? "Loading secure checkout..." : "Continue to secure payment"}</button>}
                 </div>
               )}
             </section>
@@ -296,6 +322,8 @@ export default function PublicQuote() {
           </p>
         </div>
       </header>
+      {information}
+      {error && <div role="alert" className="quote-error">{error}</div>}
       {paid ? (
         <div className="quote-paid-banner">
           <strong>Thank you!</strong>

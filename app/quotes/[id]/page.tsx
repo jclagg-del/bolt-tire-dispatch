@@ -16,6 +16,8 @@ type SavedQuote = {
   stripe_sales_tax_amount: number | null;
   discount_organization?: string | null;
   purchase_source?: string | null;
+  requested_date?: string | null;
+  requested_time?: string | null;
   quote_options: Array<Omit<QuoteOption, "price_per_tire" | "warranty_miles"> & { id: string; price_per_tire: number; warranty_miles: number | null }>;
 };
 
@@ -131,7 +133,7 @@ export default function QuoteDetailPage() {
     const total = taxableSubtotal + Number(quote.ny_state_tire_fee) + salesTax;
     const paidThroughStripe = quote.payment_status === "paid";
     const paymentDate = paidThroughStripe ? new Date().toISOString() : null;
-    const combinedNotes = [quote.notes, `Converted from quote #${quote.quote_number}`, quote.service_call_fee > 0 ? `Service call: $${Number(quote.service_call_fee).toFixed(2)}` : null].filter(Boolean).join("\n");
+    const combinedNotes = [quote.notes, `Converted from quote #${quote.quote_number}`, quote.requested_date ? `Requested service date: ${quote.requested_date}${quote.requested_time ? ` at ${quote.requested_time}` : ""} (confirm with customer)` : null, quote.service_call_fee > 0 ? `Service call: $${Number(quote.service_call_fee).toFixed(2)}` : null].filter(Boolean).join("\n");
     const { data: job, error } = await supabase.from("jobs").insert({
       customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
       vehicle: quote.vehicle, tires: [ `${selected.brand} ${selected.model}`, selected.rear_model ? `Rear: ${selected.rear_brand || selected.brand} ${selected.rear_model}` : null ].filter(Boolean).join(" / "), size: [quote.tire_size, quote.rear_tire_size ? `Rear: ${quote.rear_tire_size}` : null].filter(Boolean).join(" / "),
@@ -166,6 +168,7 @@ export default function QuoteDetailPage() {
     </div></div>
     {quote.payment_status === "paid" ? <div className="quote-paid-banner"><strong>Paid${quote.amount_paid != null ? ` — $${Number(quote.amount_paid).toFixed(2)}` : ""}</strong><span>Stripe payment received. This quote is ready to schedule or convert to a job.</span></div> : quote.payment_status === "pending" ? <div className="quote-message">Customer checkout has started; payment has not been confirmed yet.</div> : null}
     {message ? <div className="quote-message">{message}</div> : null}
+    {quote.requested_date && <div className="quote-message"><strong>Requested service date: {new Date(`${quote.requested_date}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</strong> — confirm scheduling with the customer.</div>}
 
     {(() => { const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id); return selected?.supplier_product_id ? <section className="quote-ordering-card"><div><span>SUPPLIER ORDERING</span><h2>{selected.supplier || "Supplier"} · {selected.supplier_product_id}</h2><p>{selected.brand} {selected.model} · {quote.quantity} tires</p></div><dl><div><dt>Manufacturer part #</dt><dd>{selected.manufacturer_product_id || "—"}</dd></div><div><dt>Last verified cost</dt><dd>{selected.wholesale_cost != null ? `$${Number(selected.wholesale_cost).toFixed(2)} each` : "Confirm with supplier"}</dd></div><div><dt>Availability when selected</dt><dd>{selected.supplier_availability ? `Local ${selected.supplier_availability.local || 0} · Nearby ${selected.supplier_availability.localPlus || 0} · Network ${selected.supplier_availability.nationwide || 0}` : selected.availability || "Confirm availability"}</dd></div></dl><button type="button" onClick={copyOrderingDetails}>Copy Order Details</button></section> : null; })()}
 

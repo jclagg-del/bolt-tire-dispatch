@@ -2,13 +2,14 @@ import {NextResponse} from "next/server";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {shopCustomerError} from "@/lib/shop-customer";
 import {lookupDiscount} from "@/lib/discounts-server";
+import {quoteCheckoutDetails,quoteCheckoutDetailsError} from "@/lib/quote-checkout-details";
 
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
   const key=process.env.STRIPE_SECRET_KEY;
   const publishableKey=process.env.STRIPE_PUBLISHABLE_KEY||process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   if(!key||!publishableKey)return NextResponse.json({error:"Stripe embedded checkout is not connected yet"},{status:503});
   const{token}=await params;
-  const{optionId,purchase}=await request.json();
+  const{optionId,purchase,customerDetails}=await request.json();
   const admin=createAdminClient();
   const{data:q}=await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("public_token",token).single();
   if(!q)return NextResponse.json({error:"Quote not found"},{status:404});
@@ -25,6 +26,22 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   }
   const o=(q.quote_options||[]).find((x:{id:string})=>x.id===optionId);
   if(!o)return NextResponse.json({error:"Choose a valid tire option"},{status:400});
+
+  // Sent quotes must capture scheduling/contact details before a Stripe session
+  // exists. Only these fields are customer-editable; prices and tax stay server-owned.
+  if(q.purchase_source!=="website"){
+    if(customerDetails!==undefined&&(!customerDetails||typeof customerDetails!=="object"||Array.isArray(customerDetails)))return NextResponse.json({error:"Complete your contact and service information."},{status:400});
+    const details=quoteCheckoutDetails(customerDetails===undefined?q:customerDetails);
+    const detailsError=quoteCheckoutDetailsError(details);
+    if(detailsError)return NextResponse.json({error:detailsError},{status:400});
+    const updates={...details,requested_time:details.requested_date===q.requested_date?q.requested_time||null:null,updated_at:new Date().toISOString()};
+    let save=admin.from("quotes").update(updates).eq("id",q.id);
+    save=q.payment_status==null?save.is("payment_status",null):save.eq("payment_status",q.payment_status);
+    const saved=await save.select("id").maybeSingle();
+    if(saved.error)return NextResponse.json({error:"Your information could not be saved. Please try again before paying."},{status:500});
+    if(!saved.data)return NextResponse.json({error:"This quote changed in another window. Refresh before paying."},{status:409});
+    Object.assign(q,updates);
+  }
 
   const taxable=Number(o.price_per_tire)*Number(q.quantity)+Number(o.rear_price_per_tire||0)*Number(q.rear_quantity||0)+Number(q.installation_cost)+Number(q.service_call_fee)+Number(q.disposal_fee);
   const stateFee=Number(q.ny_state_tire_fee);
