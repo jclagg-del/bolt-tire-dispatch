@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 import CustomerOrderPurchase, { purchaseApi, type PurchaseDetails } from "@/components/CustomerOrderPurchase";
+import OrderDuplicateNotice from "@/components/OrderDuplicateNotice";
+import { possibleDuplicateOrders } from "@/lib/customer-order-duplicates";
 
 type CustomerOrder = {
   id: number;
@@ -278,6 +280,7 @@ export default function OrdersPage() {
 
   const rejectOrder = async (order: CustomerOrder) => {
     if (workingId !== null) return;
+    if (order.order_status === "approved" && !order.approved_job_id) { setErrorMessage("This approval needs review. Check for an existing job before rejecting or restoring the order."); return; }
 
     const confirmed = window.confirm(
       `Reject the request from ${order.contact_name}?`
@@ -294,7 +297,9 @@ export default function OrdersPage() {
         order_status: "rejected",
         reviewed_at: new Date().toISOString(),
       })
-      .eq("id", order.id);
+      .eq("id", order.id)
+      .eq("order_status", "new")
+      .is("approved_job_id", null);
 
     setWorkingId(null);
 
@@ -342,6 +347,7 @@ export default function OrdersPage() {
 
   const deleteOrder = async (order: CustomerOrder) => {
     if (workingId !== null) return;
+    if (order.order_status === "approved" && !order.approved_job_id) { setErrorMessage("This approval needs review. Check for an existing job before deleting the order."); return; }
     if (order.payment_status === "paid") { setErrorMessage("Paid orders must be retained for payment records. Rejecting an order does not refund the card payment; contact the office to arrange any refund."); return; }
 
     const approvedMessage = order.approved_job_id
@@ -384,8 +390,10 @@ export default function OrdersPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Approve this request and add it to the schedule for ${formatDate(
+    const relatedOrders = possibleDuplicateOrders(orders)[order.id] || [];
+    const confirmed = window.confirm(order.order_status === "approved"
+      ? `Check the approval for order #${order.id}? An uncertain earlier approval will not create another job.`
+      : `${relatedOrders.length ? "Possible duplicate: this job/PO number is used on another request. Continue only if this is a separate order.\n\n" : ""}Approve order #${order.id} and create its own job for ${formatDate(
         order.requested_date
       )} at ${formatTime(order.requested_time)}?`
     );
@@ -427,6 +435,8 @@ export default function OrdersPage() {
   const newOrders = orders.filter(
     (order) => order.order_status === "new"
   );
+
+  const duplicateOrders = possibleDuplicateOrders(orders);
 
   const approvedOrders = orders.filter(
     (order) =>
@@ -506,6 +516,7 @@ export default function OrdersPage() {
               title={`New Orders (${newOrders.length})`}
               onPurchased={(orderId, details) => setOrders(current => current.map(order => order.id === orderId ? { ...order, tires_ordered: true, purchase: { ...details, status: "placed" } } : order))}
               orders={newOrders}
+              duplicateOrders={duplicateOrders}
               emptyText="No new customer orders."
               workingId={workingId}
               onToggleTires={toggleTiresOrdered}
@@ -566,6 +577,7 @@ export default function OrdersPage() {
 }
 
 type OrderSectionProps = {
+  duplicateOrders?: Record<number, number[]>;
   onPurchased?: (orderId: number, details: PurchaseDetails) => void;
   title: string;
   orders: CustomerOrder[];
@@ -580,6 +592,7 @@ type OrderSectionProps = {
 };
 
 function OrderSection({
+  duplicateOrders,
   onPurchased,
   title,
   orders,
@@ -655,6 +668,7 @@ function OrderSection({
                     <h3 style={customerName}>
                       {order.customer}
                     </h3>
+                    <div style={submittedBy}>Order #{order.id}</div>
                     {order.payment_status === "paid" && <p style={{ color: "#166534", fontWeight: 800 }}>Paid online · ${Number(order.amount_paid || 0).toFixed(2)}</p>}
                     {order.discount_code_label && <p style={{ fontSize: 13 }}>Discount code {order.discount_code_label} · ${Number(order.discount_amount || 0).toFixed(2)} off tires{order.tax_exempt ? " · Sales-tax exempt: tires and services" : ""}</p>}
 
@@ -681,6 +695,9 @@ function OrderSection({
                       : "Not Ordered"}
                   </div>
                 </div>
+
+                {order.order_status === "new" && <OrderDuplicateNotice relatedOrderIds={duplicateOrders?.[order.id]} />}
+                {approved && !order.approved_job_id && <p role="status" style={{ color: "#92400e", overflowWrap: "anywhere" }}>Approval pending or needs review. Refresh to check for the linked job. Do not create a replacement until Jobs has been checked.</p>}
 
                 <div style={appointmentBox}>
                   <strong>
@@ -852,14 +869,14 @@ function OrderSection({
                         {working
                           ? "Working..."
                           : approved
-                            ? "Finish Creating Job"
+                            ? "Check Approval"
                             : "Approve & Create Job"}
                       </button>
 
                       <button
                         type="button"
                         onClick={() => onReject(order)}
-                        disabled={working}
+                        disabled={working || (approved && !order.approved_job_id)}
                         style={rejectButton}
                       >
                         Reject

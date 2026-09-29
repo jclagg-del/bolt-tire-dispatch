@@ -50,6 +50,7 @@ function vehicleDescription(order: CustomerOrder) {
 
 function jobNotes(order: CustomerOrder) {
   const parts = [
+    `Order request #${order.id}`,
     order.goodyear_order ? "Goodyear Order: Yes" : "",
     order.tire_position ? `Tire Position: ${order.tire_position}` : "",
     order.submitted_by ? `Submitted By: ${order.submitted_by}` : "",
@@ -61,11 +62,14 @@ function jobNotes(order: CustomerOrder) {
 type TireOrderDetails = { supplier: string | null; deliveryDate: string | null };
 
 async function linkExistingJob(admin: ReturnType<typeof createAdminClient>, order: CustomerOrder, tireOrder: TireOrderDetails) {
-  if (!order.source_quote_id && !order.job_number?.trim()) return null;
-  let query = admin
+  // A customer PO is a reference, not an identity: separate requests can share
+  // both a PO and a tire part. Only an exact paid-quote source can recover a job.
+  // Other retries use this request's approved_job_id and atomic approval claim.
+  if (!order.source_quote_id) return null;
+  const query = admin
     .from("jobs")
-    .select("id");
-  query = order.source_quote_id ? query.eq("source_quote_id", order.source_quote_id) : query.eq("customer", order.customer).eq("po_number", order.job_number!.trim()).or("archived.eq.false,archived.is.null");
+    .select("id")
+    .eq("source_quote_id", order.source_quote_id);
   const { data, error } = await query
     .order("created_at", { ascending: true })
     .limit(1)
@@ -114,6 +118,9 @@ export async function POST(request: NextRequest) {
       if (order.source_quote_id) await linkPaidQuote(admin, order.source_quote_id, order.approved_job_id);
       return NextResponse.json({ jobId: order.approved_job_id, existing: true });
     }
+    if (!["new", "approved"].includes(order.order_status)) {
+      return NextResponse.json({ error: `This order cannot be approved while its status is ${order.order_status}.` }, { status: 409 });
+    }
     let paidFields = {};
     if (order.source_quote_id) {
       const { data: quote, error: paidError } = await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", order.source_quote_id).single();
@@ -139,13 +146,10 @@ export async function POST(request: NextRequest) {
     const existingJobId = await linkExistingJob(admin, order, tireOrder);
     if (existingJobId) return NextResponse.json({ jobId: existingJobId, existing: true });
 
-    if (order.order_status === "approved" && order.reviewed_at) {
-      const lockAge = Date.now() - new Date(order.reviewed_at).getTime();
-      if (Number.isFinite(lockAge) && lockAge >= 0 && lockAge < 120_000) {
-        return NextResponse.json({ error: "This order is already being approved. Refresh Orders in a moment." }, { status: 409 });
-      }
-    } else if (order.order_status !== "new") {
-      return NextResponse.json({ error: `This order cannot be approved while its status is ${order.order_status}.` }, { status: 409 });
+    if (order.order_status === "approved") {
+      // Never expire a claim and insert again: the first insert could have
+      // succeeded even if its response or the subsequent link was lost.
+      return NextResponse.json({ error: `Order #${order.id} has an approval in progress or awaiting review. Refresh first. If no job is linked, the office must check Jobs and resolve this approval; no additional job has been created.` }, { status: 409 });
     }
 
     const lockTimestamp = new Date().toISOString();
@@ -194,14 +198,18 @@ export async function POST(request: NextRequest) {
         const recovered = await linkExistingJob(admin, order, tireOrder);
         if (recovered) return NextResponse.json({ jobId: recovered, existing: true });
       }
-      await admin.from("customer_orders").update({ order_status: "new", reviewed_at: null, approved_at: null })
-        .eq("id", order.id).eq("reviewed_at", lockTimestamp).is("approved_job_id", null);
+      // A definite SQL validation/constraint error means the insert was rejected.
+      // Timeouts, transport failures and unknown outcomes must retain the claim.
+      if (/^(22|23|42)/.test(jobError?.code || "")) {
+        await admin.from("customer_orders").update({ order_status: "new", reviewed_at: null, approved_at: null })
+          .eq("id", order.id).eq("reviewed_at", lockTimestamp).is("approved_job_id", null);
+      }
       throw new Error(jobError?.message || "No job was returned.");
     }
 
-    const { error: linkError } = await admin.from("customer_orders").update({ approved_job_id: newJob.id })
-      .eq("id", order.id).eq("reviewed_at", lockTimestamp).is("approved_job_id", null);
-    if (linkError) throw new Error(`The job was created, but the order could not be linked: ${linkError.message}`);
+    const { data: linkedOrder, error: linkError } = await admin.from("customer_orders").update({ approved_job_id: newJob.id })
+      .eq("id", order.id).eq("reviewed_at", lockTimestamp).is("approved_job_id", null).select("id").maybeSingle();
+    if (linkError || !linkedOrder) throw new Error(`Job ${newJob.id} was created for order #${order.id}, but the link could not be saved. Check that job before retrying. ${linkError?.message || "The order changed during approval."}`);
     if (order.source_quote_id) await linkPaidQuote(admin, order.source_quote_id, newJob.id);
 
     return NextResponse.json({ jobId: newJob.id, created: true });
