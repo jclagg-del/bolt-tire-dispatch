@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import styles from "./AppHeader.module.css";
@@ -9,28 +9,36 @@ import styles from "./AppHeader.module.css";
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
-  const navigation = useRef<HTMLDetailsElement>(null);
+  const navigation = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const panelId = useId();
+
+  useEffect(() => { setNavigationOpen(false); }, [pathname]);
 
   useEffect(() => {
     const menu = navigation.current;
-    if (!menu) return;
-    menu.open = false;
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+    if (!menu || !navigationOpen) return;
+    const outside = (event: Event) => {
+      if (event.target instanceof Node && !menu.contains(event.target)) setNavigationOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !menu.open) return;
+      if (event.key !== "Escape") return;
       event.preventDefault();
-      menu.open = false;
-      menu.querySelector("summary")?.focus();
+      setNavigationOpen(false);
+      trigger.current?.focus();
     };
     document.addEventListener("pointerdown", outside);
+    // Safari can blur the trigger with a null relatedTarget before a link click.
+    // Only a known outside focus target should dismiss the panel.
+    document.addEventListener("focusin", outside);
     document.addEventListener("keydown", escape);
     return () => {
       document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
       document.removeEventListener("keydown", escape);
     };
-  }, [pathname]);
+  }, [navigationOpen]);
 
   const navItems = [
     { label: "Dashboard", path: "/" },
@@ -85,21 +93,21 @@ export default function AppHeader() {
         <div style={rightSide}>
           <div style={menuLabel}>
             <span style={menuLabelText}>Navigate</span>
-            <details ref={navigation} className={styles.navigation} onBlur={event => {
-              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
-            }}>
-              <summary className={styles.trigger} aria-label={`Navigate to another page. Current page: ${navItems.find(item => item.path === currentPath)?.label}`}>
+            <div ref={navigation} className={styles.navigation}>
+              <button ref={trigger} type="button" className={styles.trigger} aria-expanded={navigationOpen} aria-controls={panelId}
+                onClick={() => setNavigationOpen(open => !open)}
+                aria-label={`Navigate to another page. Current page: ${navItems.find(item => item.path === currentPath)?.label}`}>
                 <span>{navItems.find(item => item.path === currentPath)?.label}</span>
                 <span className={styles.chevron} aria-hidden="true">▾</span>
-              </summary>
-              <nav className={styles.panel} aria-label="Main navigation">
+              </button>
+              <nav id={panelId} hidden={!navigationOpen} className={styles.panel} aria-label="Main navigation">
                 {navItems.map(item => <Link key={item.path} href={item.path} className={styles.link}
                   aria-current={currentPath === item.path ? "page" : undefined}
-                  onClick={() => { if (navigation.current) navigation.current.open = false; }}>
+                  onClick={() => setNavigationOpen(false)}>
                   <span>{item.label}</span>{currentPath === item.path && <span aria-hidden="true">✓</span>}
                 </Link>)}
               </nav>
-            </details>
+            </div>
           </div>
 
           <button
