@@ -7,6 +7,21 @@ type ShopPrice = {
 
 export type PricingAudience = "staff" | "customer";
 
+export function hasSupplierCost(tire: { cost?: number | null }): boolean {
+  return typeof tire.cost === "number" && Number.isFinite(tire.cost) && tire.cost > 0;
+}
+
+// Preserve installation and fees when staff edits only the tire selling price.
+export function withQuotePrice<T extends ShopPrice>(tire: T, price: number): T {
+  if (!Number.isFinite(price) || price < 0) return tire;
+  const rounded = Math.round(price * 100) / 100;
+  const delta = rounded - tire.quotePrice;
+  return { ...tire, quotePrice: rounded, installedPrice: tire.installedPrice + delta,
+    estimatedTotals: Object.fromEntries(Object.entries(tire.estimatedTotals || {}).map(([qty, total]) =>
+      [qty, Math.round((total + Number(qty) * delta) * 100) / 100])),
+  };
+}
+
 // MAP is the customer's tire price, not a floor under an additional markup.
 // A missing/invalid MAP retains the configured markup-based fallback.
 export function customerMapPrice(map: unknown, fallback: number): number {

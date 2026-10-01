@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { installedTotal, supplierCostLabel, tireGrossProfit } from "@/lib/tire-shop-pricing";
+import { hasSupplierCost, installedTotal, supplierCostLabel, tireGrossProfit, withQuotePrice } from "@/lib/tire-shop-pricing";
+import StaffTireCard from "@/components/StaffTireCard";
 import { sameTireVariant, supplierOffers, uniqueTireCards } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import { hasTireStock, matchesTireStock } from "@/lib/tire-stock-filter";
@@ -190,6 +191,7 @@ export default function TireShoppingBeta({
   const [warehouseDetails, setWarehouseDetails] = useState<WarehouseDetail[]>([]);
   const [detailLoading, setDetailLoading] = useState("");
   const [showOutOfStock, setShowOutOfStock] = useState(false);
+  const [staffDrafts, setStaffDrafts] = useState<Record<string, { offerId: string; price: string }>>({});
   useEffect(() => {
     if (!internal) return;
     const saved = readShoppingSession<{
@@ -198,11 +200,13 @@ export default function TireShoppingBeta({
       minWarranty: string; loadRange: string; speedRating: string; availableOnly: boolean;
       snowOnly: boolean; runFlatOnly: boolean; rebateOnly: boolean; sort: string;
       showOutOfStock?: boolean;
+      staffDrafts?: Record<string, { offerId: string; price: string }>;
       mode: "size" | "vehicle" | "part"; partNumber: string; vehicle: typeof vehicle;
       years: string[]; makes: string[]; models: string[]; trims: string[]; fitmentOptions: FitmentOption[];
     }>(sessionStorage, shopSessionKey);
     if (!saved || !Array.isArray(saved.products) || !Array.isArray(saved.selected)) return;
     setQuery(saved.query); setProducts(saved.products); setSelected(saved.selected); setQuantity(saved.quantity);
+    setStaffDrafts(saved.staffDrafts || {});
     setCategory(saved.category); setSelectedBrands(saved.selectedBrands); setMinPrice(saved.minPrice); setMaxPrice(saved.maxPrice);
     setMinWarranty(saved.minWarranty); setLoadRange(saved.loadRange); setSpeedRating(saved.speedRating);
     setAvailableOnly(saved.availableOnly); setSnowOnly(saved.snowOnly); setRunFlatOnly(saved.runFlatOnly); setRebateOnly(saved.rebateOnly);
@@ -271,6 +275,7 @@ export default function TireShoppingBeta({
   }
 
   async function search() {
+    setStaffDrafts({});
     setLoading(true);
     setError("");
     setSearched(true);
@@ -287,6 +292,7 @@ export default function TireShoppingBeta({
     }
   }
   async function searchPartNumber() {
+    setStaffDrafts({});
     setLoading(true); setError(""); setSearched(true);
     try {
       const payload = await atdApi({ action: "part-number", query: partNumber });
@@ -296,6 +302,7 @@ export default function TireShoppingBeta({
     } finally { setLoading(false); }
   }
   async function searchVehicle() {
+    setStaffDrafts({});
     const option = fitmentOptions.find(
       (item) => item.vehicleid === vehicle.vehicleid,
     );
@@ -435,13 +442,27 @@ export default function TireShoppingBeta({
     });
   }
 
+  function updateStaffDraft(card: Product, offer: Product, price: string) {
+    setStaffDrafts(drafts => ({ ...Object.fromEntries(Object.entries(drafts).filter(([id]) => {
+      const previous = products.find(product => product.id === id);
+      return !previous || !sameTireVariant(previous, card);
+    })), [card.id]: { offerId: offer.id, price } }));
+    if (price.trim() !== "" && Number.isFinite(Number(price)) && Number(price) >= 0) {
+      setSelected(items => items.map(item => sameTireVariant(item, card) ? withQuotePrice(offer, Number(price)) : item));
+    }
+  }
+
   function buildQuote() {
     if (!selected.length) return;
+    if (Object.entries(staffDrafts).some(([id, draft]) =>
+      (draft.price.trim() === "" || !Number.isFinite(Number(draft.price)) || Number(draft.price) < 0) &&
+      selected.some(item => { const card = products.find(product => product.id === id); return card && sameTireVariant(item, card); })
+    )) { alert("Enter a valid price for each selected tire before generating the quote."); return; }
     try {
       saveShoppingSession(sessionStorage, shopSessionKey, {
         query, products, selected, quantity, category, selectedBrands, minPrice, maxPrice,
         minWarranty, loadRange, speedRating, availableOnly, snowOnly, runFlatOnly, rebateOnly,
-        showOutOfStock,
+        showOutOfStock, staffDrafts,
         sort, mode, partNumber, vehicle, years, makes, models, trims, fitmentOptions,
       });
     sessionStorage.setItem(
@@ -451,10 +472,10 @@ export default function TireShoppingBeta({
     } catch { alert("Your browser could not keep this shopping session. Please free some browser storage and try again so your selections are not lost."); return; }
     router.push("/quotes/new?from=tire-shop");
   }
-  function beginOrder(tire: Product) {
+  function beginOrder(tire: Product, requestedQuantity = quantity) {
     setOrderProduct(tire);
     setOrderChoosingSupplier(false);
-    setOrderQuantity(quantity);
+    setOrderQuantity(requestedQuantity);
     setOrderPo("");
     setOrderComment("");
     setOrderPreview(null);
@@ -1148,6 +1169,29 @@ export default function TireShoppingBeta({
             results.map((tire) => {
               const isSelected = selected.some((item) => sameTireVariant(item, tire));
               const supplierAvailability = supplierMatches(tire);
+              if (internal) {
+                const draft = staffDrafts[tire.id] || Object.entries(staffDrafts).find(([id]) => {
+                  const previous = products.find(product => product.id === id);
+                  return previous && sameTireVariant(previous, tire);
+                })?.[1];
+                const priced = supplierAvailability.filter(hasSupplierCost);
+                const offer = priced.find(item => item.id === draft?.offerId) || priced.find(item => item.id === tire.id) || priced[0] || tire;
+                const price = draft?.price ?? tire.quotePrice.toFixed(2);
+                const display = withQuotePrice({ ...offer, imageUrl: offer.imageUrl || tire.imageUrl }, price.trim() === "" ? NaN : Number(price));
+                return <StaffTireCard key={tire.id} tire={display} offers={priced} price={price}
+                  quantity={quantity} staggered={staggered} selected={isSelected} quoteFull={selected.length >= 3}
+                  imageFailed={failedImages.has(display.id)} onImageFailed={() => setFailedImages(current => new Set([...current, display.id]))}
+                  onImage={() => setImagePreview(display)} onSupplier={next => updateStaffDraft(tire, next, price)}
+                  onPrice={value => updateStaffDraft(tire, offer, value)} onQuantity={setQuantity}
+                  onQuote={() => toggleSelected(display)}
+                  onOrder={() => { const count = staggered ? 2 : quantity; if (display.supplier === "USAF") { setOrderQuantity(count); setUsafOrderProduct(display); } else beginOrder(display, count); }}
+                  onDetails={() => loadTireDetails(offer)}
+                  onWarehouses={() => { if (warehouseProductId !== display.id) toggleWarehouseDetails(display); }}
+                  warehouses={warehouseProductId === display.id ? warehouseDetails : []}
+                  warehouseLoading={warehouseProductId === display.id && warehouseLoading}
+                  warehouseError={warehouseProductId === display.id ? warehouseError : ""}
+                />;
+              }
               return (
                 <article
                   className={`tire-beta-product ${isSelected ? "selected" : ""}`}

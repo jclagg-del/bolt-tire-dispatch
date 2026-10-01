@@ -11,6 +11,7 @@ function loader(stubs = {}) {
   const cache = new Map();
   function load(file) {
     file = path.resolve(__dirname, '..', file);
+    if (file.endsWith('.module.css')) return { __esModule: true, default: new Proxy({}, { get: (_, key) => String(key) }) };
     if (!path.extname(file)) file += fs.existsSync(file + '.ts') ? '.ts' : '.tsx';
     if (cache.has(file)) return cache.get(file).exports;
     const mod = new Module(file, module); cache.set(file, mod); mod.paths = module.paths;
@@ -142,7 +143,7 @@ test('staff checkbox shows and labels unavailable tires, prefers stocked offers,
   assert.equal((html.match(/<article /g)||[]).length,internal&&showOutOfStock?2:1);
   if(internal){
    assert.match(html,/Show out-of-stock tires/);
-   assert.ok(html.includes('$220.00'));
+   assert.ok(html.includes('value="220.00"'));
    if(showOutOfStock){assert.match(html,/Out of stock — availability not confirmed/);assert.match(html,/<button[^>]*disabled=""[^>]*>Out of stock<\/button>/);}
    else assert.doesNotMatch(html,/Out of stock —/);
   }else assert.doesNotMatch(html,/Show out-of-stock tires|Out of stock —|Supplier cost/);
@@ -232,7 +233,20 @@ test('staff and customer shops render two distinct Grabber variants instead of f
   const Page=loader({'next/navigation':{useRouter:()=>({})},'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;const overrides={0:'2755520',1:products,3:true,12:'size'};return [Object.hasOwn(overrides,n)?overrides[n]:typeof initial==='function'?initial():initial,()=>{}]}}})('components/TireShoppingBeta.tsx').default;
   const html=renderToStaticMarkup(React.createElement(Page,{internal}));
   assert.equal((html.match(/<article /g)||[]).length,2);assert.ok(html.includes('117 T'));assert.ok(html.includes('117 H'));assert.ok(html.includes('2 tires'));
-  if(internal){assert.ok(html.includes('U.S. AutoForce'));assert.ok(html.includes('ATD'));assert.equal((html.match(/Choose supplier<\/button>/g)||[]).length,2);}
+  if(internal){assert.ok(html.includes('U.S. AutoForce'));assert.ok(html.includes('ATD'));assert.equal((html.match(/Order tires<\/button>/g)||[]).length,2);}
   else{assert.doesNotMatch(html,/Supplier cost|Cost \$150/);assert.equal((html.match(/Customize &amp; buy/g)||[]).length,2);}
  }
+});
+
+test('F1 edits and supplier selection carry into the quote, survive sorting, and order the selected part and quantity',()=>{
+ const base={brand:'NITTO',model:'Terra Grappler G3',size:'275/55R20',loadSpeed:'117 T',loadRange:'XL',sidewall:'BSW',category:'All-terrain',warranty:'70000',snowRated:true,runFlat:false,hasRebate:false,rebates:[],serviceCategory:'passenger',fitmentPosition:'both',imageUrl:null,manufacturerProductNumber:'224060',atdProductNumber:'224060',availability:{local:4,localPlus:9,nationwide:13},quotePrice:302,cost:220.99,installedPrice:370,estimatedTotals:{4:1595}};
+ const usaf={...base,id:'usaf-f1',supplier:'USAF'},atd={...base,id:'atd-f1',supplier:'ATD',cost:228.5,quotePrice:300,estimatedTotals:{4:1587}};
+ const values={0:'2755520',1:[usaf,atd],3:true,12:'size'};let index=0,captured,dialog;
+ const Page=loader({'next/navigation':{useRouter:()=>({})},'@/lib/supabase':{supabase:{}},'@/components/StaffTireCard':{__esModule:true,default:props=>{captured=props;return React.createElement('article');}},'@/components/UsafPurchase':{__esModule:true,default:props=>{dialog=props;return null;}},react:{...React,useState:initial=>{const n=index++;if(!Object.hasOwn(values,n))values[n]=typeof initial==='function'?initial():initial;return [values[n],next=>{values[n]=typeof next==='function'?next(values[n]):next}];}}})('components/TireShoppingBeta.tsx').default;
+ const render=()=>{index=0;renderToStaticMarkup(React.createElement(Page,{internal:true}));};
+ render();captured.onPrice('290.00');render();assert.equal(captured.tire.quotePrice,290);captured.onQuote();render();assert.equal(values[10][0].quotePrice,290);
+ captured.onSupplier(atd);render();assert.equal(captured.tire.supplier,'ATD');assert.equal(captured.tire.cost,228.5);assert.equal(captured.tire.quotePrice,290);assert.equal(values[10][0].supplier,'ATD');assert.equal(values[10][0].estimatedTotals['4'],1547);
+ values[8]='price';render();assert.equal(captured.tire.supplier,'ATD');assert.equal(captured.price,'290.00');
+ captured.onPrice('285.00');render();assert.equal(values[10][0].quotePrice,285);assert.equal(Object.keys(values[48]).length,1);
+ captured.onQuantity(2);render();captured.onSupplier(usaf);render();captured.onOrder();render();assert.equal(dialog.initialPart,'224060');assert.equal(dialog.initialQuantity,2);
 });
