@@ -40,7 +40,7 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
   // Keep this synchronous: callers flushSync before opening iOS AirPrint.
   return createPortal(
     <div className="tire-label-print-root" aria-hidden="true">
-      <style media="print">{"@page { size: 4in 6in; margin: 0; }"}</style>
+      <style media="print">{"@page { size: 4in 6in; margin: 0.15in; }"}</style>
       {Array.from({ length: quantity }, (_, index) => (
         <section className="tire-receiving-label" key={index}>
           <header>

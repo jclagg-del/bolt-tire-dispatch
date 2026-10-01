@@ -35,7 +35,7 @@ test('two tires render exactly two label pages directly under body, with all ide
   assert.equal((html.match(/<section class="tire-receiving-label"/g) || []).length, 2);
   assert.match(html, /1 OF 2/); assert.match(html, /2 OF 2/);
   for (const text of ['3097885', '919205', 'DELIVERY', 'Goodyear Assurance ComfortDrive', '235/40R18', '413134582']) assert.ok(html.includes(text));
-  assert.match(html, /<style media="print">@page \{ size: 4in 6in; margin: 0; \}<\/style>/);
+  assert.match(html, /<style media="print">@page \{ size: 4in 6in; margin: 0\.15in; \}<\/style>/);
 });
 test('one, four and maximum label counts do not add spacer labels', () => {
   for (const [quantity, count] of [[1, 1], [4, 4], [24, 24], [99, 24], [0, 1]]) {
@@ -53,7 +53,7 @@ test('print CSS removes surrounding layout and only breaks before subsequent lab
   const css = fs.readFileSync(require.resolve('../app/globals.css'), 'utf8');
   assert.match(css, /body:has\(>\.tire-label-print-root\)>:not\(\.tire-label-print-root\)\{display:none!important\}/);
   assert.match(css, /\.tire-label-print-root\{display:block!important;position:static!important/);
-  assert.match(css, /height:5\.98in/);
+  assert.doesNotMatch(css, /height:5\.98in/);
   assert.match(css, /\.tire-receiving-label\+\.tire-receiving-label\{break-before:page;page-break-before:always\}/);
   assert.doesNotMatch(css, /break-after:page|page-break-after:always/);
   for (const file of ['../app/tire-receiving/page.tsx', '../app/jobs/[id]/page.tsx']) {
@@ -61,4 +61,14 @@ test('print CSS removes surrounding layout and only breaks before subsequent lab
     assert.match(source, /<TireLabelPrint job=\{labelJob\}/);
     assert.match(source, /flushSync\(\(\) => setLabelJob/);
   }
+});
+test('label geometry fits inside printable margins without a full-page fixed height or clipping', () => {
+  const css = fs.readFileSync(require.resolve('../app/globals.css'), 'utf8');
+  const label = css.match(/\.tire-receiving-label\{([^}]+)\}/)[1];
+  assert.match(css, /width:3\.7in;max-width:100%/);
+  assert.match(label, /height:auto;min-height:0/);
+  assert.match(label, /overflow:visible/);
+  assert.doesNotMatch(label, /height:[\d.]+in|overflow:hidden/);
+  assert.match(css, /-webkit-text-size-adjust:100%;text-size-adjust:100%/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
 });
