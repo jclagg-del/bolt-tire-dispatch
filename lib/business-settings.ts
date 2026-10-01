@@ -56,7 +56,7 @@ export const fallbackBusinessSettings: BusinessSettings = {
   commercial_22_install: 65,
   commercial_super_single_install: 90,
   inside_dual_surcharge: 12.5,
-  passenger_disposal_fee: 7,
+  passenger_disposal_fee: 3.5,
   truck_disposal_fee: 12,
   commercial_disposal_fee: 20,
   ny_state_tire_fee: 2.5,

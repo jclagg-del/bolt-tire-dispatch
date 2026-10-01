@@ -21,7 +21,7 @@ type QuoteForm = {
 const initialForm: QuoteForm = {
   customer: "", contact_name: "", phone: "", email: "", vehicle: "", tire_size: "", quantity: "4", rear_tire_size: "", rear_quantity: "",
   address: "", notes: "", service_category: "passenger", installation_cost: "275", service_call_fee: "0",
-  disposal_fee: "28", ny_state_tire_fee: "10", sales_tax_rate: "", tax_exempt: false, expires_at: "",
+  disposal_fee: (fallbackBusinessSettings.passenger_disposal_fee * 4).toFixed(2), ny_state_tire_fee: "10", sales_tax_rate: "", tax_exempt: false, expires_at: "",
 };
 
 export default function NewQuotePage() {

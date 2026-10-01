@@ -23,6 +23,29 @@ function loader(stubs = {}) {
 const valid = { name: 'Test Customer', phone: '(201) 555-0123', email: 'customer@example.com', vehicle: '2020 Ford Transit', address: '123 Example Street' };
 const { shopCustomerError, normalizeShopCustomer } = loader()('lib/shop-customer.ts');
 const {matchesTireStock}=loader()('lib/tire-stock-filter.ts');
+test('passenger disposal defaults to $3.50 per tire and $14 for four on staff and customer forms', () => {
+ const settings = loader()('lib/business-settings.ts').fallbackBusinessSettings;
+ assert.equal(settings.passenger_disposal_fee, 3.5);
+ assert.equal(settings.truck_disposal_fee, 12);
+ assert.equal(settings.commercial_disposal_fee, 20);
+ const Page = loader({'next/navigation':{useRouter:()=>({}),useSearchParams:()=>new URLSearchParams()},'@/components/AppHeader':()=>null,'@/components/QuoteCustomerInput':()=>null,'@/lib/supabase':{supabase:{}}})('app/quotes/new/page.tsx').default;
+ const html = renderToStaticMarkup(React.createElement(Page));
+ assert.match(html, /Disposal total<\/span><input[^>]*value="14.00"/);
+ assert.match(renderCheckout(valid, 'installation', 3.5), /Tire disposal<\/span><strong>\$14.00/);
+ assert.match(renderCheckout(valid, 'tires_only', 3.5), /Tire disposal<\/span><strong>\$0.00/);
+});
+test('public settings expose the default disposal rate but preserve saved custom rates', async () => {
+ let saved = null;
+ const query = { select(){return this;}, eq(){return this;}, maybeSingle:async()=>({data:saved}) };
+ const route = loader({'@/lib/supabase/admin':{createAdminClient:()=>({from:()=>query})}})('app/api/public/shop/settings/route.ts');
+ assert.equal((await (await route.GET()).json()).disposal.passenger, 3.5);
+ saved = {passenger_disposal_fee:4.25};
+ assert.equal((await (await route.GET()).json()).disposal.passenger, 4.25);
+ const {quoteOptionTotal} = loader()('lib/quotes.ts');
+ const fees = {installation:299,serviceCall:0,disposal:28,stateFee:10,taxRate:0,taxExempt:false};
+ assert.equal(quoteOptionTotal({price_per_tire:'250'},4,fees),1337);
+ assert.equal(quoteOptionTotal({price_per_tire:'250'},4,{...fees,disposal:14}),1323);
+});
 test('split quote editor and customer quote include both axle quantities and use full-width comparison layout',()=>{
  const quoteLib=loader()('lib/quotes.ts');
  const base={customer:'Test',contact_name:'',phone:'',email:'',vehicle:'',tire_size:'285/45R22',quantity:'2',rear_tire_size:'325/40R22',rear_quantity:'2',address:'',notes:'',service_category:'passenger',installation_cost:'299',service_call_fee:'0',disposal_fee:'28',ny_state_tire_fee:'10',sales_tax_rate:'8',tax_exempt:false,expires_at:''};
@@ -168,9 +191,9 @@ test('website quotes with incomplete details cannot proceed to Stripe payment', 
   }
 });
 
-function renderCheckout(customer, service = 'installation') {
+function renderCheckout(customer, service = 'installation', disposalEach = 5) {
   let index=0;
-  const states = {0:{query:'2457017',quantity:4,products:[{id:'tire',brand:'Example',model:'Tire',size:'245/70R17',quotePrice:100,serviceCategory:'passenger',fitmentPosition:'both'}]},1:{passenger:{two:100,four:200},truck:{two:150,four:250,six:350},disposal:{passenger:5,truck:10},stateFee:2.5,taxRate:8},2:service,3:customer,6:{date:'2026-10-01',time:'09:00'}};
+  const states = {0:{query:'2457017',quantity:4,products:[{id:'tire',brand:'Example',model:'Tire',size:'245/70R17',quotePrice:100,serviceCategory:'passenger',fitmentPosition:'both'}]},1:{passenger:{two:100,four:200},truck:{two:150,four:250,six:350},disposal:{passenger:disposalEach,truck:10},stateFee:2.5,taxRate:8},2:service,3:customer,6:{date:'2026-10-01',time:'09:00'}};
   const Page=loader({'next/navigation':{useRouter:()=>({})},react:{...React,useState:initial=>{const n=index++;return [Object.hasOwn(states,n)?states[n]:initial,()=>{}];}}})('app/shop/configure/page.tsx').default;
   return renderToStaticMarkup(React.createElement(Page));
 }
