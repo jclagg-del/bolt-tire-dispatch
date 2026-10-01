@@ -1,5 +1,7 @@
 "use client";
 
+import { createPortal } from "react-dom";
+
 export type TireLabelJob = {
   id: string;
   customer?: string | null;
@@ -28,13 +30,17 @@ function scheduledDate(value?: string | null) {
 }
 
 export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
-  if (!job) return null;
-  const quantity = Math.max(1, Math.min(24, Number(job.quantity) || 1));
+  if (!job || typeof document === "undefined") return null;
+  const quantity = Math.max(1, Math.min(24, Math.floor(Number(job.quantity) || 1)));
   const service = String(job.serviceType || "Tire Service").toUpperCase();
   const tire = [job.tires, job.size].filter(Boolean).join(" • ") || "Tire information not entered";
 
-  return (
+  // A direct child of body lets print CSS remove the entire app from layout.
+  // visibility:hidden left the long receiving list occupying blank print pages.
+  // Keep this synchronous: callers flushSync before opening iOS AirPrint.
+  return createPortal(
     <div className="tire-label-print-root" aria-hidden="true">
+      <style media="print">{"@page { size: 4in 6in; margin: 0; }"}</style>
       {Array.from({ length: quantity }, (_, index) => (
         <section className="tire-receiving-label" key={index}>
           <header>
@@ -61,6 +67,7 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
           {job.vehicle ? <p>{job.vehicle}</p> : null}
         </section>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
