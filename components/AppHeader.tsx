@@ -1,11 +1,36 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import styles from "./AppHeader.module.css";
 
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const navigation = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    const menu = navigation.current;
+    if (!menu) return;
+    menu.open = false;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !menu.open) return;
+      event.preventDefault();
+      menu.open = false;
+      menu.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [pathname]);
 
   const navItems = [
     { label: "Dashboard", path: "/" },
@@ -58,21 +83,24 @@ export default function AppHeader() {
         </div>
 
         <div style={rightSide}>
-          <label style={menuLabel}>
+          <div style={menuLabel}>
             <span style={menuLabelText}>Navigate</span>
-            <select
-              aria-label="Navigate to another page"
-              value={currentPath}
-              onChange={(event) => router.push(event.target.value)}
-              style={menuSelect}
-            >
-              {navItems.map((item) => (
-                <option key={item.path} value={item.path}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <details ref={navigation} className={styles.navigation} onBlur={event => {
+              if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+            }}>
+              <summary className={styles.trigger} aria-label={`Navigate to another page. Current page: ${navItems.find(item => item.path === currentPath)?.label}`}>
+                <span>{navItems.find(item => item.path === currentPath)?.label}</span>
+                <span className={styles.chevron} aria-hidden="true">▾</span>
+              </summary>
+              <nav className={styles.panel} aria-label="Main navigation">
+                {navItems.map(item => <Link key={item.path} href={item.path} className={styles.link}
+                  aria-current={currentPath === item.path ? "page" : undefined}
+                  onClick={() => { if (navigation.current) navigation.current.open = false; }}>
+                  <span>{item.label}</span>{currentPath === item.path && <span aria-hidden="true">✓</span>}
+                </Link>)}
+              </nav>
+            </details>
+          </div>
 
           <button
             type="button"
@@ -136,18 +164,6 @@ const menuLabelText: React.CSSProperties = {
   fontWeight: 800,
   letterSpacing: "0.06em",
   textTransform: "uppercase",
-};
-
-const menuSelect: React.CSSProperties = {
-  minWidth: 190,
-  padding: "9px 38px 9px 12px",
-  borderRadius: 8,
-  border: "1px solid #cbd5e1",
-  background: "#f8fafc",
-  color: "#111827",
-  cursor: "pointer",
-  fontSize: 15,
-  fontWeight: 700,
 };
 
 const logoutBtn: React.CSSProperties = {
