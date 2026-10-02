@@ -7,6 +7,21 @@ type ShopPrice = {
 
 export type PricingAudience = "staff" | "customer";
 
+// Supplier cost is normalized once, at ingestion. ATD documents price.fet as
+// the FET not already included in price.cost; USAF also supplies it separately.
+// Keep the base for an auditable breakdown. Unknown FET is not a confirmed zero.
+export function supplierCostBreakdown(baseCost: number, rawFet: unknown) {
+  const amount = typeof rawFet === "number" || (typeof rawFet === "string" && rawFet.trim() !== "")
+    ? Number(rawFet) : NaN;
+  const fet = Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) / 100 : null;
+  return { baseCost, fet, cost: baseCost > 0 && Number.isFinite(baseCost)
+    ? Math.round((baseCost + (fet ?? 0)) * 100) / 100 : baseCost };
+}
+
+export function hasReportedFet(tire: { fet?: number | null }): boolean {
+  return typeof tire.fet === "number" && Number.isFinite(tire.fet) && tire.fet >= 0;
+}
+
 export function hasSupplierCost(tire: { cost?: number | null }): boolean {
   return typeof tire.cost === "number" && Number.isFinite(tire.cost) && tire.cost > 0;
 }

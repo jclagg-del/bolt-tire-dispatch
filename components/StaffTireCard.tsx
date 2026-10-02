@@ -1,13 +1,13 @@
 "use client";
 
-import { hasSupplierCost, installedTotal } from "@/lib/tire-shop-pricing";
+import { hasSupplierCost, hasReportedFet, installedTotal, tireGrossProfit } from "@/lib/tire-shop-pricing";
 import { hasTireStock } from "@/lib/tire-stock-filter";
 import styles from "./StaffTireCard.module.css";
 
 type Tire = {
   id: string; supplier?: string; brand: string; model: string; size: string; description: string;
   loadSpeed: string; loadRange: string; warranty: string; category: string; snowRated: boolean;
-  cost?: number; map?: number; suggestedPrice?: number | null; quotePrice: number;
+  cost?: number; baseCost?: number; fet?: number | null; map?: number; suggestedPrice?: number | null; quotePrice: number;
   installedPrice: number; estimatedTotals: Record<string, number>; imageUrl: string | null;
   atdProductNumber: string; manufacturerProductNumber: string; qaOnly?: boolean;
   fitmentPosition: string; availability: { local: number; localPlus: number; nationwide: number };
@@ -30,6 +30,7 @@ export default function StaffTireCard<T extends Tire>({ tire, offers, price, qua
   warehouses: Warehouse[]; warehouseLoading: boolean; warehouseError: string;
 }) {
   const valid = price.trim() !== "" && Number.isFinite(Number(price)) && Number(price) >= 0;
+  const costQuantity = staggered ? 2 : quantity;
   const priced = offers.filter(hasSupplierCost);
   const map = typeof tire.map === "number" && Number.isFinite(tire.map) && tire.map > 0 ? tire.map : null;
   const canOrder = hasSupplierCost(tire) && hasTireStock(tire) && ["ATD", "USAF"].includes(tire.supplier || "ATD");
@@ -46,11 +47,12 @@ export default function StaffTireCard<T extends Tire>({ tire, offers, price, qua
           <div className={styles.tags}>{tire.fitmentPosition !== "both" && <span>{tire.fitmentPosition} fitment</span>}{tire.category && tire.category !== "Undefined" && <span>{tire.category}</span>}{tire.warranty && <span>{tire.warranty} warranty</span>}{tire.loadRange && <span>Load {tire.loadRange}</span>}{tire.snowRated && <span>3PMSF</span>}{tire.runFlat && <span>Run-flat</span>}{tire.discontinued && <span>Discontinued</span>}</div>
         </div>
       </div>
-      <div className={styles.supplierHeading}>Suppliers · cost per tire</div>
+      <div className={styles.supplierHeading}>Suppliers · cost per tire including reported FET</div>
       {!hasTireStock(tire) && <p className={styles.relation}>Out of stock — availability not confirmed</p>}
       <div className={styles.suppliers} role="group" aria-label="Choose tire supplier">
         {priced.map(offer => <button type="button" className={styles.supplier} key={offer.id} aria-pressed={offer.id === tire.id} onClick={() => onSupplier(offer)}>
           <span className={styles.supplierTop}><strong>{name(offer)}{offer.qaOnly ? " · QA" : ""}</strong><strong>{money(offer.cost!)}</strong></span>
+          <span className={styles.stock}>{hasReportedFet(offer) ? `Base ${money(offer.baseCost ?? offer.cost!)} + FET ${money(offer.fet!)} / tire` : "FET not provided — cost may be incomplete. Refresh search to check."}</span>
           <span className={styles.stock}>{offer.supplier === "USAF" ? "Croton" : offer.supplier === "NTW" ? "Albany" : "Totowa"} · <b>{offer.availability.local} local</b> · <b>{offer.availability.localPlus} {offer.supplier === "USAF" ? "transfer" : "nearby"}</b> · {offer.availability.nationwide} nationwide</span>
           <span className={styles.stock}>Part #{offer.atdProductNumber}{!hasTireStock(offer) ? " · Out of stock" : ""}</span>
           <span className={styles.selection}>{offer.id === tire.id ? "✓ Selected supplier" : "Select supplier"}</span>
@@ -72,8 +74,9 @@ export default function StaffTireCard<T extends Tire>({ tire, offers, price, qua
         <div><span className={styles.label}>Supplier MAP / tire</span><strong className={styles.map}>{map !== null ? money(map) : "Not provided"}</strong>{map !== null && <button className={styles.useMap} type="button" onClick={() => onPrice(map.toFixed(2))}>Use MAP price</button>}</div>
       </div>
       <p className={styles.relation} aria-live="polite">{!valid ? "Enter a valid selling price" : map === null ? "Supplier MAP not provided" : tire.quotePrice === map ? "Our price matches MAP" : tire.quotePrice < map ? "Our price is below MAP" : "Our price is above MAP"}</p>
-      <div className={styles.metrics}><div><span className={styles.label}>Selected cost / tire</span><strong>{hasSupplierCost(tire) ? money(tire.cost!) : "Unavailable"}</strong>{hasSupplierCost(tire) && <small>{name(tire)}</small>}</div><div><span className={styles.label}>Gross profit / tire</span><strong>{valid && hasSupplierCost(tire) ? money(tire.quotePrice - tire.cost!) : "—"}</strong></div></div>
-      <details><summary>Suggested price &amp; calculation</summary><p>Markup suggestion: {tire.suggestedPrice != null ? money(tire.suggestedPrice) : "Unavailable"} / tire.</p><p>MAP is supplier-reported. Your entered selling price is used for this quote, not saved as a global price.</p></details>
+      <div className={styles.metrics}><div><span className={styles.label}>{hasReportedFet(tire) ? "Cost incl. FET / tire" : "Cost / tire · FET unconfirmed"}</span><strong>{hasSupplierCost(tire) ? money(tire.cost!) : "Unavailable"}</strong>{hasSupplierCost(tire) && <small>{name(tire)}</small>}</div><div><span className={styles.label}>Gross profit / tire</span><strong>{valid && hasSupplierCost(tire) && hasReportedFet(tire) ? money(tireGrossProfit(tire)) : "—"}</strong>{!hasReportedFet(tire) && <small>Confirm FET first</small>}</div></div>
+      {hasSupplierCost(tire) && <p className={styles.relation}>{hasReportedFet(tire) ? `Your cost for ${costQuantity}: ${money(tire.cost! * costQuantity)} including FET. Excludes freight and other supplier fees.` : "Total cost and profit need supplier FET confirmation."}</p>}
+      <details><summary>Suggested price &amp; calculation</summary><p>Markup suggestion (base cost before FET): {tire.suggestedPrice != null ? money(tire.suggestedPrice) : "Unavailable"} / tire.</p><p>MAP is supplier-reported. Your entered selling price is used for this quote, not saved as a global price.</p></details>
       {!staggered ? <div className={styles.quantityTotal}><label>Quantity<select value={quantity} onChange={event => onQuantity(Number(event.target.value))}>{[1,2,3,4,5,6].map(qty => <option key={qty} value={qty}>{qty}</option>)}</select></label><div><span className={styles.label}>Tires subtotal</span><strong>{valid ? money(tire.quotePrice * quantity) : "—"}</strong></div></div> : <p>Split fitment · 2 tires per axle on quote</p>}
       {!staggered && <div className={styles.installed}><span>Estimated installed total</span><strong>{valid ? money(installedTotal(tire, quantity)) : "—"}</strong><small>Includes installation &amp; standard fees; tax additional</small></div>}
       <div className={styles.actions}><button type="button" disabled={(!valid || quoteFull) && !selected} aria-pressed={selected} onClick={onQuote}>{selected ? "Added · Remove" : quoteFull ? "3 selected" : "+ Add to quote"}</button><button type="button" disabled={!canOrder} onClick={onOrder}>{!hasTireStock(tire) ? "Out of stock" : "Order tires"}</button></div>

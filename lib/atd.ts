@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
-import { customerMapPrice, markupPricing, type PricingAudience } from "@/lib/tire-shop-pricing";
+import { customerMapPrice, markupPricing, supplierCostBreakdown, type PricingAudience } from "@/lib/tire-shop-pricing";
 import { rankTireImages } from "@/lib/tire-image-health";
 
 const baseUrl = process.env.ATD_BASE_URL || "https://testws.atdconnect.com/rs/3_6";
@@ -48,7 +48,7 @@ type AtdProduct = {
   description?: string;
   discontinued?: boolean;
   replaced?: boolean;
-  price?: { cost?: number; map?: number; msrp?: number };
+  price?: { cost?: number; fet?: number | string | null; map?: number; msrp?: number };
   images?: Record<string, { image?: Array<{ url?: string }>; images?: Array<{ url?: string }> }>;
   productspec?: Record<string, string>;
   rebates?: Array<{ code?: string; description?: string; url?: string }>;
@@ -148,7 +148,7 @@ function presentProducts(products: AtdProduct[], inventory: Map<string, Inventor
       quotePrice: customerPricing.quotePrice,
       installedPrice: customerPricing.installedPrice,
       estimatedTotals,
-      ...(includeCost ? { cost, map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0), ...markupPricing(cost, truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent, truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit, truck ? "truck" : "passenger") } : {}),
+      ...(includeCost ? { ...supplierCostBreakdown(cost, product.price?.fet), map: Number(product.price?.map || 0), msrp: Number(product.price?.msrp || 0), ...markupPricing(cost, truck ? settings.tire_shop_truck_markup_percent : settings.tire_shop_passenger_markup_percent, truck ? settings.tire_shop_truck_min_profit : settings.tire_shop_passenger_min_profit, truck ? "truck" : "passenger") } : {}),
       availability: { local: stock?.local || 0, localPlus: stock?.localplus || 0, nationwide: stock?.nationwide || 0 },
     };
   });
@@ -158,13 +158,13 @@ type PresentedProduct=ReturnType<typeof presentProducts>[number];
 
 async function searchAtdByKeyword(keywords: string, includeCost: boolean, searchType: "size" | "part", audience: PricingAudience):Promise<PresentedProduct[]> {
   // Separate customer MAP prices from staff prices and pre-MAP cached results.
-  const cacheKey=`map-v1:${searchType}:${keywords}:${includeCost?"staff":"public"}:${audience}`;
+  const cacheKey=`fet-v2:${searchType}:${keywords}:${includeCost?"staff":"public"}:${audience}`;
   try{
     const response = await atdRequest<{ products?: AtdProduct[] }>("product/product-by-keyword", {
       locationnumber: locationNumber,
       keywords,
       options: {
-        price: { cost: 1, map: 1, msrp: 1 },
+        price: { cost: 1, fet: 1, map: 1, msrp: 1 },
         images: { small: 1 },
         productspec: {},
         includerebates: 1,
@@ -205,7 +205,7 @@ export async function searchAtdByFitment(vehicle: Record<string, string>, includ
     locationnumber: locationNumber,
     vehicle,
     criteria: { productgroup: ["passenger tires", "light truck tires"] },
-    options: { price: { cost: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {}, includerebates: 1, includemarketingprograms: 1 },
+    options: { price: { cost: 1, fet: 1, map: 1, msrp: 1 }, images: { small: 1 }, productspec: {}, includerebates: 1, includemarketingprograms: 1 },
   });
   const products = (response.fitments || []).flatMap((fitment) =>
     (fitment.fitmentresults || []).flatMap((result) =>

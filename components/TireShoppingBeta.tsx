@@ -24,6 +24,8 @@ type Product = {
   loadSpeed: string;
   warranty: string;
   cost?: number;
+  baseCost?: number;
+  fet?: number | null;
   map?: number;
   suggestedPrice?: number | null;
   pricingMarkupPercent?: number;

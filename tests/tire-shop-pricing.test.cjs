@@ -20,23 +20,37 @@ test('ATD size, part, fitment and checkout use customer MAP without changing sta
   const previous=envKeys.map(k=>process.env[k]);const oldFetch=global.fetch;
   envKeys.forEach(k=>process.env[k]='unit-test-only');
   const settings={tire_shop_passenger_markup_percent:25,tire_shop_passenger_min_profit:50,passenger_four_install:200,passenger_disposal_fee:5,ny_state_tire_fee:2.5};
-  const product={atdproductnumber:'123',brand:'General',style:'Example',productgroup:'passenger tires',price:{cost:154.39,map:200.99},productspec:{size:'235/60R18'}};
+  const product={atdproductnumber:'123',brand:'General',style:'Example',productgroup:'passenger tires',price:{cost:154.39,fet:0,map:200.99},productspec:{size:'235/60R18'}};
   const cacheKeys=[];
   const admin={from(table){const q={select(){return q},eq(){return q},maybeSingle:async()=>({data:table==='business_settings'?settings:null}),upsert(value){cacheKeys.push(value.cache_key);return Promise.resolve({error:null})}};return q;}};
   const stubs={'server-only':{},'@/lib/supabase/admin':{createAdminClient:()=>admin},'@/lib/business-settings':{fallbackBusinessSettings:settings,installationDefault:()=>200},'@/lib/tire-shop-pricing':mod.exports,'@/lib/tire-image-health':{rankTireImages:()=>[]}};
   const atd=new Module(__filename,module);atd.require=id=>Object.hasOwn(stubs,id)?stubs[id]:require(id);
   atd._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/atd.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,__filename);
-  global.fetch=async url=>Response.json(String(url).includes('product-availability')?{products:[{atdproductnumber:'123',local:4}]}:String(url).includes('product-by-fitment')?{fitments:[{fitmentresults:[{position:{both:{products:[product]}}}]}]}:{products:[product]});
+  global.fetch=async (url,options)=>{
+    if(!String(url).includes('product-availability'))assert.equal(JSON.parse(options.body).options.price.fet,1);
+    return Response.json(String(url).includes('product-availability')?{products:[{atdproductnumber:'123',local:4}]}:String(url).includes('product-by-fitment')?{fitments:[{fitmentresults:[{position:{both:{products:[product]}}}]}]}:{products:[product]});
+  };
   try {
     for(const search of [atd.exports.searchAtdBySize,atd.exports.searchAtdByPartNumber]) {
       const [customer]=await search('2356018',false);const [staff]=await search('2356018',true);const [checkout]=await search('2356018',true,'customer');
       assert.equal(customer.quotePrice,200.99);assert.equal(staff.quotePrice,205);assert.equal(checkout.quotePrice,200.99);
       assert.deepEqual(checkout.estimatedTotals,customer.estimatedTotals);assert.equal(customer.estimatedTotals['4'],200.99*4+200+5*4+2.5*4);
-      for(const key of ['cost','map','msrp','suggestedPrice'])assert.equal(Object.hasOwn(customer,key),false);
+      for(const key of ['cost','baseCost','fet','map','msrp','suggestedPrice'])assert.equal(Object.hasOwn(customer,key),false);
     }
     assert.equal((await atd.exports.searchAtdByFitment({},false))[0].quotePrice,200.99);
-    assert.ok(cacheKeys.includes('map-v1:size:2356018:staff:customer'));
-    assert.ok(cacheKeys.includes('map-v1:size:2356018:staff:staff'));
+    assert.ok(cacheKeys.includes('fet-v2:size:2356018:staff:customer'));
+    assert.ok(cacheKeys.includes('fet-v2:size:2356018:staff:staff'));
+    product.price.fet=30.12;
+    for(const search of [atd.exports.searchAtdBySize,atd.exports.searchAtdByPartNumber,atd.exports.searchAtdByFitment]) {
+      const [staff]=await search('2356018',true);const [customer]=await search('2356018',false);
+      assert.equal(staff.cost,184.51);assert.equal(staff.baseCost,154.39);assert.equal(staff.fet,30.12);
+      assert.equal(staff.quotePrice,205);assert.equal(staff.suggestedPrice,205);
+      assert.equal(Math.round(tireGrossProfit(staff)*100)/100,20.49);
+      assert.equal(customer.quotePrice,200.99);
+      for(const key of ['cost','baseCost','fet'])assert.equal(Object.hasOwn(customer,key),false);
+    }
+    delete product.price.fet;
+    assert.equal((await atd.exports.searchAtdBySize('2356018',true))[0].fet,null);
     product.price.map=0;assert.equal((await atd.exports.searchAtdBySize('2356018',false))[0].quotePrice,205);
     product.price.map=300.99;assert.equal((await atd.exports.searchAtdBySize('2356018',false))[0].quotePrice,300.99);
   } finally {global.fetch=oldFetch;envKeys.forEach((k,i)=>{if(previous[i]===undefined)delete process.env[k];else process.env[k]=previous[i];});}
@@ -77,7 +91,7 @@ test('markup suggestion is calculated separately from MAP and does not mutate pr
 
 test('USAF size and part searches keep suggestions staff-only and preserve MAP-based selling prices', async () => {
   const settings = { tire_shop_passenger_markup_percent:25, tire_shop_passenger_min_profit:50, tire_shop_truck_markup_percent:25, tire_shop_truck_min_profit:60, truck_disposal_fee:12, passenger_disposal_fee:7, ny_state_tire_fee:2.5 };
-  const row = { part_number:'224060', brand:'Nitto', model:'Terra Grappler G3', tire_type:'LIGHT TRUCK', cost:220.99, map_price:302, retail_price:330, tire_size:'2755520', warehouse_inventory:[{warehouse:'4853',quantity:4}] };
+  const row = { part_number:'224060', brand:'Nitto', model:'Terra Grappler G3', tire_type:'LIGHT TRUCK', cost:220.99, fet:0, map_price:302, retail_price:330, tire_size:'2755520', warehouse_inventory:[{warehouse:'4853',quantity:4}] };
   const admin = { from(table) {
     const chain = { then(resolve) { return Promise.resolve({data:table === 'business_settings' ? settings : [row]}).then(resolve); } };
     for (const method of ['select','eq','or','gt','order','limit','maybeSingle']) chain[method] = () => chain;
@@ -103,7 +117,7 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
     assert.equal(staff.quotePrice,302);
     assert.equal(customer.quotePrice,302);
     assert.deepEqual(customer.estimatedTotals,staff.estimatedTotals);
-    for (const field of ['cost','map','suggestedPrice','pricingMarkupPercent','pricingMinimumProfit','pricingCategory']) assert.equal(Object.hasOwn(customer,field),false);
+    for (const field of ['cost','baseCost','fet','map','suggestedPrice','pricingMarkupPercent','pricingMinimumProfit','pricingCategory']) assert.equal(Object.hasOwn(customer,field),false);
   }
   row.map_price = 250.99;
   for(const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
@@ -119,6 +133,14 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
   }
   row.map_price = 0;
   assert.equal((await catalog.exports.searchUsafBySize('224060',false))[0].quotePrice,281);
+  row.fet='25.12';
+  for(const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
+    const [staff]=await search('224060',true);const [customer]=await search('224060',false);
+    assert.equal(staff.cost,246.11);assert.equal(staff.baseCost,220.99);assert.equal(staff.fet,25.12);
+    assert.equal(staff.quotePrice,281);assert.equal(staff.suggestedPrice,281);
+    assert.equal(customer.quotePrice,281);
+    for(const key of ['cost','baseCost','fet'])assert.equal(Object.hasOwn(customer,key),false);
+  }
   row.warehouse_inventory = [{warehouse:'07',quantity:8}];
   for (const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
     const [product] = await search('224060', true);
@@ -135,4 +157,20 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
     assert.equal(unavailable.atdProductNumber,'224060');
     assert.deepEqual(unavailable.availability,{local:0,localPlus:0,nationwide:0});
   }
+});
+
+test('supplier cost includes reported FET once, preserves zero and does not fabricate missing tax or cost',()=>{
+  const {supplierCostBreakdown,hasReportedFet}=mod.exports;
+  assert.deepEqual(supplierCostBreakdown(309,'32.14'),{baseCost:309,fet:32.14,cost:341.14});
+  assert.deepEqual(supplierCostBreakdown(309,0),{baseCost:309,fet:0,cost:309});
+  for(const missing of [undefined,null,'',false,'unknown',-1,NaN,Infinity]) {
+    const result=supplierCostBreakdown(309,missing);
+    assert.equal(result.fet,null);assert.equal(result.cost,309);assert.equal(hasReportedFet(result),false);
+  }
+  assert.equal(supplierCostBreakdown(0,32.14).cost,0);
+  assert.equal(supplierCostBreakdown(10.1,0.2).cost,10.3);
+  const tire={...supplierCostBreakdown(309,32.14),quotePrice:387,installedPrice:450};
+  const changed=mod.exports.withQuotePrice(tire,390);
+  assert.equal(changed.cost,341.14);assert.equal(changed.fet,32.14);
+  assert.equal(Math.round(tireGrossProfit(changed)*100)/100,48.86);
 });
