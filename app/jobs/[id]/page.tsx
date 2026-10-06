@@ -5,6 +5,8 @@ import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
+import JobJhaButton from "@/components/JobJhaButton";
+import { requireCompletedJha } from "@/lib/job-jha-client";
 import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
@@ -500,8 +502,9 @@ export default function EditJobPage() {
     window.print();
   };
 
-  const openCompleteModal = () => {
+  const openCompleteModal = async () => {
     if (!form || completing) return;
+    if (!id || !(await requireCompletedJha(id))) return;
 
     setMileageConfirmed(Boolean(form.vehicle_mileage.trim()));
     setTorqueConfirmed(false);
@@ -526,6 +529,7 @@ export default function EditJobPage() {
     }
 
     setCompleting(true);
+    if (!(await requireCompletedJha(id))) { setCompleting(false); return; }
 
     const { error } = await supabase
       .from("jobs")
@@ -620,6 +624,7 @@ export default function EditJobPage() {
             </div>
 
             <div style={heroActions}>
+              {id && <JobJhaButton jobId={id} />}
               <button
                 type="button"
                 onClick={() => handleSave()}

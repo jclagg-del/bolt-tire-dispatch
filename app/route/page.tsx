@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import JobJhaButton from "@/components/JobJhaButton";
+import { requireCompletedJha } from "@/lib/job-jha-client";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
 import RouteStopList from "@/components/RouteStopList";
@@ -328,7 +330,8 @@ export default function RoutePage() {
     }));
   };
 
-  const openCompleteModal = (job: Job) => {
+  const openCompleteModal = async (job: Job) => {
+    if (!(await requireCompletedJha(job.id))) return;
     setSelectedJob(job);
     setRouteMileage(job.vehicle_mileage || "");
     setMileageConfirmed(!!(job.vehicle_mileage || "").trim());
@@ -355,6 +358,7 @@ export default function RoutePage() {
     }
 
     setCompletingId(selectedJob.id);
+    if (!(await requireCompletedJha(selectedJob.id))) { setCompletingId(null); return; }
 
     const { error } = await supabase
       .from("jobs")
@@ -608,6 +612,7 @@ function RouteCard({
       {job.notes && <div style={notes}>📝 {job.notes}</div>}
 
       <div style={buttonRow}>
+        <JobJhaButton jobId={job.id} />
         {job.address ? (
           <a href={mapsUrl(job.address)} target="_blank" rel="noreferrer" style={goBtn}>
             Go

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import JobJhaButton from "@/components/JobJhaButton";
+import { requireCompletedJha } from "@/lib/job-jha-client";
 import { supabase } from "@/lib/supabase";
 
 type Task = {
@@ -105,6 +107,7 @@ export default function TasksPage() {
 
   const markCompleted = async (task: Task) => {
     if (workingId !== null) return;
+    if (!(await requireCompletedJha(task.id))) return;
     if (!window.confirm(`Mark ${task.customer || "this task"} as completed?`)) return;
     setWorkingId(task.id);
     const completedAt = new Date().toISOString();
@@ -121,6 +124,7 @@ export default function TasksPage() {
 
   const updateTask = async (task: Task, updates: Partial<Task>) => {
     if (workingId !== null) return;
+    if (updates.customer_order_status === "Work Completed" && !(await requireCompletedJha(task.id))) return;
     setWorkingId(task.id);
     const { error } = await supabase.from("jobs").update(updates).eq("id", task.id);
     setWorkingId(null);
@@ -231,6 +235,7 @@ export default function TasksPage() {
                   <label><input type="checkbox" checked={invoiceEmailed(task)} disabled={workingId === task.id} onChange={(event) => setInvoiceEmailed(task, event.target.checked)} /> Invoice Emailed</label>
                 </div>
                 {visibleNotes(task) ? <p style={notes}>{visibleNotes(task)}</p> : null}
+                <JobJhaButton jobId={task.id} />
                 {!task.complete && !["completed", "billed", "paid"].includes(task.job_status || "") ? (
                   <button
                     type="button"
