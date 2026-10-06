@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import EmbeddedStripeCheckout from "@/components/EmbeddedStripeCheckout";
 import QuoteCheckoutInformation from "@/components/QuoteCheckoutInformation";
 import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
-import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
+import { AdditionalItem, additionalItemAmount, additionalItemsTotals } from "@/lib/additional-items";
 import { quoteCheckoutDetails, quoteCheckoutDetailsError } from "@/lib/quote-checkout-details";
 type Option = {
   id: string;
@@ -120,7 +120,7 @@ const tireSummary = (q: Quote) =>
 const tireSubtotal = (q: Quote, o: Option) =>
   Number(o.price_per_tire) * q.quantity +
   Number(o.rear_price_per_tire || 0) * Number(q.rear_quantity || 0);
-const total = (q: Quote, o: Option) => {
+const total = (q: Quote, o: Option, includeEstimatedTax = true) => {
   const extra = additionalItemsTotals(q.additional_items);
   const taxable =
     tireSubtotal(q, o) +
@@ -130,7 +130,7 @@ const total = (q: Quote, o: Option) => {
   return (
     taxable + extra.nonTaxable +
     Number(q.ny_state_tire_fee) +
-    (q.tax_exempt ? 0 : (taxable * Number(q.sales_tax_rate)) / 100)
+    (q.tax_exempt || !includeEstimatedTax ? 0 : (taxable * Number(q.sales_tax_rate)) / 100)
   );
 };
 export default function PublicQuote() {
@@ -275,12 +275,12 @@ export default function PublicQuote() {
                   <dt>NY state fee</dt>
                   <dd>${Number(q.ny_state_tire_fee).toFixed(2)}</dd>
                 </div>
+                {(q.additional_items || []).map((item, index) => <div key={index}><dt>{item.description}<small style={{ display: "block" }}>{item.quantity} × ${item.unit_price.toFixed(2)}{!item.taxable ? " · Non-taxable" : ""}</small></dt><dd>${additionalItemAmount(item).toFixed(2)}</dd></div>)}
                 <div className="total">
-                  <dt>Total before Stripe tax</dt>
-                  <dd>${total(q, chosen).toFixed(2)}</dd>
+                  <dt>Subtotal before sales tax</dt>
+                  <dd>${total(q, chosen, false).toFixed(2)}</dd>
                 </div>
               </dl>
-              <AdditionalItemsSummary items={q.additional_items} />
               <small>
                 Stripe calculates final sales tax from your billing address.
               </small>

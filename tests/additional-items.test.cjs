@@ -43,6 +43,15 @@ test('QuickBooks lines retain mapping, quantity, rate, description and exemption
   assert.equal(rules.additionalInvoiceLines(items,catalog,true)[0].SalesItemLineDetail.TaxCodeRef.value,'NON');
   for(const bad of [[],catalog.map(p=>({...p,company_id:'other'}))]) assert.throws(()=>rules.additionalInvoiceLines(items,bad,false),/Map.*TPMS sensor/);
 });
+test('current QuickBooks installation and state-fee names match quoted category, not unrelated catalog items', () => {
+  const {quickBooksBaseItems}=loader()('lib/quickbooks-base-items');
+  const items=['Tires','On-Site Mount & Balance - Passenger Vehicle (3 - 4 Tires)','On-Site Mount & Balance - Light/Medium Truck (3 - 4 Tires)','NYS Tire Disposal Fee','Waste Tire Fee'].map((Name,i)=>({Id:String(i),Name,Type:'Service'}));
+  assert.equal(quickBooksBaseItems(items,'passenger',4).installationItem.Id,'1');
+  assert.equal(quickBooksBaseItems(items,'truck',4).installationItem.Id,'2');
+  assert.equal(quickBooksBaseItems(items,'passenger',4).stateTireFeeItem.Id,'3');
+  assert.equal(quickBooksBaseItems(items,null,4).installationItem,undefined);
+  assert.equal(quickBooksBaseItems(items,'passenger',2).installationItem,undefined);
+});
 test('paid job conversion retains extra lines and keeps their non-taxable amount out of the tax basis', () => {
   const {websitePaymentFields} = loader()('lib/paid-website-order');
   const job = websitePaymentFields({id:'q',quantity:4,installation_cost:100,service_call_fee:0,disposal_fee:14,ny_state_tire_fee:10,additional_items:items,stripe_sales_tax_amount:47.92,amount_paid:686.92}, {brand:'Brand',model:'Model',price_per_tire:100});
@@ -74,20 +83,20 @@ test('staff and both customer quote views show the same extras and tax-inclusive
     const Page=loader({react:{...React,useEffect(){},useState:initial=>[index++===0?quote:index===2&&surface==='staff'?false:initial,()=>{}]},'next/navigation':{useParams:()=>({id:'q',token:'token'}),useRouter:()=>({}),useSearchParams:()=>new URLSearchParams(surface==='direct'?'purchase=1':'')},'@/components/AppHeader':()=>null,'@/lib/supabase':{supabase:{}}})
       (surface==='staff'?'app/quotes/[id]/page':'app/q/[token]/page').default;
     const html=renderToStaticMarkup(React.createElement(Page));
-    for(const text of ['TPMS sensor','85.00','Additional service','30.00','686.92']) assert.ok(html.includes(text),`${surface}: ${text}`);
+    for(const text of ['TPMS sensor','85.00','Additional service','30.00',surface==='direct'?'639.00':'686.92']) assert.ok(html.includes(text),`${surface}: ${text}`);
   }
 });
 test('invoice route fails before any external writes for an unmapped extra and sends mapped lines once', async () => {
-  for (const mapped of [false,true]) {
+  for (const [mapped, modernCatalog] of [[false,false],[true,false],[true,true]]) {
     const job={id:1,complete:true,customer:'Example',qty:4,price_tires:100,installation_cost:100,tire_disposal_fee:0,ny_state_tire_fee:10,additional_items:items};
     const calls=[],updates=[];
-    const admin={from:()=>({select(){return this},eq(){return this},single:async()=>({data:job}),update(v){updates.push(v);return this},then(resolve){resolve({})}})};
+    const admin={from:()=>({select(){return this},eq(){return this},single:async()=>({data:job}),maybeSingle:async()=>({data:{service_category:'passenger'}}),update(v){updates.push(v);return this},then(resolve){resolve({})}})};
     const catalog=items.map(i=>({id:i.quickbooks_item_id,company_id:'company',name:i.quickbooks_item_name}));
     const route=loader({'@/lib/supabase/admin':{requireApiUser:async()=>({id:'staff'}),createAdminClient:()=>admin},'@/lib/quickbooks-items':{quickBooksItems:async()=>mapped?catalog:[]},'@/lib/quickbooks':{escapeQueryValue:x=>x,quickBooksRequest:async(url,init)=>{
       calls.push({url,init});
       if(init?.method==='POST'){assert.equal(url,'/invoice');return {Invoice:{Id:'inv',TotalAmt:639,Balance:639}};}
       if(decodeURIComponent(url).includes('from Customer'))return {QueryResponse:{Customer:[{Id:'customer',DisplayName:'Example'}]}};
-      return {QueryResponse:{Item:['Tires','On-site Mount and Balance','NY State Tire Tax','Waste Tire Fee'].map((Name,i)=>({Id:String(i),Name,Type:'Service'}))}};
+      return {QueryResponse:{Item:(modernCatalog?['Tires','On-Site Mount & Balance - Passenger Vehicle (3 - 4 Tires)','NYS Tire Disposal Fee','Waste Tire Fee']:['Tires','On-site Mount and Balance','NY State Tire Tax','Waste Tire Fee']).map((Name,i)=>({Id:String(i),Name,Type:'Service'}))}};
     }}})('app/api/quickbooks/invoices/route');
     const response=await route.POST(new Request('https://example.test',{method:'POST',body:JSON.stringify({jobId:1})}));
     assert.equal(response.status,mapped?200:500);

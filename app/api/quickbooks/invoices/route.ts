@@ -3,6 +3,7 @@ import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { escapeQueryValue, quickBooksRequest } from "@/lib/quickbooks";
 import { additionalInvoiceLines } from "@/lib/additional-items";
 import { quickBooksItems } from "@/lib/quickbooks-items";
+import { quickBooksBaseItems } from "@/lib/quickbooks-base-items";
 
 export async function POST(request: Request) {
   try {
@@ -45,22 +46,20 @@ export async function POST(request: Request) {
     const itemQuery = encodeURIComponent("select * from Item where Active = true maxresults 1000");
     const itemResult = await quickBooksRequest(`/query?query=${itemQuery}`);
     const items = itemResult.QueryResponse?.Item || [];
-    const normalizeItemName = (value?: string) => (value || "").trim().toLowerCase();
-    const findItem = (name: string) => items.find(
-      (item: { Name?: string; FullyQualifiedName?: string; Type?: string }) =>
-        item.Type !== "Category" &&
-        (normalizeItemName(item.Name) === normalizeItemName(name) ||
-          normalizeItemName(item.FullyQualifiedName) === normalizeItemName(name))
-    );
-    const tireItem = findItem("Tires");
-    const installationItem = findItem("On-site Mount and Balance");
-    const stateTireFeeItem = findItem("NY State Tire Tax");
-    const disposalItem = findItem("Waste Tire Fee");
+    let category: string | null = null;
+    if (Number(job.installation_cost) > 0 && !quickBooksBaseItems(items, null, Number(job.qty)).installationItem) {
+      let source = admin.from("quotes").select("service_category");
+      source = job.source_quote_id ? source.eq("id", job.source_quote_id) : source.eq("converted_job_id", job.id);
+      const quote = await source.maybeSingle();
+      if (quote.error) throw new Error("Could not verify this job’s quoted installation category.");
+      category = quote.data?.service_category || null;
+    }
+    const { tireItem, installationItem, installationName, stateTireFeeItem, disposalItem } = quickBooksBaseItems(items, category, Number(job.qty));
     const missingItems = [
-      !tireItem && "Tires",
-      !installationItem && "On-site Mount and Balance",
-      !stateTireFeeItem && "NY State Tire Tax",
-      !disposalItem && "Waste Tire Fee",
+      Number(job.qty) * Number(job.price_tires) > 0 && !tireItem && "Tires",
+      Number(job.installation_cost) > 0 && !installationItem && installationName,
+      Number(job.ny_state_tire_fee ?? Number(job.qty) * 2.5) > 0 && !stateTireFeeItem && "NY State Tire Tax / NYS Tire Disposal Fee",
+      Number(job.tire_disposal_fee ?? Number(job.qty) * 4) > 0 && !disposalItem && "Waste Tire Fee",
     ].filter(Boolean);
     if (missingItems.length) {
       throw new Error(`Create these as invoiceable products/services—not categories—in QuickBooks: ${missingItems.join(", ")}.`);
@@ -69,8 +68,9 @@ export async function POST(request: Request) {
     const taxCode = job.tax_exempt ? "NON" : "TAX";
     const serviceDate = job.scheduled ? String(job.scheduled).slice(0, 10) : null;
     const lines: Record<string, unknown>[] = [];
-    const addLine = (item: { Id: string; Name: string }, description: string, amount: number, taxable = true, quantity?: number, unitPrice?: number) => {
+    const addLine = (item: { Id: string; Name: string } | undefined, description: string, amount: number, taxable = true, quantity?: number, unitPrice?: number) => {
       if (amount <= 0) return;
+      if (!item) throw new Error(`Missing QuickBooks item for ${description}.`);
       lines.push({
         Amount: Number(amount.toFixed(2)),
         Description: description,
