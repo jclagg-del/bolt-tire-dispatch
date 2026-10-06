@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import { paidTiresQueueUrl } from "@/lib/paid-tires-queue";
 
 type Job = {
   id: string | number;
@@ -319,7 +320,7 @@ export default function DashboardPage() {
             value={newOrdersCount}
             onClick={() => router.push("/orders")}
           />
-          <QuickCard label="Paid Tires to Order" value={tiresToOrderCount} onClick={() => router.push("/jobs?payment=paid")} />
+          <QuickCard label="Paid Tires to Order" value={tiresToOrderCount} onClick={() => router.push(paidTiresQueueUrl)} />
           <QuickCard label="Open Jobs" value={scheduledJobs.length} onClick={() => router.push("/jobs")} />
           <QuickCard label="Today's Route" value={todaysJobs.length} onClick={() => router.push("/route")} />
           <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />

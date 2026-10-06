@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
+import { isPaidTiresToOrder } from "@/lib/paid-tires-queue";
 
 type Job = {
   id: string | number;
@@ -28,6 +29,8 @@ type Job = {
   invoice_number?: string | null;
   job_status?: string | null;
   archived?: boolean | null;
+  tires_ordered?: boolean | null;
+  source_quote_id?: string | null;
 };
 
 type Vehicle = {
@@ -175,6 +178,7 @@ function JobsPageContent() {
   const searchParams = useSearchParams();
 
   const customerFilter = searchParams.get("customer") || "";
+  const paidTiresQueue = searchParams.get("queue") === "paid-tires-to-order";
   const initialPaymentFilter = searchParams.get("payment") || "all";
   const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
 
@@ -185,7 +189,7 @@ function JobsPageContent() {
   const [searchText, setSearchText] = useState(customerFilter);
   const [vehicleFilter, setVehicleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentFilter, setPaymentFilter] = useState(initialPaymentFilter);
+  const [paymentFilter, setPaymentFilter] = useState(paidTiresQueue ? "paid" : initialPaymentFilter);
   const [serviceFilter, setServiceFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [startDateFilter, setStartDateFilter] = useState("");
@@ -209,7 +213,7 @@ function JobsPageContent() {
   const fetchJobs = async () => {
     setLoading(true);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("jobs")
       .select(`
         id,
@@ -232,9 +236,14 @@ function JobsPageContent() {
         payment_status,
         invoice_number,
         job_status,
-        archived
+        archived,
+        tires_ordered,
+        source_quote_id
       `)
       .eq("archived", false);
+
+    if (paidTiresQueue) query = query.eq("payment_status", "paid").eq("tires_ordered", false).not("source_quote_id", "is", null);
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching jobs:", error.message);
@@ -243,14 +252,25 @@ function JobsPageContent() {
       return;
     }
 
-    setJobs(((data as Job[]) || []).filter((job) => !TASK_TYPES.has(job.service_type || "")));
+    setJobs((data as Job[]) || []);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchVehicles();
     fetchJobs();
-  }, []);
+  }, [paidTiresQueue]);
+
+  useEffect(() => {
+    setSearchText(customerFilter);
+    setPaymentFilter(paidTiresQueue ? "paid" : initialPaymentFilter);
+    setStatusFilter("all");
+    setVehicleFilter("all");
+    setServiceFilter("all");
+    setDateFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+  }, [paidTiresQueue, customerFilter, initialPaymentFilter]);
 
   const vehicleMap = useMemo(() => {
     const map: Record<string, Vehicle> = {};
@@ -260,15 +280,17 @@ function JobsPageContent() {
     return map;
   }, [vehicles]);
 
+  const queueJobs = useMemo(() => jobs.filter(job => paidTiresQueue ? isPaidTiresToOrder(job) : !TASK_TYPES.has(job.service_type || "")), [jobs, paidTiresQueue]);
+
   const serviceTypes = useMemo(() => {
     const set = new Set<string>();
 
-    jobs.forEach((job) => {
+    queueJobs.forEach((job) => {
       if (job.service_type) set.add(job.service_type);
     });
 
     return Array.from(set).sort();
-  }, [jobs]);
+  }, [queueJobs]);
 
   const applyQuickDate = (value: string) => {
     setDateFilter(value);
@@ -307,7 +329,7 @@ function JobsPageContent() {
   };
 
   const filteredJobs = useMemo(() => {
-    let result = [...jobs];
+    let result = [...queueJobs];
 
     const search = searchText.trim().toLowerCase();
 
@@ -345,6 +367,7 @@ function JobsPageContent() {
       result = result.filter((job) => {
         const status = job.job_status || (job.complete ? "completed" : "scheduled");
         if (statusFilter === "open") {
+          if (paidTiresQueue) return !job.complete && status !== "completed";
           return !["completed", "billed", "paid"].includes(status);
         }
         return status === statusFilter;
@@ -390,7 +413,8 @@ function JobsPageContent() {
 
     return result.sort((a, b) => (b.scheduled || "").localeCompare(a.scheduled || ""));
   }, [
-    jobs,
+    queueJobs,
+    paidTiresQueue,
     searchText,
     vehicleFilter,
     statusFilter,
@@ -420,8 +444,8 @@ function JobsPageContent() {
         <div style={heroTop}>
           <div>
             <div style={eyebrow}>Jobs</div>
-            <h1 style={title}>All Jobs</h1>
-            <p style={subtitle}>Search, filter, open, and manage every job in one place.</p>
+            <h1 style={title}>{paidTiresQueue ? "Paid Tires to Order" : "All Jobs"}</h1>
+            <p style={subtitle}>{paidTiresQueue ? "Paid quote purchases whose tires have not been ordered. Unscheduled purchases are included." : "Search, filter, open, and manage every job in one place."}</p>
           </div>
 
           <Link href="/jobs/new" style={{ textDecoration: "none" }}>
@@ -453,9 +477,9 @@ function JobsPageContent() {
           <button type="button" style={quickDateButton} onClick={() => applyQuickDate("next_week")}>
             Next Week
           </button>
-          <button type="button" style={quickDateButton} onClick={() => setPaymentFilter("unpaid")}>
+          {!paidTiresQueue && <button type="button" style={quickDateButton} onClick={() => setPaymentFilter("unpaid")}>
             Unpaid
-          </button>
+          </button>}
         </div>
 
         <div style={filterGrid}>
@@ -526,6 +550,7 @@ function JobsPageContent() {
 
           <select
             value={paymentFilter}
+            disabled={paidTiresQueue}
             onChange={(e) => setPaymentFilter(e.target.value)}
             style={filterInput}
           >
@@ -549,12 +574,12 @@ function JobsPageContent() {
           </select>
 
           <button type="button" style={clearBtn} onClick={clearFilters}>
-            Clear Filters
+            {paidTiresQueue ? "Show All Jobs" : "Clear Filters"}
           </button>
         </div>
 
         <div style={resultCount}>
-          Showing {filteredJobs.length} of {jobs.length} jobs
+          Showing {filteredJobs.length} of {queueJobs.length} {paidTiresQueue ? "paid purchases awaiting tire orders" : "jobs"}
         </div>
       </div>
 
