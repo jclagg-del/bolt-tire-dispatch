@@ -52,8 +52,8 @@ export async function POST(request: Request) {
     const settings = { ...fallbackBusinessSettings, ...(savedSettings || {}) } as BusinessSettings;
     const category = products.some((item) => item.serviceCategory === "truck") ? "truck" : "passenger";
     const quoteQuantity = staggered ? 4 : quantity;
-    const frontPrice = discountedTirePrice(front.quotePrice, Number(discount?.percent || 0));
-    const rearPrice = rear ? discountedTirePrice(rear.quotePrice, Number(discount?.percent || 0)) : null;
+    const frontPrice = discountedTirePrice(front.quotePrice, discount);
+    const rearPrice = rear ? discountedTirePrice(rear.quotePrice, discount) : null;
     const discountAmount = Math.round(((front.quotePrice - frontPrice) * (staggered ? 2 : quoteQuantity) + (staggered && rear ? (rear.quotePrice - (rearPrice || 0)) * 2 : 0)) * 100) / 100;
     const disposalEach = category === "truck" ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const { data: quote, error } = await admin.from("quotes").insert({
@@ -66,6 +66,7 @@ export async function POST(request: Request) {
       sales_tax_rate: settings.default_sales_tax_rate, tax_exempt: Boolean(discount?.tax_exempt),
       discount_code_id: discount?.id || null, discount_code_label: discount?.code || null,
       discount_percent: Number(discount?.percent || 0), discount_amount: discountAmount,
+      discount_type: discount?.discount_type || "percent", discount_fixed_amount: Number(discount?.fixed_amount || 0),
       discount_organization: discount?.organization || null,
       checkout_service: installationSelected ? "installation" : "tires_only",
       purchase_source: "website", requested_date: installationSelected ? requestedDate : null,

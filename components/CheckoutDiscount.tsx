@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { normalizeDiscountCode, type AppliedDiscount } from "@/lib/discounts";
+import { discountLabel, normalizeDiscountCode, type AppliedDiscount } from "@/lib/discounts";
 
 export default function CheckoutDiscount({ discount, onChange }: { discount: AppliedDiscount | null; onChange: (value: AppliedDiscount | null) => void }) {
   const [code, setCode] = useState("");
@@ -23,7 +23,7 @@ export default function CheckoutDiscount({ discount, onChange }: { discount: App
     <h2>Discount code</h2>
     <div className="purchase-builder-fields"><label>Discount code<input value={code} maxLength={40} autoComplete="off" onChange={e => { generation.current++; setBusy(false); setCode(normalizeDiscountCode(e.target.value)); onChange(null); setError(""); }} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (code && !busy) void apply(); } }} /></label></div>
     <button type="button" onClick={apply} disabled={busy || !code}>{busy ? "Checking…" : "Apply code"}</button>
-    {discount && <><button type="button" onClick={() => { generation.current++; setBusy(false); setCode(""); onChange(null); }}>Remove code</button><p role="status">{discount.percent}% off tires{discount.organization ? ` · ${discount.organization}` : ""}{discount.tax_exempt ? " · Sales tax exempt on tires and services" : ""}</p>{discount.organization && <p>Pay online by card. Your order will be sent to our team as Paid for tire purchasing and fulfillment.</p>}</>}
+    {discount && <><button type="button" onClick={() => { generation.current++; setBusy(false); setCode(""); onChange(null); }}>Remove code</button><p role="status">{discountLabel(discount)}{discount.organization ? ` · ${discount.organization}` : ""}{discount.tax_exempt ? " · Sales tax exempt on tires and services" : ""}</p>{discount.organization && <p>Pay online by card. Your order will be sent to our team as Paid for tire purchasing and fulfillment.</p>}</>}
     {error && <p role="alert" className="purchase-builder-error">{error}</p>}
   </section>;
 }

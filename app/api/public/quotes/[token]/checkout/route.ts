@@ -21,7 +21,7 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     if(q.discount_code_id){
       try{
         const discount=await lookupDiscount(q.discount_code_label);
-        if(!discount||discount.id!==q.discount_code_id||Number(discount.percent)!==Number(q.discount_percent)||discount.tax_exempt!==q.tax_exempt||discount.organization!==q.discount_organization)throw new Error("Discount settings changed. Return to checkout and apply the code again.");
+        if(!discount||discount.id!==q.discount_code_id||Number(discount.percent)!==Number(q.discount_percent)||(discount.discount_type||"percent")!==(q.discount_type||"percent")||Number(discount.fixed_amount||0)!==Number(q.discount_fixed_amount||0)||discount.tax_exempt!==q.tax_exempt||discount.organization!==q.discount_organization)throw new Error("Discount settings changed. Return to checkout and apply the code again.");
       }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Discount approval could not be verified."},{status:409})}
     }
   }

@@ -17,7 +17,9 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Enter valid discount settings." }, { status: 400 });
   const value = {
     code: normalizeDiscountCode(body.code), description: String(body.description || "").trim().slice(0, 200),
-    percent: Number(body.percent), organization: String(body.organization || "").trim().slice(0, 150) || null,
+    discount_type: body.discount_type ?? "percent",
+    fixed_amount: body.discount_type === "fixed" ? Number(body.fixed_amount) : 0,
+    percent: body.discount_type === "fixed" ? 0 : Number(body.percent), organization: String(body.organization || "").trim().slice(0, 150) || null,
     tax_exempt: body.tax_exempt === true, exemption_reference: String(body.exemption_reference || "").trim().slice(0, 300) || null,
     active: body.active === true, expires_on: body.expires_on ? String(body.expires_on) : null,
     updated_by: user.id, updated_at: new Date().toISOString(),

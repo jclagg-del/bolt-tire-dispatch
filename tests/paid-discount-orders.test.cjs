@@ -95,3 +95,40 @@ test('Stripe charges net tires plus full service/fees and disables sales tax onl
  const res=await route.POST(new Request('https://example.test',{method:'POST',body:JSON.stringify({optionId:'option'})}),{params:Promise.resolve({token:'token'})});assert.equal(res.status,200);assert.equal(sent.get('line_items[0][price_data][unit_amount]'),'50000');assert.equal(sent.get('line_items[1][price_data][unit_amount]'),'1000');assert.equal(sent.get('automatic_tax[enabled]'),taxExempt?null:'true');
  }}finally{global.fetch=prior.fetch;for(const [env,value] of [['STRIPE_SECRET_KEY',prior.key],['STRIPE_PUBLISHABLE_KEY',prior.pub]])if(value===undefined)delete process.env[env];else process.env[env]=value;}
 });
+test('fixed per-tire savings survive standard/split checkout and paid job conversion without discounting fees',async()=>{
+ const {websitePaymentFields}=loader()('lib/paid-website-order');
+ for(const split of [false,true]) for(const exempt of [false,true]) {
+  const discount={id:'code',code:'FIXED20',percent:0,discount_type:'fixed',fixed_amount:20.01,organization:'HPR',tax_exempt:exempt};
+  const base={size:'275/65R18',brand:'Example',model:'Tire',serviceCategory:'passenger',supplier:'USAF',atdProductNumber:'1234',warranty:'60000',availability:{local:10,localPlus:10}};
+  const front={...base,id:'front',quotePrice:100}; const rear={...base,id:'rear',quotePrice:10};
+  const db=database({quotes:[],quote_options:[]});
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/discounts-server':{lookupDiscount:async()=>discount},'@/lib/atd':{searchAtdBySize:async()=>[]},'@/lib/usaf-catalog':{searchUsafBySize:async()=>[front,rear]},'@/lib/shop-availability':{availableShopTimes:async()=>[{value:'09:30'}]}})('app/api/public/shop/quote/route');
+  const res=await route.POST(new Request('https://example.test',{method:'POST',body:JSON.stringify({name:quote.customer,phone:quote.phone,email:quote.email,vehicle:quote.vehicle,address:quote.address,query:'2756518',productId:'front',quantity:4,discountCode:'FIXED20',fixed_amount:99,discount_type:'percent',service:'installation',requestedDate:'2026-10-01',requestedTime:'09:30',...(split?{selections:[{productId:'front',size:'2756518',position:'front'},{productId:'rear',size:'2756518',position:'rear'}]}:{})})}));
+  assert.equal(res.status,200,JSON.stringify(await res.clone().json()));
+  const saved=db.tables.quotes[0],o=db.tables.quote_options[0];
+  assert.equal(saved.discount_type,'fixed');assert.equal(saved.discount_fixed_amount,20.01);assert.equal(saved.discount_percent,0);
+  assert.equal(o.price_per_tire,79.99);assert.equal(o.rear_price_per_tire,split?0:null);assert.equal(saved.discount_amount,split?60.02:80.04);
+  const tireTotal=split?159.98:319.96;
+  const expected=tireTotal+saved.installation_cost+saved.disposal_fee+saved.ny_state_tire_fee;
+  const job=websitePaymentFields({...saved,amount_paid:expected,stripe_sales_tax_amount:0},o);
+  assert.equal(job.subtotal,Math.round(expected*100)/100);assert.equal(job.price_tires*4,tireTotal);
+  assert.equal(job.installation_cost,saved.installation_cost);assert.equal(job.tire_disposal_fee,saved.disposal_fee);assert.equal(job.ny_state_tire_fee,saved.ny_state_tire_fee);
+  const prior={key:process.env.STRIPE_SECRET_KEY,pub:process.env.STRIPE_PUBLISHABLE_KEY,fetch:global.fetch};
+  process.env.STRIPE_SECRET_KEY='unit-test';process.env.STRIPE_PUBLISHABLE_KEY='unit-test';
+  saved.quote_options=[o];saved.payment_status='unpaid';let sent;
+  try {
+   global.fetch=async(url,options)=>{sent=options.body;return Response.json({id:'session',client_secret:'test-only'});};
+   const checkout=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/discounts-server':{lookupDiscount:async()=>discount}})('app/api/public/quotes/[token]/checkout/route');
+   const request=()=>new Request('https://example.test',{method:'POST',body:JSON.stringify({optionId:o.id})});
+   assert.equal((await checkout.POST(request(),{params:Promise.resolve({token:'public-token'})})).status,200);
+   assert.equal(Number(sent.get('line_items[0][price_data][unit_amount]')),Math.round((tireTotal+saved.installation_cost+saved.disposal_fee)*100));
+   assert.equal(Number(sent.get('line_items[1][price_data][unit_amount]')),Math.round(saved.ny_state_tire_fee*100));
+   assert.equal(sent.get('automatic_tax[enabled]'),exempt?null:'true');
+   for(const change of [{fixed_amount:25},{discount_type:'percent'}]){
+    const current={...discount};Object.assign(discount,change);sent=null;
+    assert.equal((await checkout.POST(request(),{params:Promise.resolve({token:'public-token'})})).status,409);assert.equal(sent,null);
+    Object.assign(discount,current);
+   }
+  }finally{global.fetch=prior.fetch;for(const [env,value] of [['STRIPE_SECRET_KEY',prior.key],['STRIPE_PUBLISHABLE_KEY',prior.pub]])if(value===undefined)delete process.env[env];else process.env[env]=value;}
+ }
+});
