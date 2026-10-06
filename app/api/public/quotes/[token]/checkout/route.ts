@@ -3,6 +3,7 @@ import {createAdminClient} from "@/lib/supabase/admin";
 import {shopCustomerError} from "@/lib/shop-customer";
 import {lookupDiscount} from "@/lib/discounts-server";
 import {quoteCheckoutDetails,quoteCheckoutDetailsError} from "@/lib/quote-checkout-details";
+import { AdditionalItem, additionalItemAmount, additionalItemsError } from "@/lib/additional-items";
 
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
   const key=process.env.STRIPE_SECRET_KEY;
@@ -26,6 +27,9 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   }
   const o=(q.quote_options||[]).find((x:{id:string})=>x.id===optionId);
   if(!o)return NextResponse.json({error:"Choose a valid tire option"},{status:400});
+  const extra: AdditionalItem[] = q.additional_items || [];
+  const itemsError = additionalItemsError(extra);
+  if(itemsError)return NextResponse.json({error:itemsError},{status:400});
 
   // Sent quotes must capture scheduling/contact details before a Stripe session
   // exists. Only these fields are customer-editable; prices and tax stay server-owned.
@@ -70,6 +74,17 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     body.set("line_items[1][price_data][tax_behavior]","exclusive");
     body.set("line_items[1][price_data][product_data][tax_code]","txcd_00000000");
     body.set("line_items[1][price_data][product_data][name]","New York State tire fee");
+  }
+  let extraIndex = stateFee > 0 ? 2 : 1;
+  for (const item of extra) {
+    const prefix = `line_items[${extraIndex++}]`;
+    body.set(`${prefix}[quantity]`, "1");
+    body.set(`${prefix}[price_data][currency]`, "usd");
+    body.set(`${prefix}[price_data][unit_amount]`, String(Math.round(additionalItemAmount(item) * 100)));
+    body.set(`${prefix}[price_data][tax_behavior]`, "exclusive");
+    body.set(`${prefix}[price_data][product_data][tax_code]`, item.taxable ? "txcd_99999999" : "txcd_00000000");
+    body.set(`${prefix}[price_data][product_data][name]`, item.description.slice(0, 250));
+    body.set(`${prefix}[price_data][product_data][description]`, `${item.quantity} × $${item.unit_price.toFixed(2)}`);
   }
   if(!q.tax_exempt){body.set("automatic_tax[enabled]","true");body.set("billing_address_collection","required");body.set("customer_creation","always")}
   if(q.email)body.set("customer_email",q.email);

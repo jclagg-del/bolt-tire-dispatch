@@ -1,3 +1,4 @@
+import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
 export type QuoteStatus = "draft" | "sent" | "viewed" | "approved" | "declined" | "expired" | "converted";
 export type QuoteTier = "good" | "better" | "best";
 
@@ -38,9 +39,10 @@ export const emptyQuoteOptions: QuoteOption[] = [
   { tier: "best", brand: "", model: "", image_url: "", price_per_tire: "", warranty_miles: "", tire_type: "", load_speed_rating: "", snow_rating: "", highlights: "", availability: "", recommended: false, sort_order: 3 },
 ];
 
-export function quoteOptionTotal(option: Pick<QuoteOption, "price_per_tire" | "rear_price_per_tire">, quantity: number, fees: { installation: number; serviceCall: number; disposal: number; stateFee: number; taxRate: number; taxExempt: boolean }, rearQuantity = 0) {
+export function quoteOptionTotal(option: Pick<QuoteOption, "price_per_tire" | "rear_price_per_tire">, quantity: number, fees: { installation: number; serviceCall: number; disposal: number; stateFee: number; taxRate: number; taxExempt: boolean; additionalItems?: AdditionalItem[] }, rearQuantity = 0) {
   const tires = (Number(option.price_per_tire) || 0) * quantity + (Number(option.rear_price_per_tire) || 0) * rearQuantity;
-  const taxable = tires + fees.installation + fees.serviceCall + fees.disposal;
+  const extra = additionalItemsTotals(fees.additionalItems);
+  const taxable = tires + fees.installation + fees.serviceCall + fees.disposal + extra.taxable;
   const tax = fees.taxExempt ? 0 : taxable * (fees.taxRate / 100);
-  return taxable + fees.stateFee + tax;
+  return taxable + extra.nonTaxable + fees.stateFee + tax;
 }

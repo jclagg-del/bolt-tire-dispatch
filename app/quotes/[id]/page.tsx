@@ -5,8 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 import { QuoteOption, QuoteStatus, quoteOptionTotal } from "@/lib/quotes";
+import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
+import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
 
 type SavedQuote = {
+  additional_items?: AdditionalItem[];
   id: string; quote_number: number; status: QuoteStatus; customer: string; contact_name: string | null;
   phone: string | null; email: string | null; vehicle: string | null; tire_size: string | null; quantity: number; rear_tire_size: string | null; rear_quantity: number | null;
   address: string | null; notes: string | null; service_category: string; installation_cost: number;
@@ -44,7 +47,7 @@ export default function QuoteDetailPage() {
 
   const totals = useMemo(() => quote ? quote.quote_options.map((option) => quoteOptionTotal(
     { price_per_tire: String(option.price_per_tire), rear_price_per_tire: option.rear_price_per_tire == null ? "" : String(option.rear_price_per_tire) }, quote.quantity,
-    { installation: Number(quote.installation_cost), serviceCall: Number(quote.service_call_fee), disposal: Number(quote.disposal_fee), stateFee: Number(quote.ny_state_tire_fee), taxRate: Number(quote.sales_tax_rate), taxExempt: quote.tax_exempt }, quote.rear_quantity || 0
+    { installation: Number(quote.installation_cost), serviceCall: Number(quote.service_call_fee), disposal: Number(quote.disposal_fee), stateFee: Number(quote.ny_state_tire_fee), taxRate: Number(quote.sales_tax_rate), taxExempt: quote.tax_exempt, additionalItems: quote.additional_items }, quote.rear_quantity || 0
   )) : [], [quote]);
 
   const selectOption = async (optionId: string) => {
@@ -125,22 +128,24 @@ export default function QuoteDetailPage() {
     if (!selected) return alert("Approve one tire option before converting this quote.");
     setSaving(true);
     const tireSubtotal = Number(selected.price_per_tire) * quote.quantity + Number(selected.rear_price_per_tire || 0) * Number(quote.rear_quantity || 0);
-    const taxableSubtotal = tireSubtotal + Number(quote.installation_cost) + Number(quote.service_call_fee) + Number(quote.disposal_fee);
+    const extra = additionalItemsTotals(quote.additional_items);
+    const taxableSubtotal = tireSubtotal + Number(quote.installation_cost) + Number(quote.service_call_fee) + Number(quote.disposal_fee) + extra.taxable;
     const estimatedSalesTax = quote.tax_exempt ? 0 : taxableSubtotal * (Number(quote.sales_tax_rate) / 100);
     const salesTax = quote.payment_status === "paid" && quote.stripe_sales_tax_amount != null
       ? Number(quote.stripe_sales_tax_amount)
       : estimatedSalesTax;
-    const total = taxableSubtotal + Number(quote.ny_state_tire_fee) + salesTax;
+    const total = taxableSubtotal + extra.nonTaxable + Number(quote.ny_state_tire_fee) + salesTax;
     const paidThroughStripe = quote.payment_status === "paid";
     const paymentDate = paidThroughStripe ? new Date().toISOString() : null;
     const combinedNotes = [quote.notes, `Converted from quote #${quote.quote_number}`, quote.requested_date ? `Requested service date: ${quote.requested_date}${quote.requested_time ? ` at ${quote.requested_time}` : ""} (confirm with customer)` : null, quote.service_call_fee > 0 ? `Service call: $${Number(quote.service_call_fee).toFixed(2)}` : null].filter(Boolean).join("\n");
     const { data: job, error } = await supabase.from("jobs").insert({
+      additional_items: quote.additional_items || [],
       customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
       vehicle: quote.vehicle, tires: [ `${selected.brand} ${selected.model}`, selected.rear_model ? `Rear: ${selected.rear_brand || selected.brand} ${selected.rear_model}` : null ].filter(Boolean).join(" / "), size: [quote.tire_size, quote.rear_tire_size ? `Rear: ${quote.rear_tire_size}` : null].filter(Boolean).join(" / "),
       qty: quote.quantity + Number(quote.rear_quantity || 0), price_tires: tireSubtotal / (quote.quantity + Number(quote.rear_quantity || 0)), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
       tire_supplier: selected.supplier || null, tire_product_number: selected.supplier_product_id || selected.manufacturer_product_id || null,
       tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee),
-      address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + Number(quote.ny_state_tire_fee),
+      address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + extra.nonTaxable + Number(quote.ny_state_tire_fee),
       sales_tax_rate: quote.tax_exempt ? 0 : (taxableSubtotal > 0 ? (salesTax / taxableSubtotal) * 100 : 0), sales_tax_amount: salesTax,
       tax_exempt: quote.tax_exempt, job_total: total,
       payment_status: paidThroughStripe ? "paid" : "unpaid",
@@ -191,6 +196,6 @@ export default function QuoteDetailPage() {
       })}
     </section>
 
-    <section className="quote-form-card"><h2>Included pricing</h2><div className="quote-fee-summary"><span>Installation <strong>${Number(quote.installation_cost).toFixed(2)}</strong></span>{Number(quote.service_call_fee) > 0 ? <span>Service call <strong>${Number(quote.service_call_fee).toFixed(2)}</strong></span> : null}<span>Disposal <strong>${Number(quote.disposal_fee).toFixed(2)}</strong></span><span>NY state fee <strong>${Number(quote.ny_state_tire_fee).toFixed(2)}</strong></span><span>Sales tax <strong>{quote.tax_exempt ? "Exempt" : `${Number(quote.sales_tax_rate)}%`}</strong></span></div>{quote.notes ? <p className="quote-notes">{quote.notes}</p> : null}</section>
+    <section className="quote-form-card"><h2>Included pricing</h2><AdditionalItemsSummary items={quote.additional_items} /><div className="quote-fee-summary"><span>Installation <strong>${Number(quote.installation_cost).toFixed(2)}</strong></span>{Number(quote.service_call_fee) > 0 ? <span>Service call <strong>${Number(quote.service_call_fee).toFixed(2)}</strong></span> : null}<span>Disposal <strong>${Number(quote.disposal_fee).toFixed(2)}</strong></span><span>NY state fee <strong>${Number(quote.ny_state_tire_fee).toFixed(2)}</strong></span><span>Sales tax <strong>{quote.tax_exempt ? "Exempt" : `${Number(quote.sales_tax_rate)}%`}</strong></span></div>{quote.notes ? <p className="quote-notes">{quote.notes}</p> : null}</section>
   </main></div>;
 }

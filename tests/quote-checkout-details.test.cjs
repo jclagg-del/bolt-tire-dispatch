@@ -64,6 +64,23 @@ test('valid details are saved before payment without accepting client prices or 
     assert.equal(calls[0].body.get('automatic_tax[enabled]'), 'true');
   }, { saved: { requested_date: '2026-10-01', requested_time: '09:30' } });
 });
+test('checkout charges saved additional lines exactly once and ignores customer-supplied extras', async () => {
+  const additional_items = [{ description: 'TPMS sensor', quantity: 2, unit_price: 42.50, taxable: true }, { description: 'Non-taxable service', quantity: 1.5, unit_price: 20, taxable: false }];
+  for (const tax_exempt of [false, true]) await setup(async ({ post, calls }) => {
+    const response = await post({ customerDetails: details, additional_items: [], installation_cost: 0 });
+    assert.equal(response.status, 200);
+    const body = calls[0].body;
+    assert.equal(body.get('line_items[0][price_data][unit_amount]'), '52000');
+    assert.equal(body.get('line_items[2][price_data][unit_amount]'), '8500');
+    assert.equal(body.get('line_items[3][price_data][unit_amount]'), '3000');
+    assert.equal(body.get('line_items[2][price_data][product_data][tax_code]'), 'txcd_99999999');
+    assert.equal(body.get('line_items[3][price_data][product_data][tax_code]'), 'txcd_00000000');
+    assert.equal(body.get('automatic_tax[enabled]'), tax_exempt ? null : 'true');
+  }, { saved: { additional_items, tax_exempt } });
+  await setup(async ({ post, calls }) => {
+    assert.equal((await post({ customerDetails: details })).status, 400); assert.equal(calls.length, 0);
+  }, { saved: { additional_items: [{ ...additional_items[0], quantity: -1 }] } });
+});
 test('saved complete details work; paid, failed-save, changed and invalid-option requests cannot start payment', async () => {
   await setup(async ({ post }) => { assert.equal((await post({})).status, 200); }, { saved: details });
   for (const [settings, expected] of [[{ saveError: true }, 500], [{ changed: true }, 409], [{ saved: { payment_status: 'paid' } }, 409]]) {

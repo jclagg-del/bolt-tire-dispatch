@@ -7,10 +7,13 @@ import { supabase } from "@/lib/supabase";
 import { BusinessSettings, fallbackBusinessSettings, installationDefault } from "@/lib/business-settings";
 import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
 import QuoteCustomerInput from "@/components/QuoteCustomerInput";
+import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
+import { AdditionalItem, additionalItemsError } from "@/lib/additional-items";
 import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 
 type QuoteForm = {
+  additional_items?: AdditionalItem[];
   customer: string; contact_name: string; phone: string; email: string; vehicle: string;
   tire_size: string; quantity: string; rear_tire_size: string; rear_quantity: string; address: string; notes: string;
   service_category: "passenger" | "truck" | "commercial" | "medium_dismount" | "trailer_atv" | "off_road" | "skid_steer" | "tires_only";
@@ -56,12 +59,13 @@ export default function NewQuotePage() {
         setLoadingQuote(false);
         return alert(`Could not load quote: ${error?.message || "Quote not found"}`);
       }
-      if (data.converted_job_id || data.payment_status === "paid") {
+      if (data.converted_job_id || ["paid", "pending"].includes(data.payment_status)) {
         setLoadingQuote(false);
-        alert("Paid or converted quotes cannot be edited.");
+        alert("Quotes with payment pending, paid quotes, and converted quotes cannot be edited.");
         return router.push(`/quotes/${editId}`);
       }
       setForm({
+        additional_items: data.additional_items || [],
         customer: data.customer || "", contact_name: data.contact_name || "", phone: data.phone || "", email: data.email || "",
         vehicle: data.vehicle || "", tire_size: data.tire_size || "", quantity: String(data.quantity || 1), rear_tire_size: data.rear_tire_size || "", rear_quantity: data.rear_quantity ? String(data.rear_quantity) : "", address: data.address || "",
         notes: data.notes || "", service_category: data.service_category || "passenger", installation_cost: String(data.installation_cost ?? 0),
@@ -172,15 +176,18 @@ export default function NewQuotePage() {
   const totals = useMemo(() => visibleOptions.map((option) => quoteOptionTotal(option, Number(form.quantity) || 0, {
     installation: Number(form.installation_cost) || 0, serviceCall: Number(form.service_call_fee) || 0,
     disposal: Number(form.disposal_fee) || 0, stateFee: Number(form.ny_state_tire_fee) || 0,
-    taxRate: Number(form.sales_tax_rate) || 0, taxExempt: form.tax_exempt,
+    taxRate: Number(form.sales_tax_rate) || 0, taxExempt: form.tax_exempt, additionalItems: form.additional_items,
   }, splitFitment ? Number(form.rear_quantity) || 0 : 0)), [visibleOptions, form, splitFitment]);
 
   const saveQuote = async () => {
+    const itemsError = additionalItemsError(form.additional_items || []);
+    if (itemsError) return alert(itemsError);
     if (!form.customer.trim()) return alert("Enter a customer name.");
     const completedOptions = visibleOptions.filter((option) => option.brand.trim() && option.model.trim());
     if (!completedOptions.length) return alert("Add at least one tire option.");
     setSaving(true);
     const quoteValues = {
+      additional_items: form.additional_items || [],
       customer: form.customer.trim(), contact_name: form.contact_name.trim() || null, phone: form.phone.trim() || null,
       email: form.email.trim() || null, vehicle: form.vehicle.trim() || null, tire_size: form.tire_size.trim() || null,
       quantity: Number(form.quantity) || 1, rear_tire_size: splitFitment ? form.rear_tire_size.trim() || null : null, rear_quantity: splitFitment ? Number(form.rear_quantity) || 1 : null, address: form.address.trim() || null, notes: form.notes.trim() || null,
@@ -305,6 +312,7 @@ export default function NewQuotePage() {
         </div>)}
       </section>
 
+      <AdditionalItemsEditor items={form.additional_items || []} onChange={items => setForm({ ...form, additional_items: items })} disabled={saving} />
       <section className="quote-form-card"><h2>Pricing and fees</h2><div className="quote-form-grid">
         <QuoteField label="Installation" value={form.installation_cost} type="number" onChange={(value) => setForm({ ...form, installation_cost: value })} />
         {form.service_category === "commercial" || Number(form.service_call_fee) > 0 ? <QuoteField label="Service call" value={form.service_call_fee} type="number" onChange={(value) => setForm({ ...form, service_call_fee: value })} /> : null}

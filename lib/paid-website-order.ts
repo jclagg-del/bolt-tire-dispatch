@@ -1,5 +1,7 @@
+import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
 /** Snapshots come from the server's saved quote, never the checkout request. */
 export type WebsiteQuote = {
+  additional_items?: AdditionalItem[];
   id: string; quote_number: number; customer: string; contact_name?: string | null;
   phone?: string | null; email?: string | null; vehicle?: string | null; address?: string | null;
   quantity: number; rear_quantity?: number | null; tire_size?: string | null; rear_tire_size?: string | null;
@@ -27,15 +29,17 @@ export function websitePaymentFields(q: WebsiteQuote, o: WebsiteOption) {
   const items = websiteTireItems(q, o);
   const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const tireTotal = items.reduce((sum, item) => sum + item.quantity * item.price, 0);
-  const taxable = tireTotal + Number(q.installation_cost) + Number(q.service_call_fee) + Number(q.disposal_fee);
+  const extra = additionalItemsTotals(q.additional_items);
+  const taxable = tireTotal + Number(q.installation_cost) + Number(q.service_call_fee) + Number(q.disposal_fee) + extra.taxable;
   const tax = Number(q.stripe_sales_tax_amount || 0);
   return {
+    additional_items: q.additional_items || [],
     source_quote_id: q.id, email: q.email || null, vehicle: q.vehicle || null,
     qty: quantity, tires: items.map(i => `${i.brand} ${i.model}`).join(" / "),
     size: items.map(i => i.size).join(" / "), tire_product_number: items.map(i => i.part).join(" / "),
     price_tires: tireTotal / quantity, installation_cost: Number(q.installation_cost) + Number(q.service_call_fee),
     tire_disposal_fee: Number(q.disposal_fee), ny_state_tire_fee: Number(q.ny_state_tire_fee),
-    subtotal: Math.round((taxable + Number(q.ny_state_tire_fee)) * 100) / 100,
+    subtotal: Math.round((taxable + extra.nonTaxable + Number(q.ny_state_tire_fee)) * 100) / 100,
     sales_tax_amount: tax, sales_tax_rate: q.tax_exempt ? 0 : taxable > 0 ? tax / taxable * 100 : 0,
     tax_exempt: Boolean(q.tax_exempt), job_total: Number(q.amount_paid), payment_status: "paid", paid_date: q.paid_at,
   };

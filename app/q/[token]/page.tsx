@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import EmbeddedStripeCheckout from "@/components/EmbeddedStripeCheckout";
 import QuoteCheckoutInformation from "@/components/QuoteCheckoutInformation";
+import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
+import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
 import { quoteCheckoutDetails, quoteCheckoutDetailsError } from "@/lib/quote-checkout-details";
 type Option = {
   id: string;
@@ -25,6 +27,7 @@ type Option = {
   sort_order: number;
 };
 type Quote = {
+  additional_items?: AdditionalItem[];
   quote_number: number;
   customer: string;
   contact_name: string | null;
@@ -118,13 +121,14 @@ const tireSubtotal = (q: Quote, o: Option) =>
   Number(o.price_per_tire) * q.quantity +
   Number(o.rear_price_per_tire || 0) * Number(q.rear_quantity || 0);
 const total = (q: Quote, o: Option) => {
+  const extra = additionalItemsTotals(q.additional_items);
   const taxable =
     tireSubtotal(q, o) +
     Number(q.installation_cost) +
     Number(q.service_call_fee) +
-    Number(q.disposal_fee);
+    Number(q.disposal_fee) + extra.taxable;
   return (
-    taxable +
+    taxable + extra.nonTaxable +
     Number(q.ny_state_tire_fee) +
     (q.tax_exempt ? 0 : (taxable * Number(q.sales_tax_rate)) / 100)
   );
@@ -276,6 +280,7 @@ export default function PublicQuote() {
                   <dd>${total(q, chosen).toFixed(2)}</dd>
                 </div>
               </dl>
+              <AdditionalItemsSummary items={q.additional_items} />
               <small>
                 Stripe calculates final sales tax from your billing address.
               </small>
@@ -403,6 +408,7 @@ export default function PublicQuote() {
       </section>
       <section className="quote-form-card">
         <h2>{purchase ? "Order details" : "Included in every option"}</h2>
+        <AdditionalItemsSummary items={q.additional_items} />
         {q.discount_code_label && <p>Discount code {q.discount_code_label}: ${Number(q.discount_amount || 0).toFixed(2)} tire savings included in the prices above.{q.discount_organization ? ` Organization: ${q.discount_organization}.` : ""}</p>}
         <div className="quote-fee-summary">
           <span>

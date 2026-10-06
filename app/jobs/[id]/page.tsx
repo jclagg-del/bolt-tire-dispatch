@@ -5,6 +5,8 @@ import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
+import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
+import { AdditionalItem, additionalItemsError, additionalItemsTotals } from "@/lib/additional-items";
 import JobJhaButton from "@/components/JobJhaButton";
 import { requireCompletedJha } from "@/lib/job-jha-client";
 import JobTireOrdering from "@/components/JobTireOrdering";
@@ -14,6 +16,7 @@ import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "
 import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
 
 type JobForm = {
+  additional_items?: AdditionalItem[];
   customer: string;
   contact_name: string;
   phone: string;
@@ -122,6 +125,7 @@ export default function EditJobPage() {
         size,
         qty,
         price_tires,
+        additional_items,
         tire_product_number,
         tires_ordered,
         tire_supplier,
@@ -197,6 +201,7 @@ export default function EditJobPage() {
         data.qty !== null && data.qty !== undefined
           ? String(data.qty)
           : "",
+      additional_items: data.additional_items || [],
       price_tires:
         data.price_tires !== null && data.price_tires !== undefined
           ? String(data.price_tires)
@@ -328,8 +333,11 @@ export default function EditJobPage() {
     const tireDisposalFee = Number(form.tire_disposal_fee) || 0;
     const nyStateTireFee = Number(form.ny_state_tire_fee) || 0;
 
-    const taxableSubtotal = quantity * tirePrice + installationCost + tireDisposalFee;
-    const subtotal = taxableSubtotal + nyStateTireFee;
+    const itemsError = additionalItemsError(form.additional_items || []);
+    if (itemsError) { setSaving(false); alert(itemsError); return; }
+    const extra = additionalItemsTotals(form.additional_items);
+    const taxableSubtotal = quantity * tirePrice + installationCost + tireDisposalFee + extra.taxable;
+    const subtotal = taxableSubtotal + extra.nonTaxable + nyStateTireFee;
     const salesTaxRate = form.tax_exempt ? 0 : Number(form.sales_tax_rate) || 0;
     const salesTaxAmount = taxableSubtotal * (salesTaxRate / 100);
     const calculatedJobTotal = subtotal + salesTaxAmount;
@@ -337,6 +345,7 @@ export default function EditJobPage() {
     const { error } = await supabase
       .from("jobs")
       .update({
+        additional_items: form.additional_items || [],
         customer: form.customer.trim(),
         contact_name: form.contact_name.trim() || null,
         phone: form.phone.trim() || null,
@@ -876,6 +885,7 @@ export default function EditJobPage() {
             </Field>
           </div>
 
+          <AdditionalItemsEditor context="job" items={form.additional_items || []} onChange={items => setForm({ ...form, additional_items: items })} disabled={saving} />
           <div style={form.tax_exempt ? taxExemptCard : taxCard}>
             <label style={checkboxLabel}>
               <input type="checkbox" checked={form.tax_exempt} onChange={handleTaxExemptChange} style={checkbox} />
@@ -891,6 +901,7 @@ export default function EditJobPage() {
           </div>
 
           <div style={costBreakdown}>
+            <div style={costRow}><span>Additional items &amp; services</span><strong>${additionalItemsTotals(form.additional_items).total.toFixed(2)}</strong></div>
             <div style={costRow}>
               <span>Tires</span>
               <strong>${(((Number(form.qty) || 0) * (Number(form.price_tires) || 0))).toFixed(2)}</strong>
@@ -909,11 +920,11 @@ export default function EditJobPage() {
             </div>
             <div style={costRow}>
               <span>Sales tax</span>
-              <strong>${(form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * ((Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}</strong>
+              <strong>${(form.tax_exempt ? 0 : (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0) + additionalItemsTotals(form.additional_items).taxable) * ((Number(form.sales_tax_rate) || 0) / 100))).toFixed(2)}</strong>
             </div>
             <div style={costTotalRow}>
               <span>Job Total</span>
-              <strong>${((Number(form.ny_state_tire_fee) || 0) + (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100)))).toFixed(2)}</strong>
+              <strong>${((Number(form.ny_state_tire_fee) || 0) + additionalItemsTotals(form.additional_items).nonTaxable + (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0) + additionalItemsTotals(form.additional_items).taxable) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100)))).toFixed(2)}</strong>
             </div>
           </div>
 
@@ -924,7 +935,7 @@ export default function EditJobPage() {
               <label style={fieldLabel}>Job Total</label>
               <input
                 name="job_total"
-                value={((Number(form.ny_state_tire_fee) || 0) + (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0)) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100)))).toFixed(2)}
+                value={((Number(form.ny_state_tire_fee) || 0) + additionalItemsTotals(form.additional_items).nonTaxable + (((Number(form.qty) || 0) * (Number(form.price_tires) || 0) + (Number(form.installation_cost) || 0) + (Number(form.tire_disposal_fee) || 0) + additionalItemsTotals(form.additional_items).taxable) * (1 + (form.tax_exempt ? 0 : (Number(form.sales_tax_rate) || 0) / 100)))).toFixed(2)}
                 readOnly
                 style={{ ...input, background: "#f3f4f6" }}
                 placeholder="Job Total"

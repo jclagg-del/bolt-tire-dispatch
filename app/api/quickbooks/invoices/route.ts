@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { escapeQueryValue, quickBooksRequest } from "@/lib/quickbooks";
+import { additionalInvoiceLines } from "@/lib/additional-items";
+import { quickBooksItems } from "@/lib/quickbooks-items";
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +13,8 @@ export async function POST(request: Request) {
     if (error || !job) throw new Error("Job not found.");
     if (!job.complete) throw new Error("Complete the job before creating an invoice.");
     if (job.quickbooks_invoice_id) throw new Error("This job already has a QuickBooks invoice.");
+    // Validate all mappings before creating any QuickBooks customer or invoice.
+    const extraLines = additionalInvoiceLines(job.additional_items || [], job.additional_items?.length ? await quickBooksItems() : [], Boolean(job.tax_exempt), job.scheduled ? String(job.scheduled).slice(0, 10) : null);
 
     const customerName = String(job.billing_name || job.customer || "").trim();
     if (!customerName) throw new Error("The job needs a customer or billing name.");
@@ -94,9 +98,10 @@ export async function POST(request: Request) {
       : qty * 2.5;
     const stateTireFeeUnitPrice = qty > 0 ? stateTireFee / qty : undefined;
     addLine(stateTireFeeItem, "NY State tire tax", stateTireFee, false, qty, stateTireFeeUnitPrice);
-    const disposalFee = Number(job.tire_disposal_fee) || qty * 4;
+    const disposalFee = job.tire_disposal_fee == null ? qty * 4 : Number(job.tire_disposal_fee) || 0;
     const disposalUnitPrice = qty > 0 ? disposalFee / qty : undefined;
     addLine(disposalItem, "Waste tire fee", disposalFee, true, qty, disposalUnitPrice);
+    lines.push(...extraLines);
     if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
 
     const invoicePayload: Record<string, unknown> = {
