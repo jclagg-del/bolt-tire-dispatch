@@ -39,6 +39,26 @@ export const emptyQuoteOptions: QuoteOption[] = [
   { tier: "best", brand: "", model: "", image_url: "", price_per_tire: "", warranty_miles: "", tire_type: "", load_speed_rating: "", snow_rating: "", highlights: "", availability: "", recommended: false, sort_order: 3 },
 ];
 
+// Keep saved option identities/tier keys. Fill unused tiers, not array offsets:
+// a quote containing only good + best still needs a blank better slot.
+export function quoteOptionsForEditor(saved: QuoteOption[]): QuoteOption[] {
+  const items = saved.slice(0, 3).map((option) => ({ ...option }));
+  const assigned = new Set<QuoteTier>();
+  const reserved = new Set(items.map((option) => option.tier));
+  // Prefer the persisted row if an older browser draft contains duplicate tiers.
+  const priority = [...items].sort((a, b) => Number(Boolean(b.id)) - Number(Boolean(a.id)));
+  for (const option of priority) {
+    if (assigned.has(option.tier)) {
+      option.tier = emptyQuoteOptions.find((empty) => !reserved.has(empty.tier))!.tier;
+      reserved.add(option.tier);
+    }
+    assigned.add(option.tier);
+  }
+  const nextSortOrder = Math.max(0, ...items.map((option) => option.sort_order)) + 1;
+  const missing = emptyQuoteOptions.filter((option) => !assigned.has(option.tier));
+  return [...items, ...missing.map((option, index) => ({ ...option, sort_order: nextSortOrder + index }))];
+}
+
 export function quoteOptionTotal(option: Pick<QuoteOption, "price_per_tire" | "rear_price_per_tire">, quantity: number, fees: { installation: number; serviceCall: number; disposal: number; stateFee: number; taxRate: number; taxExempt: boolean; additionalItems?: AdditionalItem[] }, rearQuantity = 0) {
   const tires = (Number(option.price_per_tire) || 0) * quantity + (Number(option.rear_price_per_tire) || 0) * rearQuantity;
   const extra = additionalItemsTotals(fees.additionalItems);

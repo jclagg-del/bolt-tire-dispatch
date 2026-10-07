@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 import { BusinessSettings, fallbackBusinessSettings, installationDefault } from "@/lib/business-settings";
-import { emptyQuoteOptions, QuoteOption, quoteOptionTotal } from "@/lib/quotes";
+import { emptyQuoteOptions, QuoteOption, quoteOptionTotal, quoteOptionsForEditor } from "@/lib/quotes";
 import QuoteCustomerInput from "@/components/QuoteCustomerInput";
 import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
 import { AdditionalItem, additionalItemsError } from "@/lib/additional-items";
@@ -31,6 +31,8 @@ export default function NewQuotePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
+  const savedQuoteId = useRef<string | null>(null);
+  const saveInFlight = useRef(false);
   const [form, setForm] = useState<QuoteForm>(initialForm);
   const selectedCustomer = useRef<QuoteCustomer | null>(null);
   const shopSelection = useRef<string | null>(null);
@@ -79,7 +81,7 @@ export default function NewQuotePage() {
         load_speed_rating: option.load_speed_rating || "", snow_rating: option.snow_rating || "", highlights: option.highlights || "",
         availability: option.availability || "", rear_brand: option.rear_brand || "", rear_model: option.rear_model || "", rear_image_url: option.rear_image_url || "", rear_price_per_tire: option.rear_price_per_tire == null ? "" : String(option.rear_price_per_tire),
       })) as QuoteOption[];
-      setOptions([...saved, ...emptyQuoteOptions.slice(saved.length).map((option) => ({ ...option }))].slice(0, 3));
+      setOptions(quoteOptionsForEditor(saved));
       setLoadingQuote(false);
       return;
     }
@@ -89,7 +91,7 @@ export default function NewQuotePage() {
       form: QuoteForm; options: QuoteOption[]; splitFitment: boolean; selection: string | null;
     }>(sessionStorage, quoteDraftKey) : null;
     if (draft) {
-      setForm(draft.form); setOptions(draft.options); setSplitFitment(draft.splitFitment);
+      setForm(draft.form); setOptions(quoteOptionsForEditor(draft.options)); setSplitFitment(draft.splitFitment);
       shopSelection.current = stored || draft.selection;
       if (!stored || stored === draft.selection) {
         sessionStorage.removeItem("bolt-tire-quote-selection");
@@ -180,12 +182,16 @@ export default function NewQuotePage() {
   }, splitFitment ? Number(form.rear_quantity) || 0 : 0)), [visibleOptions, form, splitFitment]);
 
   const saveQuote = async () => {
+    if (saveInFlight.current) return;
     const itemsError = additionalItemsError(form.additional_items || []);
     if (itemsError) return alert(itemsError);
     if (!form.customer.trim()) return alert("Enter a customer name.");
-    const completedOptions = visibleOptions.filter((option) => option.brand.trim() && option.model.trim());
+    const normalizedOptions = quoteOptionsForEditor(options);
+    const completedOptions = (splitFitment ? normalizedOptions.slice(0, 1) : normalizedOptions).filter((option) => option.brand.trim() && option.model.trim());
     if (!completedOptions.length) return alert("Add at least one tire option.");
+    saveInFlight.current = true;
     setSaving(true);
+    try {
     const quoteValues = {
       additional_items: form.additional_items || [],
       customer: form.customer.trim(), contact_name: form.contact_name.trim() || null, phone: form.phone.trim() || null,
@@ -197,11 +203,13 @@ export default function NewQuotePage() {
       tax_exempt: form.tax_exempt, expires_at: form.expires_at || null,
       updated_at: new Date().toISOString(),
     };
-    const quoteRequest = editId
-      ? supabase.from("quotes").update(quoteValues).eq("id", editId).select("id,selected_option_id").single()
+    const existingId = editId || savedQuoteId.current;
+    const quoteRequest = existingId
+      ? supabase.from("quotes").update(quoteValues).eq("id", existingId).select("id,selected_option_id").single()
       : supabase.from("quotes").insert(quoteValues).select("id,selected_option_id").single();
     const { data: quote, error } = await quoteRequest;
     if (error || !quote) { setSaving(false); return alert(`Could not save quote: ${error?.message || "Unknown error"}`); }
+    savedQuoteId.current = quote.id;
     const optionValues = (option: QuoteOption) => ({
       quote_id: quote.id, tier: option.tier, brand: option.brand.trim(), model: option.model.trim(),
       image_url: option.image_url.trim() || null, price_per_tire: Number(option.price_per_tire) || 0,
@@ -216,32 +224,32 @@ export default function NewQuotePage() {
       rear_supplier: option.rear_supplier || null, rear_supplier_product_id: option.rear_supplier_product_id || null,
       rear_manufacturer_product_id: option.rear_manufacturer_product_id || null, rear_wholesale_cost: option.rear_wholesale_cost == null ? null : Number(option.rear_wholesale_cost),
     });
-    let optionError: { message: string } | null = null;
-    if (editId) {
-      const retainedIds = completedOptions.flatMap((option) => option.id ? [option.id] : []);
+    // Upsert by the database's unique slot key so a retry keeps the original IDs.
+    const savedOptions = await supabase.from("quote_options")
+      .upsert(completedOptions.map(optionValues), { onConflict: "quote_id,tier" }).select("id,tier");
+    let optionError = savedOptions.error;
+    if (!optionError && savedOptions.data) {
+      const retainedIds = savedOptions.data.map((option) => option.id);
       if (quote.selected_option_id && !retainedIds.includes(quote.selected_option_id)) {
         const result = await supabase.from("quotes").update({ selected_option_id: null, status: "draft" }).eq("id", quote.id);
         optionError = result.error;
       }
-      for (const option of completedOptions) {
-        if (optionError) break;
-        const result = option.id
-          ? await supabase.from("quote_options").update(optionValues(option)).eq("id", option.id)
-          : await supabase.from("quote_options").insert(optionValues(option));
-        optionError = result.error;
-      }
       if (!optionError) {
-        const oldIds = options.flatMap((option) => option.id ? [option.id] : []).filter((id) => !retainedIds.includes(id));
-        if (oldIds.length) optionError = (await supabase.from("quote_options").delete().in("id", oldIds)).error;
+        optionError = (await supabase.from("quote_options").delete().eq("quote_id", quote.id)
+          .not("tier", "in", `(${completedOptions.map((option) => option.tier).join(",")})`)).error;
       }
-    } else {
-      optionError = (await supabase.from("quote_options").insert(completedOptions.map(optionValues))).error;
     }
     setSaving(false);
     if (optionError) return alert(`Quote saved, but options failed: ${optionError.message}`);
     sessionStorage.removeItem(quoteDraftKey);
     sessionStorage.removeItem(shopSessionKey);
     router.push(`/quotes/${quote.id}`);
+    } catch (error) {
+      alert(`Could not finish saving. Your entries are still here; please try again. ${error instanceof Error ? error.message : ""}`);
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
+    }
   };
 
   const backToShop = () => {
