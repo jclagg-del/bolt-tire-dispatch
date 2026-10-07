@@ -53,11 +53,11 @@ function fixture({ user = { id: 'staff-id' }, role = 'technician', job = { id: '
     from(table) {
       const query = { select() { return query; }, eq() { return query; }, order() { return query; }, limit() { return query; },
         insert(value) { calls.photoRows.push(value); return query; },
-        maybeSingle: () => Promise.resolve(result()), then: (yes, no) => Promise.resolve(result()).then(yes, no) };
-      function result() {
+        maybeSingle: () => Promise.resolve(result(true)), then: (yes, no) => Promise.resolve(result()).then(yes, no) };
+      function result(single = false) {
         if (table === 'staff_security') return { data: role ? { role } : null };
         if (table === 'jobs') return { data: job };
-        return { data: table === 'job_jha_history' ? [] : record && structuredClone(record), error: missingSchema ? { code: '42P01' } : null };
+        return { data: table === 'job_jha_history' && !single ? [] : record && structuredClone(record), error: missingSchema ? { code: '42P01' } : null };
       }
       return query;
     },
@@ -85,6 +85,28 @@ test('missing schema fails closed and GET does not infer readiness', async () =>
   assert.equal((await fixture({ rpcError: { code: '42883' } }).put()).status, 503);
   const response = await fixture().get();
   assert.equal(response.headers.get('cache-control'), 'no-store'); assert.equal((await response.json()).ready, false);
+});
+test('delivery completion is exempt using saved service type, even without JHA storage', async () => {
+  for (const service_type of ['Delivery', ' delivered ', 'DELIVERY_PICKUP', 'delivery / pickup', 'delivery/pickup', 'delivery and pickup', '  DELIVERY  ']) {
+    const response = await fixture({ job: { id: '1', service_type }, missingSchema: true }).get();
+    assert.equal(response.status, 200, service_type);
+    const data = await response.json();
+    assert.equal(data.required, false); assert.equal(data.ready, true);
+    assert.equal(data.record, null); assert.equal(response.headers.get('cache-control'), 'no-store');
+  }
+  for (const service_type of ['Installation', 'Mount & Balance', 'Delivery and Installation', 'Repair', 'Pickup', '', null]) {
+    const response = await fixture({ job: { id: '1', service_type, notes: 'Delivery' } }).get('?service_type=Delivery');
+    const data = await response.json();
+    assert.equal(data.required, true, service_type); assert.equal(data.ready, false);
+  }
+});
+test('delivery exemption never bypasses staff authorization or deletes past assessments', async () => {
+  assert.equal((await fixture({ role: 'customer', job: { id: '1', service_type: 'Delivery' } }).get()).status, 403);
+  const record = { revision: 1, status: 'complete', context: {}, assessment: complete() };
+  const f = fixture({ job: { id: '1', service_type: 'Delivery' }, record });
+  const history = await (await f.get('?revision=1')).json();
+  assert.equal(history.record.revision, 1); assert.equal(history.readOnly, true);
+  assert.equal(f.calls.rpc.length, 0);
 });
 test('save ignores forged author/time and binds to authenticated identity and revision', async () => {
   const f = fixture();
@@ -122,7 +144,7 @@ test('photo endpoint rejects empty, oversized and misleading content before uplo
 test('Route, job details and Tasks expose the JHA and recheck before completion', () => {
   for (const file of ['app/route/page.tsx', 'app/jobs/[id]/page.tsx', 'app/tasks/page.tsx']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.match(source, /<JobJhaButton jobId=/); assert.match(source, /await requireCompletedJha\(/);
+    assert.match(source, /!isDeliveryService\([^)]*\) && <JobJhaButton jobId=/); assert.match(source, /await requireCompletedJha\(/);
   }
 });
 test('valid photo receives a server-generated job path and failed metadata save removes only that upload', async () => {

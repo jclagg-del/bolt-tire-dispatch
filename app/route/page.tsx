@@ -612,7 +612,7 @@ function RouteCard({
       {job.notes && <div style={notes}>📝 {job.notes}</div>}
 
       <div style={buttonRow}>
-        <JobJhaButton jobId={job.id} />
+        {!isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
         {job.address ? (
           <a href={mapsUrl(job.address)} target="_blank" rel="noreferrer" style={goBtn}>
             Go

@@ -16,7 +16,13 @@ mod.require = id => {
   if (id === '@/components/JobJhaButton') return { __esModule: true, default: () => React.createElement('button', null, 'Complete JHA') };
   if (id === '@/lib/job-jha-client') return {};
   if (id === '@/lib/quo') return { getQuoCallUrl: () => null, getQuoTextUrl: () => null };
-  if (id === '@/lib/job-completion') return {};
+  if (id === '@/lib/job-completion') {
+    const completion = new Module(__filename, module);
+    completion._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/job-completion.ts'), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS },
+    }).outputText, __filename);
+    return completion.exports;
+  }
   if (id === '@/lib/route-order') return {};
   if (id === '@/components/RouteStopList') return { default: () => null };
   return require(id);
@@ -24,9 +30,9 @@ mod.require = id => {
 mod._compile(ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
 }).outputText + '\nexports.TestRouteCard = RouteCard;', __filename);
-function render(part) {
+function render(part, service_type) {
   return renderToStaticMarkup(React.createElement(mod.exports.TestRouteCard, {
-    job: { id: 1, customer: 'Route test', po_number: '3094589', mo_number: 'MO123', tires: 'Goodyear Assurance', size: '225/60R17', qty: 2, tire_product_number: part },
+    job: { id: 1, customer: 'Route test', po_number: '3094589', mo_number: 'MO123', tires: 'Goodyear Assurance', size: '225/60R17', qty: 2, tire_product_number: part, service_type },
     stopNumber: 1, onComplete() {}, isCompleting: false,
   }));
 }
@@ -46,4 +52,8 @@ test('multiple part numbers remain visible as stored without HTML interpretation
   const html = render('00123 / 00456 <rear>');
   assert.ok(html.includes('00123 / 00456 &lt;rear&gt;'));
   assert.ok(html.includes('word-break:break-word'));
+});
+test('delivery route cards omit JHA while service and unknown jobs retain it', () => {
+  for (const service of ['Delivery', 'delivery', 'delivered', 'delivery_pickup']) assert.doesNotMatch(render('00123', service), /Complete JHA/);
+  for (const service of ['Installation', 'repair', 'Delivery and Installation', null]) assert.match(render('00123', service), /Complete JHA/);
 });

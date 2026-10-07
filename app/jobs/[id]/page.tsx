@@ -634,7 +634,7 @@ export default function EditJobPage() {
             </div>
 
             <div style={heroActions}>
-              {id && <JobJhaButton jobId={id} />}
+              {id && !isDeliveryService(savedServiceType) && <JobJhaButton jobId={id} />}
               <button
                 type="button"
                 onClick={() => handleSave()}
