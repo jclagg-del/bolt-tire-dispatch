@@ -1,8 +1,8 @@
 import "server-only";
 import { websiteTireItems, type WebsiteOption, type WebsiteQuote } from "@/lib/paid-website-order";
+import { renderCustomerConfirmationEmail } from "@/lib/customer-confirmation-email";
 
 const receiptKey = "bolt_customer_payment_email";
-const html = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const validEmail = (value: unknown): value is string => typeof value === "string" && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 // Separate from the office alert: a successful office email must never suppress
@@ -44,7 +44,7 @@ export async function sendCustomerPaymentConfirmation(sessionId: string, quote: 
     to: [email], reply_to: "sales@bolttire.com", subject,
     text: ["Thank you for your order!", ...details.map(([key, value]) => `${key}: ${value}`), "Tires:", ...tires,
       ...(extras.length ? ["Additional items / services:", ...extras] : []), next, "Bolt Tire · sales@bolttire.com"].join("\n"),
-    html: `<div style="font-family:Arial,sans-serif;max-width:640px;color:#111827"><h1 style="font-size:24px">Thank you for your order!</h1><p>We've received your payment.</p>${details.map(([key,value]) => `<p><strong>${html(key)}:</strong> ${html(value)}</p>`).join("")}<h2 style="font-size:18px">Tires</h2><ul>${tires.map(tire => `<li>${html(tire)}</li>`).join("")}</ul>${extras.length ? `<h2 style="font-size:18px">Additional items / services</h2><ul>${extras.map(item => `<li>${html(item)}</li>`).join("")}</ul>` : ""}<p>${html(next)}</p><p>Bolt Tire · <a href="mailto:sales@bolttire.com">sales@bolttire.com</a></p></div>`,
+    html: renderCustomerConfirmationEmail({ amount, orderNumber, details, tires, extras, next }),
   };
   const sent = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `customer-paid-checkout-${sessionId}` },

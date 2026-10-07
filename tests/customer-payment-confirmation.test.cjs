@@ -41,6 +41,13 @@ test('customer receipt includes paid total, stable order reference, both axles a
     assert.deepEqual(email.to,['customer@example.com']);assert.equal(email.reply_to,'sales@bolttire.com');
     for(const value of ['BT-38','$762.51','235/60R18','255/60R18','100UA3552','rear-part','Wheel service','pending confirmation','not a shipment','order-status update'])assert.ok(email.text.includes(value),value);
     assert.match(email.html,/&lt;script&gt;Customer&lt;\/script&gt;/);assert.doesNotMatch(email.html,/<script>/);
+    assert.match(email.html, /src="https:\/\/app\.bolttire\.com\/bolt-logo\.png"/);
+    assert.match(email.html, /alt="Bolt Tire"/);
+    assert.match(email.html, /role="presentation"/);
+    assert.match(email.html, /mailto:sales@bolttire\.com\?subject=Order%20BT-38/);
+    assert.match(email.html, /What happens next\?/);
+    assert.doesNotMatch(email.html, /<script|<iframe|display:grid|display:flex/);
+    for (const value of ['BT-38','$762.51','100UA3552','rear-part','pending confirmation','not a shipment']) assert.ok(email.html.includes(value),value);
     for(const value of ['PRIVATE OFFICE NOTES','PRIVATE SUPPLIER','/quotes/'])assert.ok(!email.text.includes(value));
     assert.equal(session.metadata.bolt_customer_payment_email,'accepted-customer-mail');
   });
