@@ -3,6 +3,18 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paidWebsiteOrder, websitePaymentFields } from "@/lib/paid-website-order";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
+import { sendCustomerPaymentConfirmation } from "@/lib/customer-payment-confirmation";
+
+async function notifyPaidCustomer(sessionId: string, quote: Parameters<typeof sendPaymentNotification>[1], option: Parameters<typeof sendPaymentNotification>[2], officeAlreadySent = false) {
+  // Wait for both attempts, even if one fails, so serverless cleanup cannot
+  // interrupt the other send. Each recipient has an independent durable receipt.
+  const results = await Promise.allSettled([
+    officeAlreadySent ? Promise.resolve() : sendPaymentNotification(sessionId, quote, option),
+    sendCustomerPaymentConfirmation(sessionId, quote, option),
+  ]);
+  const failure = results.find(result => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+}
 
 function valid(payload: string, header: string, secret: string) {
   const parts = Object.fromEntries(header.split(",").map((item) => item.split("=")));
@@ -40,7 +52,7 @@ export async function POST(request: Request) {
   if (paymentError) throw new Error(paymentError.message);
   Object.assign(quote, payment);
   if (quote.purchase_source !== "website") {
-    await sendPaymentNotification(session.id, quote, option);
+    await notifyPaidCustomer(session.id, quote, option);
     return NextResponse.json({ received: true });
   }
 
@@ -56,8 +68,8 @@ export async function POST(request: Request) {
       order = existing.data;
     } else if (orderError) throw new Error(orderError.message);
     if (!order) throw new Error("Paid order could not be saved");
+    await notifyPaidCustomer(session.id, quote, option, Boolean(order.payment_notification_sent_at));
     if (!order.payment_notification_sent_at) {
-      await sendPaymentNotification(session.id, quote, option);
       const notified = await admin.from("customer_orders").update({ payment_notification_sent_at: paidAt }).eq("id", order.id);
       if (notified.error) throw new Error(notified.error.message);
     }
@@ -65,7 +77,7 @@ export async function POST(request: Request) {
   }
 
   if (quote.converted_job_id) {
-    await sendPaymentNotification(session.id, quote, option);
+    await notifyPaidCustomer(session.id, quote, option);
     return NextResponse.json({ received: true, jobId: quote.converted_job_id });
   }
 
@@ -88,7 +100,7 @@ export async function POST(request: Request) {
   if (!jobId) throw new Error("Paid job could not be located");
   const linked = await admin.from("quotes").update({ status: "converted", converted_job_id: jobId, appointment_hold_expires_at: null, updated_at: paidAt }).eq("id", quote.id);
   if (linked.error) throw new Error(linked.error.message);
-  await sendPaymentNotification(session.id, quote, option);
+  await notifyPaidCustomer(session.id, quote, option);
   return NextResponse.json({ received: true, jobId });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Paid order could not be recorded" }, { status: 500 });

@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
 const {createHmac}=require('node:crypto');
-function loader(stubs={}){const cache=new Map();return function load(file){file=path.resolve(__dirname,'..',file);if(!path.extname(file))file+='.ts';if(cache.has(file))return cache.get(file).exports;const m=new Module(file,module);cache.set(file,m);m.paths=module.paths;m.require=id=>id==='server-only'?{}:Object.hasOwn(stubs,id)?stubs[id]:id.startsWith('@/')?load(id.slice(2)):id.startsWith('.')?load(path.resolve(path.dirname(file),id)):require(id);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);return m.exports;};}
+function loader(stubs={}){stubs={'@/lib/customer-payment-confirmation':{sendCustomerPaymentConfirmation:async()=>{}},...stubs};const cache=new Map();return function load(file){file=path.resolve(__dirname,'..',file);if(!path.extname(file))file+='.ts';if(cache.has(file))return cache.get(file).exports;const m=new Module(file,module);cache.set(file,m);m.paths=module.paths;m.require=id=>id==='server-only'?{}:Object.hasOwn(stubs,id)?stubs[id]:id.startsWith('@/')?load(id.slice(2)):id.startsWith('.')?load(path.resolve(path.dirname(file),id)):require(id);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);return m.exports;};}
 const option={id:'option',brand:'Goodyear',model:'Example',price_per_tire:90,supplier:'USAF',supplier_product_id:'1234'};
 const quote={id:'quote',quote_number:123,customer:'Example Person',contact_name:'Example Person',phone:'2015550123',email:'example@example.com',vehicle:'2020 Ford Transit',address:'123 Example St',quantity:4,tire_size:'275/65R18',installation_cost:100,service_call_fee:20,disposal_fee:20,ny_state_tire_fee:10,tax_exempt:true,amount_paid:510,stripe_sales_tax_amount:0,paid_at:'2026-09-28T12:00:00Z',discount_code_label:'EXAMPLE',discount_organization:'HPR',discount_amount:40,checkout_service:'tires_only',purchase_source:'website',selected_option_id:option.id,quote_options:[option]};
 // Small in-memory database exercises route behavior, including unique constraints.
@@ -58,6 +58,27 @@ test('paid staff quote sends a payment alert without automatically creating a jo
   assert.equal((await route.POST(signedEvent())).status,200);assert.equal(calls,1);
   assert.equal(db.tables.quotes[0].payment_status,'paid');assert.equal(db.tables.jobs.length,0);assert.equal(db.tables.customer_orders.length,0);
  }finally{if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
+});
+test('all paid checkout paths attempt customer confirmation, including office-already-notified orders',async()=>{
+ const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ try {for(const variant of ['staff','website','organization','converted','organization-notified']) {
+  const row={...quote,purchase_source:variant==='staff'?'staff':'website',discount_organization:variant.startsWith('organization')?'HPR':null,...(variant==='converted'?{converted_job_id:55}:{})};
+  const db=database({quotes:[row],customer_orders:variant==='organization-notified'?[{id:10,source_quote_id:quote.id,payment_notification_sent_at:'2026-10-01'}]:[]});
+  let customerCalls=0;
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async()=>{}},'@/lib/customer-payment-confirmation':{sendCustomerPaymentConfirmation:async(id,q,o)=>{customerCalls++;assert.equal(id,'cs_test_example');assert.equal(q.payment_status,'paid');assert.equal(o.id,'option');}}})('app/api/stripe/webhook/route');
+  assert.equal((await route.POST(signedEvent(false))).status,200);assert.equal(customerCalls,0);
+  assert.equal((await route.POST(signedEvent())).status,200,variant);assert.equal(customerCalls,1,variant);
+ }} finally {if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
+});
+test('customer mail failure retries without duplicating jobs; office failure still waits for customer attempt',async()=>{
+ const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ try {for(const failing of ['customer','office']) {
+  const db=database({quotes:[{...quote,discount_organization:null}]});let customerCalls=0,officeCalls=0;
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async()=>{officeCalls++;if(failing==='office'&&officeCalls===1)throw Error('Office mail failed');}},'@/lib/customer-payment-confirmation':{sendCustomerPaymentConfirmation:async()=>{await new Promise(resolve=>setImmediate(resolve));customerCalls++;if(failing==='customer'&&customerCalls===1)throw Error('Customer mail failed');}}})('app/api/stripe/webhook/route');
+  assert.equal((await route.POST(signedEvent())).status,500);assert.equal(customerCalls,1);assert.equal(officeCalls,1);
+  assert.equal((await route.POST(signedEvent())).status,200);assert.equal(customerCalls,2);
+  assert.equal(db.tables.jobs.length,1);assert.equal(db.tables.supplier_orders.length,0);
+ }} finally {if(previous===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=previous;}
 });
 test('previously notified organization purchase does not email again after job conversion',async()=>{
  const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
