@@ -14,6 +14,7 @@ import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
 import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
+import BluetoothLabelButton from "@/components/BluetoothLabelButton";
 
 type JobForm = {
   additional_items?: AdditionalItem[];
@@ -685,6 +686,7 @@ export default function EditJobPage() {
               >
                 🏷️ Print Tire Labels
               </button>
+              <BluetoothLabelButton style={labelButton} job={{id:String(id),customer:form.customer,jobNumber:form.po_number,moNumber:form.mo_number,serviceType:form.service_type,tires:form.tires,size:form.size,productNumber:form.tire_product_number,quantity:Number(form.qty)||1,vehicle:form.vehicle,scheduled:form.scheduled}} />
             </div>
           </div>
         </div>

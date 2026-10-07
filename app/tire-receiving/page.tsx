@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { flushSync } from "react-dom";
 import AppHeader from "@/components/AppHeader";
 import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
+import BluetoothLabelButton from "@/components/BluetoothLabelButton";
 import { supabase } from "@/lib/supabase";
 
 type ReceivingJob = {
@@ -161,6 +162,7 @@ export default function TireReceivingPage() {
                     <button type="button" style={printButton} disabled={updating} onClick={() => printLabels(job)}>
                       Print {Math.max(1, Number(job.qty) || 1)} Labels
                     </button>
+                    <BluetoothLabelButton disabled={updating} style={printButton} job={{id:job.id,customer:job.customer,facilityName:job.facility_name,jobNumber:job.po_number,moNumber:job.mo_number,serviceType:job.service_type,tires:job.tires,size:job.size,productNumber:job.tire_product_number,quantity:job.qty,vehicle:job.vehicle,scheduled:job.scheduled}} />
                     <button
                       type="button"
                       style={{ ...receivedButton, ...(updating ? disabledButton : {}) }}
