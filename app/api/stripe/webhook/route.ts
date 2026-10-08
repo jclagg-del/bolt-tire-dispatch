@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { paidWebsiteOrder, websitePaymentFields } from "@/lib/paid-website-order";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
 import { sendCustomerPaymentConfirmation } from "@/lib/customer-payment-confirmation";
+import { stripePaymentRequest } from "@/lib/stripe-payments";
+import { finalizeQuotePayment, type PaymentAttempt } from "@/lib/quote-payment-checkout";
 
 async function notifyPaidCustomer(sessionId: string, quote: Parameters<typeof sendPaymentNotification>[1], option: Parameters<typeof sendPaymentNotification>[2], officeAlreadySent = false) {
   // Wait for both attempts, even if one fails, so serverless cleanup cannot
@@ -32,25 +34,40 @@ export async function POST(request: Request) {
   if (!valid(payload, request.headers.get("stripe-signature") || "", secret)) return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   let event;
   try { event = JSON.parse(payload); } catch { return NextResponse.json({ error: "Invalid event" }, { status: 400 }); }
-  if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) || event.data.object.payment_status !== "paid") return NextResponse.json({ received: true });
-
-  const session = event.data.object;
+  let session = event.data.object;
+  const admin = createAdminClient();
+  let attempt: PaymentAttempt | null = null;
+  if (["payment_intent.succeeded","payment_intent.processing","payment_intent.payment_failed","payment_intent.canceled","payment_intent.requires_action","payment_intent.amount_capturable_updated"].includes(event.type)) {
+    if (!session.metadata?.bolt_payment_attempt) return NextResponse.json({received:true});
+    try {
+      const saved = await admin.from("quote_payment_attempts").select("*").eq("id",session.metadata.bolt_payment_attempt).single();
+      if (saved.error || !saved.data) throw new Error("Payment attempt not found");
+      attempt=saved.data;
+      // Events can be delivered out of order. Use current Stripe state and the
+      // locked attempt, never a stale 'processing' event to downgrade a payment.
+      let intent=await stripePaymentRequest(`payment_intents/${session.id}`);
+      intent=await finalizeQuotePayment(admin,attempt!,intent);
+      if(intent.status!=="succeeded")return NextResponse.json({received:true});
+      session={id:intent.id,payment_intent:intent.id,payment_status:"paid",amount_total:intent.amount_received,currency:intent.currency,total_details:{amount_tax:attempt!.tax_cents},metadata:intent.metadata};
+    } catch(error) {return NextResponse.json({error:error instanceof Error?error.message:"Payment status could not be saved"},{status:500});}
+  } else if (!["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) || session.payment_status !== "paid") return NextResponse.json({ received: true });
   const quoteId = session.metadata?.quote_id;
   if (!quoteId) return NextResponse.json({ received: true });
-  const admin = createAdminClient();
   try {
   const paidAt = new Date().toISOString();
   const amountPaid = Number(session.amount_total || 0) / 100;
   const salesTax = Number(session.total_details?.amount_tax || 0) / 100;
   const { data: quote, error: quoteError } = await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", quoteId).single();
   if (quoteError || !quote) throw new Error(quoteError?.message || "Paid quote not found");
-  const option = (quote.quote_options || []).find((item: { id: string }) => item.id === (session.metadata?.option_id || quote.selected_option_id));
+  if (quote.payment_status === "refunded") return NextResponse.json({ received: true });
+  let option = (quote.quote_options || []).find((item: { id: string }) => item.id === (session.metadata?.option_id || quote.selected_option_id));
   if (!option) throw new Error("Paid quote has no matching tire option");
   if (quote.stripe_payment_intent_id && quote.stripe_payment_intent_id !== session.payment_intent) throw new Error("A different payment already exists for this quote. Review payment before proceeding.");
-  const payment = { payment_status: "paid", amount_paid: amountPaid, stripe_sales_tax_amount: salesTax, paid_at: quote.paid_at || paidAt, stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null, selected_option_id: option.id, updated_at: paidAt };
+  const payment = { payment_status: "paid", amount_paid: amountPaid, stripe_sales_tax_amount: salesTax, paid_at: quote.paid_at || paidAt, stripe_payment_intent_id: typeof session.payment_intent === "string" ? session.payment_intent : null, selected_option_id: option.id, updated_at: paidAt, ...(attempt ? {payment_pricing_snapshot:attempt.snapshot,payment_funding:attempt.funding}: {}) };
   const { error: paymentError } = await admin.from("quotes").update(payment).eq("id", quoteId);
   if (paymentError) throw new Error(paymentError.message);
   Object.assign(quote, payment);
+  if(attempt){Object.assign(quote,attempt.snapshot.quote);option={...option,...attempt.snapshot.option};}
   if (quote.purchase_source !== "website") {
     await notifyPaidCustomer(session.id, quote, option);
     return NextResponse.json({ received: true });

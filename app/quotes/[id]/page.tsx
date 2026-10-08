@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { QuoteOption, QuoteStatus, quoteOptionTotal } from "@/lib/quotes";
 import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
 import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
+import { settledQuote } from "@/lib/quote-payment-pricing";
 
 type SavedQuote = {
   additional_items?: AdditionalItem[];
@@ -38,7 +39,7 @@ export default function QuoteDetailPage() {
     const { data, error } = await supabase.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", id).single();
     setLoading(false);
     if (error) { setMessage(error.message); return; }
-    const next = data as SavedQuote;
+    const next = settledQuote(data) as SavedQuote;
     next.quote_options = [...(next.quote_options || [])].sort((a, b) => a.sort_order - b.sort_order);
     setQuote(next);
   };

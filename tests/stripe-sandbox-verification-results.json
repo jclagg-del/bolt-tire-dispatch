@@ -1,0 +1,70 @@
+{
+  "verified_at": "2026-10-08T12:57:00Z",
+  "environment": "Stripe test mode only",
+  "production_checkout_changed": false,
+  "customer_emails_sent": false,
+  "base_amount_cents": 100000,
+  "cases": [
+    {"funding":"credit","amount_cents":103000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UO42yP9jgv8gmqF0io5ySFS"},
+    {"funding":"debit","amount_cents":100000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UO42zP9jgv8gmqF1pPd8tzt"},
+    {"funding":"prepaid","amount_cents":100000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UO430P9jgv8gmqF0UJHm9a0"},
+    {"funding":"us_bank_account","amount_cents":100000,"status":"processing","retry_same_intent":true,"intent":"pi_3UO431P9jgv8gmqF0gF57foK"}
+  ],
+  "tax_api_connected": true,
+  "manual_card_confirmation_api_fixture_only": true,
+  "manual_confirmation_browser_compatible": false,
+  "tax_hook_accepted": true,
+  "manual_confirmation_cases": [
+    {"funding":"credit","amount_cents":103000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UO4MSP9jgv8gmqF0ZiAm7Dw"},
+    {"funding":"debit","amount_cents":100000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UO4MTP9jgv8gmqF0rRfoVdb"},
+    {"funding":"prepaid","amount_cents":100000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UO4MTP9jgv8gmqF1526UT5V"},
+    {"funding":"us_bank_account","amount_cents":100000,"status":"processing","retry_same_intent":true,"intent":"pi_3UO4MUP9jgv8gmqF0BNt89oc"}
+  ],
+  "tax_hook_test_intent": "pi_3UO4MWP9jgv8gmqF11EeG0Bn",
+  "tax_rate_validated": true,
+  "tax_validation_scope": "One taxable NYC sandbox fixture only; not live configuration or all invoice tax treatments.",
+  "tax_test_result": {
+    "registration": "taxreg_1UOGqQP9jgv8gmqFvZtivOSe",
+    "calculation": "taxcalc_1UOGrZP9jgv8gmqFDsayFQYF",
+    "subtotal_cents": 103000,
+    "rate_percent": "8.875",
+    "tax_cents": 9141,
+    "total_cents": 112141,
+    "intent": "pi_3UOGraP9jgv8gmqF0WmDAL6n",
+    "status": "succeeded",
+    "exact_amount_received_verified": true
+  },
+  "oct8_recheck": [
+    {"funding":"credit","amount_cents":103000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UOGrVP9jgv8gmqF18BMKpAP"},
+    {"funding":"debit","amount_cents":100000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UOGrWP9jgv8gmqF0Bgsbcfs"},
+    {"funding":"prepaid","amount_cents":100000,"status":"succeeded","retry_same_intent":true,"intent":"pi_3UOGrYP9jgv8gmqF1NPiu9UW"},
+    {"funding":"us_bank_account","amount_cents":100000,"status":"processing","retry_same_intent":true,"intent":"pi_3UOGrZP9jgv8gmqF0VEnHxwH"}
+  ],
+  "browser_confirmation_verified": true,
+  "browser_verification_scope": "Standalone Chrome sandbox verifier, not actual quote/website end-to-end. Automatic confirmation with manual card capture and matching Elements captureMethod.",
+  "actual_app_e2e_verified": false,
+  "browser_card_cases": [
+    {"funding":"credit","three_d_secure_completed":true,"amount_cents":103000,"status":"succeeded","intent":"pi_3UOJRfP9jgv8gmqF0IhTdAcw"},
+    {"funding":"debit","amount_cents":100000,"status":"succeeded","intent":"pi_3UOJWrP9jgv8gmqF0wNzIo3E"},
+    {"funding":"prepaid","amount_cents":100000,"status":"succeeded","intent":"pi_3UOJXQP9jgv8gmqF0Lowv1MW"},
+    {"funding":"credit","amount_cents":103000,"status":"declined","reason":"insufficient_funds","test_card_last4":"9995"}
+  ],
+  "browser_ach_case": {
+    "funding":"us_bank_account",
+    "amount_cents":100000,
+    "status":"requires_action",
+    "intent":"pi_3UOJb9P9jgv8gmqF0JNLVcHU",
+    "verification":"Stripe Test Bank manual entry; microdeposit verification still required",
+    "settlement_verified":false
+  },
+  "permissions_unchanged_after_creation": true,
+  "remaining": [
+    "Verify bank ConfirmationToken flow, recovery and binding in the actual application",
+    "Browser-verify locally implemented quote and website dual-price UI and secure payment integration",
+    "Verify tax treatment, configured tax registrations, and invoice reconciliation",
+    "End-to-end verify implemented ACH pending/failure/success handling; unit tests pass and redirects no longer imply paid",
+    "Configure Stripe PaymentIntent event delivery; application webhook, retry and duplicate-prevention tests pass locally",
+    "Apply the migration after rollout gates are satisfied; isolated PostgreSQL migration and state-transition tests pass",
+    "Complete end-to-end testing before enabling live checkout"
+  ]
+}

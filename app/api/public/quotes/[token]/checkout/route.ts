@@ -4,6 +4,7 @@ import {shopCustomerError} from "@/lib/shop-customer";
 import {lookupDiscount} from "@/lib/discounts-server";
 import {quoteCheckoutDetails,quoteCheckoutDetailsError} from "@/lib/quote-checkout-details";
 import { AdditionalItem, additionalItemAmount, additionalItemsError } from "@/lib/additional-items";
+import { quotePaymentPrice } from "@/lib/quote-payment-pricing";
 
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
   const key=process.env.STRIPE_SECRET_KEY;
@@ -45,6 +46,14 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
     if(saved.error)return NextResponse.json({error:"Your information could not be saved. Please try again before paying."},{status:500});
     if(!saved.data)return NextResponse.json({error:"This quote changed in another window. Refresh before paying."},{status:409});
     Object.assign(q,updates);
+  }
+
+  if(q.payment_pricing_version===1){
+    if(q.stripe_checkout_session_id)return NextResponse.json({error:"This quote already has a legacy payment session. Contact Bolt Tire."},{status:409});
+    try {
+      const regular=quotePaymentPrice(q,o,"regular"), discounted=quotePaymentPrice(q,o,"discounted");
+      return NextResponse.json({paymentMode:"methods",publishableKey,optionId:o.id,regularCents:regular.subtotalCents,discountedCents:discounted.subtotalCents,serviceAddress:q.address});
+    } catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Saved prices could not be verified."},{status:400})}
   }
 
   const taxable=Number(o.price_per_tire)*Number(q.quantity)+Number(o.rear_price_per_tire||0)*Number(q.rear_quantity||0)+Number(q.installation_cost)+Number(q.service_call_fee)+Number(q.disposal_fee);

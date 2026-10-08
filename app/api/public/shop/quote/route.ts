@@ -7,6 +7,7 @@ import { availableShopTimes } from "@/lib/shop-availability";
 import { normalizeShopCustomer, shopCustomerError } from "@/lib/shop-customer";
 import { lookupDiscount } from "@/lib/discounts-server";
 import { discountedTirePrice } from "@/lib/discounts";
+import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 
 export async function POST(request: Request) {
   try {
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
     const discountAmount = Math.round(((front.quotePrice - frontPrice) * (staggered ? 2 : quoteQuantity) + (staggered && rear ? (rear.quotePrice - (rearPrice || 0)) * 2 : 0)) * 100) / 100;
     const disposalEach = category === "truck" ? settings.truck_disposal_fee : settings.passenger_disposal_fee;
     const { data: quote, error } = await admin.from("quotes").insert({
+      ...(paymentMethodPricingEnabled() ? { payment_pricing_version: 1 } : {}),
       status: "approved", customer: name, contact_name: name, phone: phone || null, email: email || null,
       vehicle, address,
       tire_size: front.size || query, quantity: staggered ? 2 : quoteQuantity,

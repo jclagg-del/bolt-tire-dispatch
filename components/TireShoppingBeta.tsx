@@ -10,6 +10,8 @@ import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import { hasTireStock, matchesTireStock } from "@/lib/tire-stock-filter";
 import SelectedQuoteTires from "@/components/SelectedQuoteTires";
 import TireResultControls from "@/components/TireResultControls";
+import CustomerTirePricing from "@/components/CustomerTirePricing";
+import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 
@@ -1484,12 +1486,12 @@ export default function TireShoppingBeta({
                         <small>{supplierName(tire.supplier)}{tire.qaOnly ? " QA test" : ""} · {tire.atdProductNumber}</small>
                       </>
                     )}
-                    <div className="tire-beta-customer-price">
+                    {!internal && paymentMethodPricingEnabled() ? <CustomerTirePricing price={tire.quotePrice} quantity={quantity} category={tire.serviceCategory} split={staggered} /> : <div className="tire-beta-customer-price">
                       <span>{internal ? "Current tire price" : "Tire price"}</span>
                       <strong>
                         ${tire.quotePrice.toFixed(2)} <small>each</small>
                       </strong>
-                    </div>
+                    </div>}
                     {internal && <div className="tire-beta-pricing-basis">
                       <span>Suggested price (markup) <strong>{tire.suggestedPrice != null ? `$${tire.suggestedPrice.toFixed(2)} / tire` : "Unavailable"}</strong></span>
                       <span>Supplier-reported MAP <strong>{tire.map != null && tire.map > 0 ? `$${tire.map.toFixed(2)} / tire` : "Not provided"}</strong></span>
@@ -1499,7 +1501,7 @@ export default function TireShoppingBeta({
                         <p>The current tire price above is still used for quotes and customer totals. This comparison does not change it.</p>
                       </details>
                     </div>}
-                    {!staggered && (
+                    {!staggered && (internal || !paymentMethodPricingEnabled()) && (
                       <div className="tire-beta-total-price">
                         <span>Estimated total for {quantity}</span>
                         <strong>

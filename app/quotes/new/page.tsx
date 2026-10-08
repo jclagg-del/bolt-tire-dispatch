@@ -1,4 +1,5 @@
 "use client";
+import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -206,7 +207,7 @@ export default function NewQuotePage() {
     const existingId = editId || savedQuoteId.current;
     const quoteRequest = existingId
       ? supabase.from("quotes").update(quoteValues).eq("id", existingId).select("id,selected_option_id").single()
-      : supabase.from("quotes").insert(quoteValues).select("id,selected_option_id").single();
+      : supabase.from("quotes").insert({...quoteValues,...(paymentMethodPricingEnabled()?{payment_pricing_version:1}:{})}).select("id,selected_option_id").single();
     const { data: quote, error } = await quoteRequest;
     if (error || !quote) { setSaving(false); return alert(`Could not save quote: ${error?.message || "Unknown error"}`); }
     savedQuoteId.current = quote.id;

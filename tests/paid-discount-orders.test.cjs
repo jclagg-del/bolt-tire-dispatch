@@ -28,6 +28,50 @@ test('paid order snapshot keeps payment separate from supplier fulfillment and p
  assert.equal(paidWebsiteOrder({...quote,discount_organization:'KSS'},option).customer,'Kingdom Support Services');
 });
 function signedEvent(paid=true,type='checkout.session.completed'){const body=JSON.stringify({type,data:{object:{id:'cs_test_example',payment_status:paid?'paid':'unpaid',metadata:{quote_id:'quote',option_id:'option'},amount_total:51000,total_details:{amount_tax:0},payment_intent:'pi_example'}}});const t=Math.floor(Date.now()/1000);return new Request('https://example.test/webhook',{method:'POST',headers:{'stripe-signature':`t=${t},v1=${createHmac('sha256','unit-test-secret').update(`${t}.${body}`).digest('hex')}`},body});}
+function signedIntent(type,object){const body=JSON.stringify({type,data:{object}}),t=Math.floor(Date.now()/1000);return new Request('https://example.test/webhook',{method:'POST',headers:{'stripe-signature':`t=${t},v1=${createHmac('sha256','unit-test-secret').update(`${t}.${body}`).digest('hex')}`},body});}
+test('verified PaymentIntent events preserve pending ACH, settle snapshots once and ignore stale event states',async()=>{
+ const prior=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ try {for(const organization of [null,'HPR']) {
+  const snapshot=loader()('lib/quote-payment-pricing').quotePaymentPrice(quote,option,'regular');
+  const attempt={id:'attempt',quote_id:quote.id,option_id:option.id,state:'processing',funding:'us_bank_account',submitted_at:new Date().toISOString(),amount_cents:snapshot.subtotalCents,tax_cents:0,snapshot};
+  const db=database({quotes:[{...quote,payment_pricing_version:1,payment_status:'pending',discount_organization:organization}],quote_payment_attempts:[attempt]});
+  db.rpc=async(name,args)=>{assert.equal(name,'sync_quote_payment');const saved=db.tables.quote_payment_attempts[0];Object.assign(saved,{state:args.p_state,stripe_payment_intent_id:args.p_intent_id,stripe_payment_method_id:args.p_method_id});return{data:structuredClone(saved)}};
+  let intent={id:'pi_verified',object:'payment_intent',livemode:false,status:'processing',amount:snapshot.subtotalCents,amount_received:0,currency:'usd',payment_method:'pm_bound',metadata:{quote_id:quote.id,option_id:option.id,bolt_payment_attempt:attempt.id}};
+  let messages=0;
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/stripe-payments':{stripePaymentRequest:async url=>{assert.equal(url,'payment_intents/pi_verified');return structuredClone(intent)}},'@/lib/payment-notifications':{sendPaymentNotification:async(id,paid,o)=>{messages++;assert.equal(id,'pi_verified');assert.equal(paid.payment_status,'paid');assert.equal(paid.amount_paid,snapshot.subtotalCents/100);assert.equal(o.price_per_tire,snapshot.option.price_per_tire);assert.equal(paid.installation_cost,snapshot.quote.installation_cost)}}})('app/api/stripe/webhook/route');
+  assert.equal((await route.POST(signedIntent('payment_intent.processing',intent))).status,200);assert.equal(messages,0);assert.equal(db.tables.jobs.length,0);assert.equal(db.tables.customer_orders.length,0);assert.equal(db.tables.quotes[0].payment_status,'pending');
+  intent={...intent,status:'succeeded',amount_received:intent.amount};
+  for(const type of ['payment_intent.succeeded','payment_intent.processing','payment_intent.payment_failed']) assert.equal((await route.POST(signedIntent(type,{...intent,status:'processing'}))).status,200);
+  assert.equal(db.tables.quotes[0].payment_status,'paid');assert.deepEqual(db.tables.quotes[0].payment_pricing_snapshot,snapshot);
+  assert.equal(db.tables.quotes[0].quote_options[0].price_per_tire,option.price_per_tire,'Original quote base price is not rewritten');
+  assert.equal(db.tables.jobs.length,organization?0:1);assert.equal(db.tables.customer_orders.length,organization?1:0);assert.equal(db.tables.supplier_orders.length,0);
+  if(!organization){assert.equal(db.tables.jobs[0].price_tires,snapshot.option.price_per_tire);assert.equal(db.tables.jobs[0].job_total,snapshot.subtotalCents/100);}
+ }}finally{if(prior===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=prior;}
+});
+test('authorization webhook captures the verified card without the browser, then fulfills only once',async()=>{
+ const prior=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ try {
+  const snapshot=loader()('lib/quote-payment-pricing').quotePaymentPrice(quote,option,'regular');
+  const attempt={id:'capture-attempt',quote_id:quote.id,option_id:option.id,state:'requires_action',funding:'credit',payment_method_type:'card',stripe_payment_intent_id:'pi_capture',stripe_payment_method_id:'pm_bound',amount_cents:snapshot.subtotalCents,tax_cents:0,snapshot};
+  const db=database({quotes:[{...quote,payment_pricing_version:1,payment_status:'pending'}],quote_payment_attempts:[attempt]});
+  db.rpc=async(name,args)=>{assert.equal(name,'sync_quote_payment');const saved=db.tables.quote_payment_attempts[0];Object.assign(saved,{state:args.p_state,stripe_payment_intent_id:args.p_intent_id,stripe_payment_method_id:args.p_method_id});return{data:structuredClone(saved)}};
+  let intent={id:'pi_capture',object:'payment_intent',livemode:false,status:'requires_capture',capture_method:'manual',amount:snapshot.subtotalCents,amount_capturable:snapshot.subtotalCents,amount_received:0,currency:'usd',payment_method:'pm_bound',metadata:{quote_id:quote.id,option_id:option.id,bolt_payment_attempt:attempt.id}};
+  let captures=0,messages=0;
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/stripe-payments':{stripePaymentRequest:async(url,body,key)=>{
+   if(url==='payment_methods/pm_bound')return{id:'pm_bound',livemode:false,type:'card',card:{funding:'credit'}};
+   if(url==='payment_intents/pi_capture/capture'){
+    assert.equal(db.tables.quotes[0].payment_status,'pending');assert.equal(db.tables.customer_orders.length,0);assert.equal(messages,0);
+    assert.equal(key,'quote-capture-capture-attempt');assert.equal(Number(body.get('amount_to_capture')),intent.amount);
+    captures++;intent={...intent,status:'succeeded',amount_received:intent.amount,amount_capturable:0};
+   } else assert.equal(url,'payment_intents/pi_capture');
+   return structuredClone(intent);
+  }},'@/lib/payment-notifications':{sendPaymentNotification:async()=>{messages++}}})('app/api/stripe/webhook/route');
+  const authorization=structuredClone(intent);
+  for(let i=0;i<2;i++)assert.equal((await route.POST(signedIntent('payment_intent.amount_capturable_updated',authorization))).status,200);
+  assert.equal(captures,1);assert.equal(messages,1);assert.equal(db.tables.customer_orders.length,1);
+  assert.equal(db.tables.quotes[0].payment_status,'paid');assert.equal(db.tables.supplier_orders.length,0);
+ }finally{if(prior===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=prior;}
+});
 test('signed paid webhook creates one visible paid order, not a job or supplier purchase, even on retries',async()=>{
  const previous=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';const db=database();let notifications=0;
  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async(sessionId,paidQuote)=>{notifications++;assert.equal(paidQuote.payment_status,'paid');assert.equal(sessionId,'cs_test_example');}}})('app/api/stripe/webhook/route');

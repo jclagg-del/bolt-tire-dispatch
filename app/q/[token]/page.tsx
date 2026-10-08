@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import EmbeddedStripeCheckout from "@/components/EmbeddedStripeCheckout";
+import PaymentMethodCheckout from "@/components/PaymentMethodCheckout";
+import { quotePaymentPrice } from "@/lib/quote-payment-pricing";
 import QuoteCheckoutInformation from "@/components/QuoteCheckoutInformation";
 import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
 import { AdditionalItem, additionalItemAmount, additionalItemsTotals } from "@/lib/additional-items";
@@ -27,6 +29,7 @@ type Option = {
   sort_order: number;
 };
 type Quote = {
+  payment_pricing_version?: number | null;
   additional_items?: AdditionalItem[];
   quote_number: number;
   customer: string;
@@ -54,6 +57,7 @@ type Quote = {
   expires_at: string | null;
   payment_status: string;
   amount_paid: number | null;
+  stripe_sales_tax_amount?: number | null;
   requested_date: string | null;
   requested_time: string | null;
   quote_options: Option[];
@@ -82,7 +86,7 @@ function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
           {q.tire_size || "Size TBD"} · Qty {q.quantity}
         </p>
         <div className="quote-price-each">
-          ${Number(option.price_per_tire).toFixed(2)} <span>per tire</span>
+          {q.payment_pricing_version === 1 && q.payment_status !== "paid" ? <>Credit ${quotePaymentPrice(q, option, "regular").option.price_per_tire.toFixed(2)} <span>per tire</span><small style={{display:"block"}}>ACH / debit / prepaid: ${Number(option.price_per_tire).toFixed(2)} per tire</small></> : <>${Number(option.price_per_tire).toFixed(2)} <span>per tire</span></>}
         </div>
       </div>
       {split ? (
@@ -103,7 +107,7 @@ function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
             {q.rear_tire_size || "Size TBD"} · Qty {q.rear_quantity || 0}
           </p>
           <div className="quote-price-each">
-            ${Number(option.rear_price_per_tire || 0).toFixed(2)} <span>per tire</span>
+            {q.payment_pricing_version === 1 && q.payment_status !== "paid" ? <>Credit ${Number(quotePaymentPrice(q, option, "regular").option.rear_price_per_tire).toFixed(2)} <span>per tire</span><small style={{display:"block"}}>ACH / debit / prepaid: ${Number(option.rear_price_per_tire || 0).toFixed(2)} per tire</small></> : <>${Number(option.rear_price_per_tire || 0).toFixed(2)} <span>per tire</span></>}
           </div>
         </div>
       ) : null}
@@ -141,8 +145,13 @@ export default function PublicQuote() {
   const [error, setError] = useState("");
   const [paying, setPaying] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<{
-    clientSecret: string;
+    clientSecret?: string;
     publishableKey: string;
+    paymentMode?: string;
+    optionId?: string;
+    regularCents?: number;
+    discountedCents?: number;
+    serviceAddress?: string | null;
   } | null>(null);
   const [details, setDetails] = useState(quoteCheckoutDetails({}));
   useEffect(() => {
@@ -159,7 +168,7 @@ export default function PublicQuote() {
       .catch((e) => setError(e.message));
   }, [token]);
   const pay = async (id: string) => {
-    if (!q || paying || checkout) return;
+    if (!q || paying || checkout || (search.get("payment") && q.payment_pricing_version !== 1)) return;
     if (q.purchase_source !== "website") {
       const message = quoteCheckoutDetailsError(details);
       if (message) {
@@ -197,13 +206,26 @@ export default function PublicQuote() {
     }
   };
   useEffect(() => {
-    if (!q || q.purchase_source !== "website" || !purchase || q.payment_status === "paid" || checkout || paying)
+    if (!q || q.purchase_source !== "website" || !purchase || q.payment_status === "paid" || checkout || paying || (search.get("payment") && q.payment_pricing_version !== 1))
       return;
     const option =
       q.quote_options.find((item) => item.id === q.selected_option_id) ||
       q.quote_options[0];
     if (option) pay(option.id);
   }, [q, purchase]);
+  useEffect(() => {
+    if (!search.get("payment") || q?.payment_status === "paid") return;
+    let stopped = false;
+    const timer = setInterval(() => {
+      fetch(`/api/public/quotes/${token}`).then(async response => {
+        if (!response.ok || stopped) return;
+        const current = await response.json();
+        if (!stopped) setQ(current);
+        if (current.payment_status === "paid") clearInterval(timer);
+      }).catch(() => {});
+    }, 4000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [token, q?.payment_status, search]);
   if (error && !q)
     return (
       <main className="public-quote-page">
@@ -216,12 +238,12 @@ export default function PublicQuote() {
         <div className="quote-empty">Loading...</div>
       </main>
     );
-  const paid =
-    q.payment_status === "paid" || search.get("payment") === "success";
+  // A return URL is not proof of payment, especially for delayed ACH payments.
+  const paid = q.payment_status === "paid";
   const chosen =
     q.quote_options.find((o) => o.id === q.selected_option_id) ||
     q.quote_options[0];
-  const options = purchase && chosen ? [chosen] : q.quote_options;
+  const options = (purchase || paid) && chosen ? [chosen] : q.quote_options;
   const information = !paid && q.purchase_source !== "website" ? <QuoteCheckoutInformation value={details} onChange={value => { setDetails(value); setError(""); }} disabled={Boolean(paying || checkout)} /> : null;
   if (purchase)
     return (
@@ -240,12 +262,14 @@ export default function PublicQuote() {
         </header>
         {information}
         {error && <div role="alert" className="quote-error">{error}</div>}
+        {!paid && search.get("payment") && q.payment_pricing_version !== 1 && <p role="status" className="quote-message">Checking payment confirmation. A submitted bank transfer may still be pending. Please do not submit another payment.</p>}
         {paid ? (
           <div className="quote-paid-banner">
             <strong>Thank you! Your paid order is confirmed.</strong>
+            {q.amount_paid != null && <span>Amount paid: ${Number(q.amount_paid).toFixed(2)}{q.stripe_sales_tax_amount != null ? ` · Sales tax included: $${Number(q.stripe_sales_tax_amount).toFixed(2)}` : ""}</span>}
             <span>
               {q.requested_date && q.requested_time
-                ? `Appointment: ${new Date(`${q.requested_date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${new Date(`2000-01-01T${q.requested_time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}.`
+                ? `Requested appointment: ${new Date(`${q.requested_date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${new Date(`2000-01-01T${q.requested_time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}. Bolt Tire will confirm your service time.`
                 : "Bolt Tire will contact you with pickup or delivery details."}
             </span>
           </div>
@@ -277,18 +301,19 @@ export default function PublicQuote() {
                 </div>
                 {(q.additional_items || []).map((item, index) => <div key={index}><dt>{item.description}<small style={{ display: "block" }}>{item.quantity} × ${item.unit_price.toFixed(2)}{!item.taxable ? " · Non-taxable" : ""}</small></dt><dd>${additionalItemAmount(item).toFixed(2)}</dd></div>)}
                 <div className="total">
-                  <dt>Subtotal before sales tax</dt>
+                  <dt>{q.payment_pricing_version === 1 ? "ACH / debit subtotal before sales tax" : "Subtotal before sales tax"}</dt>
                   <dd>${total(q, chosen, false).toFixed(2)}</dd>
                 </div>
               </dl>
+              {q.payment_pricing_version === 1 && <p><strong>Credit subtotal: ${(quotePaymentPrice(q, chosen, "regular").subtotalCents / 100).toFixed(2)}</strong><br />ACH/debit/prepaid subtotal: ${(quotePaymentPrice(q, chosen, "discounted").subtotalCents / 100).toFixed(2)}</p>}
               <small>
-                Stripe calculates final sales tax from your billing address.
+                {q.tax_exempt ? "Your approved sales-tax exemption applies to tires and services." : q.payment_pricing_version === 1 ? "Stripe calculates final sales tax from your confirmed service / delivery address." : "Stripe calculates final sales tax from your billing address."}
               </small>
             </aside>
             <section className="direct-payment">
-              {checkout ? (
+              {checkout?.paymentMode === "methods" ? <PaymentMethodCheckout token={token} publishableKey={checkout.publishableKey} optionId={checkout.optionId!} regularCents={checkout.regularCents!} discountedCents={checkout.discountedCents!} serviceAddress={checkout.serviceAddress} onComplete={() => location.reload()} /> : checkout?.clientSecret ? (
                 <EmbeddedStripeCheckout
-                  {...checkout}
+                  publishableKey={checkout.publishableKey} clientSecret={checkout.clientSecret}
                   onComplete={() => {
                     location.href = `/q/${token}?purchase=1&payment=success`;
                   }}
@@ -332,6 +357,7 @@ export default function PublicQuote() {
       {paid ? (
         <div className="quote-paid-banner">
           <strong>Thank you!</strong>
+          {q.amount_paid != null && <span>Amount paid: ${Number(q.amount_paid).toFixed(2)}{q.stripe_sales_tax_amount != null ? ` · Sales tax included: $${Number(q.stripe_sales_tax_amount).toFixed(2)}` : ""}</span>}
           <span>
             Your payment was received. Bolt Tire will contact you to confirm
             scheduling.
@@ -385,12 +411,13 @@ export default function PublicQuote() {
               <p className="quote-highlights">{o.highlights}</p>
             ) : null}
             <div className="quote-installed-total">
-              <span>{purchase ? "Order total" : "Installed total"}</span>
-              <strong>${total(q, o).toFixed(2)}</strong>
+              <span>{paid && q.amount_paid != null ? "Total paid" : q.payment_pricing_version === 1 && !paid ? "Credit total (estimated tax)" : purchase ? "Order total" : "Installed total"}</span>
+              <strong>${(paid && q.amount_paid != null ? Number(q.amount_paid) : q.payment_pricing_version === 1 && !paid ? (() => { const p=quotePaymentPrice(q,o,"regular"); return (p.subtotalCents+(q.tax_exempt?0:Math.round(p.taxableCents*Number(q.sales_tax_rate)/100)))/100; })() : total(q, o)).toFixed(2)}</strong>
             </div>
+            {q.payment_pricing_version === 1 && !paid && <p>ACH / debit / prepaid: <strong>${total(q,o).toFixed(2)}</strong><br /><small>Final tax and payment type verified before payment.</small></p>}
             <button
               className="quote-select-button"
-              disabled={paid || Boolean(paying) || Boolean(checkout)}
+              disabled={paid || Boolean(paying) || Boolean(checkout) || Boolean(search.get("payment") && q.payment_pricing_version !== 1)}
               onClick={() => pay(o.id)}
             >
               {paid
@@ -408,6 +435,8 @@ export default function PublicQuote() {
       </section>
       <section className="quote-form-card">
         <h2>{purchase ? "Order details" : "Included in every option"}</h2>
+        {q.payment_pricing_version === 1 && !paid && <p>Itemized service prices below are ACH / debit / prepaid prices. Both complete payment totals are shown above.</p>}
+        {!paid && search.get("payment") && q.payment_pricing_version !== 1 && <p role="status">Checking payment confirmation. A submitted bank transfer may still be pending. Please do not submit another payment.</p>}
         <AdditionalItemsSummary items={q.additional_items} />
         {q.discount_code_label && <p>Discount code {q.discount_code_label}: ${Number(q.discount_amount || 0).toFixed(2)} tire savings included in the prices above.{q.discount_organization ? ` Organization: ${q.discount_organization}.` : ""}</p>}
         <div className="quote-fee-summary">
@@ -431,14 +460,14 @@ export default function PublicQuote() {
           <span>
             Sales tax{" "}
             <strong>
-              {q.tax_exempt ? "Exempt" : `${Number(q.sales_tax_rate)}%`}
+              {paid && q.stripe_sales_tax_amount != null ? `$${Number(q.stripe_sales_tax_amount).toFixed(2)}` : q.tax_exempt ? "Exempt" : `${Number(q.sales_tax_rate)}%`}
             </strong>
           </span>
         </div>
       </section>
-      {checkout && !paid ? (
+      {checkout?.paymentMode === "methods" && !paid ? <PaymentMethodCheckout token={token} publishableKey={checkout.publishableKey} optionId={checkout.optionId!} regularCents={checkout.regularCents!} discountedCents={checkout.discountedCents!} serviceAddress={checkout.serviceAddress} onComplete={() => location.reload()} /> : checkout?.clientSecret && !paid ? (
         <EmbeddedStripeCheckout
-          {...checkout}
+          publishableKey={checkout.publishableKey} clientSecret={checkout.clientSecret}
           onComplete={() => {
             location.href = `/q/${token}?${purchase ? "purchase=1&" : ""}payment=success`;
           }}

@@ -9,6 +9,12 @@ function load(file) {
   return m.exports;
 }
 const { sendCustomerPaymentConfirmation: send } = load('lib/customer-payment-confirmation');
+test('paid checkout keeps the requested appointment subject to confirmation',()=>{
+  const page=fs.readFileSync(path.resolve(__dirname,'../app/q/[token]/page.tsx'),'utf8');
+  assert.match(page,/Requested appointment:/);
+  assert.match(page,/Bolt Tire will confirm your service time/);
+  assert.doesNotMatch(page,/`Appointment:/);
+});
 const quote = { id:'quote-1', quote_number:38, customer:'<script>Customer</script>', email:'customer@example.com', phone:'2015550123', vehicle:'2017 Acura RDX', address:'123 Example St', quantity:2, tire_size:'235/60R18', rear_quantity:2, rear_tire_size:'255/60R18', requested_date:'2026-10-10', requested_time:'09:30', notes:'PRIVATE OFFICE NOTES', additional_items:[{quantity:1,description:'Wheel service <front>',unit_price:20}], purchase_source:'website' };
 const option = { id:'option',brand:'GT Radial',model:'Maxtour LX',supplier:'PRIVATE SUPPLIER',supplier_product_id:'100UA3552',price_per_tire:120,rear_model:'Rear tire',rear_price_per_tire:130,rear_supplier_product_id:'rear-part' };
 async function mock(run, tweaks={}) {
@@ -24,7 +30,7 @@ async function mock(run, tweaks={}) {
       if(emails.has(key))assert.equal(emails.get(key),options.body);
       emails.set(key,options.body);return Response.json({id:'accepted-customer-mail'});
     }
-    assert.equal(url,'https://api.stripe.com/v1/checkout/sessions/cs_test_example');
+    assert.equal(url,tweaks.intent?'https://api.stripe.com/v1/payment_intents/pi_example':'https://api.stripe.com/v1/checkout/sessions/cs_test_example');
     if(options.method==='POST') {
       assert.deepEqual([...options.body.keys()],['metadata[bolt_customer_payment_email]']);
       if(receiptFailures-->0)return Response.json({}, {status:503});
@@ -82,4 +88,10 @@ test('send failure and receipt-write failure remain retryable without duplicate 
     await assert.rejects(send('cs_test_example',quote,option),/Could not save/);
     await send('cs_test_example',quote,option);assert.equal(emails.size,1);assert.ok(session.metadata.bolt_customer_payment_email);
   },{receiptFailures:1});
+});
+test('PaymentIntent receipts send once only after exact settlement; pending or failed ACH sends nothing',async()=>{
+  for(const status of ['processing','requires_payment_method','canceled','succeeded'])await mock(async({emails})=>{
+    if(status!=='succeeded'){await assert.rejects(send('pi_example',quote,option));assert.equal(emails.size,0);}
+    else{await send('pi_example',quote,option);await send('pi_example',quote,option);assert.equal(emails.size,1);assert.match(JSON.parse([...emails.values()][0]).text,/\$762\.51/);}
+  },{intent:true,session:{object:'payment_intent',status,amount:76251,amount_received:status==='succeeded'?76251:0}});
 });

@@ -86,6 +86,19 @@ test('staff and both customer quote views show the same extras and tax-inclusive
     for(const text of ['TPMS sensor','85.00','Additional service','30.00',surface==='direct'?'639.00':'686.92']) assert.ok(html.includes(text),`${surface}: ${text}`);
   }
 });
+test('paid quote and website receipts show collected tax and actual payment instead of stale estimates', () => {
+  const quote={quote_number:6,customer:'QA',quantity:4,installation_cost:103,service_call_fee:0,disposal_fee:14.42,ny_state_tire_fee:10,sales_tax_rate:0,tax_exempt:false,additional_items:[],payment_pricing_version:1,payment_status:'paid',amount_paid:624.28,stripe_sales_tax_amount:48.81,selected_option_id:'chosen',quote_options:[{id:'chosen',brand:'Paid tire',model:'Selected',price_per_tire:103},{id:'other',brand:'Unpurchased tire',model:'Other',price_per_tire:200}]};
+  for (const purchase of [false,true]) {
+    let index=0;
+    const Page=loader({react:{...React,useEffect(){},useState:initial=>[index++===0?quote:initial,()=>{}]},'next/navigation':{useParams:()=>({token:'test'}),useSearchParams:()=>new URLSearchParams(purchase?'purchase=1':'')},'@/lib/supabase':{supabase:{}}})('app/q/[token]/page').default;
+    const html=renderToStaticMarkup(React.createElement(Page));
+    assert.ok(html.includes('Amount paid: $624.28'));
+    assert.ok(html.includes('Sales tax included: $48.81'));
+    assert.ok(!html.includes('Unpurchased tire'));
+    assert.ok(!html.includes('0%'));
+    if (!purchase) assert.ok(html.includes('Total paid'));
+  }
+});
 test('invoice route fails before any external writes for an unmapped extra and sends mapped lines once', async () => {
   for (const [mapped, modernCatalog] of [[false,false],[true,false],[true,true]]) {
     const job={id:1,complete:true,customer:'Example',qty:4,price_tires:100,installation_cost:100,tire_disposal_fee:0,ny_state_tire_fee:10,additional_items:items};

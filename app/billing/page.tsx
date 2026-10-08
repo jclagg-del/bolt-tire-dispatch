@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
+import QuarterlyTaxReport from "@/components/QuarterlyTaxReport";
 
 type BillingJob = {
   id: string | number;
@@ -261,6 +262,7 @@ export default function BillingPage() {
           </p>
         </div>
 
+        <QuarterlyTaxReport />
         <div style={quickBooksConnected ? connectedCard : connectCard}>
           <div>
             <strong>{quickBooksConnected ? "QuickBooks connected" : "Connect QuickBooks Online"}</strong>

@@ -1,4 +1,5 @@
 import "server-only";
+import { stripeReceiptUrl, normalizeStripeReceipt } from "@/lib/stripe-payments";
 import { websiteTireItems, type WebsiteOption, type WebsiteQuote } from "@/lib/paid-website-order";
 import { renderCustomerConfirmationEmail } from "@/lib/customer-confirmation-email";
 
@@ -11,12 +12,11 @@ export async function sendCustomerPaymentConfirmation(sessionId: string, quote: 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   const resendKey = process.env.RESEND_API_KEY;
   if (!stripeKey || !resendKey) throw new Error("Customer confirmation email is not configured");
-  if (!/^cs_[a-zA-Z0-9_]+$/.test(sessionId || "")) throw new Error("Missing payment checkout session");
-  const sessionUrl = `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`;
+  const sessionUrl = stripeReceiptUrl(sessionId);
   const authorization = { Authorization: `Bearer ${stripeKey}` };
   const checked = await fetch(sessionUrl, { headers: authorization, cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (!checked.ok) throw new Error(`Could not verify customer payment (${checked.status})`);
-  const session = await checked.json();
+  const session = normalizeStripeReceipt(await checked.json());
   if (session.payment_status !== "paid" || session.metadata?.quote_id !== quote.id || (session.metadata?.option_id && session.metadata.option_id !== option.id)) {
     throw new Error("Customer confirmation does not match a paid quote");
   }
