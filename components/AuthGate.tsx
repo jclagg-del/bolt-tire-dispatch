@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 const PUBLIC_ROUTES = [
   "/login",
+  "/accept-invite",
   "/order/kingdom",
   "/kingdom-schedule",
   "/kingdom-orders",

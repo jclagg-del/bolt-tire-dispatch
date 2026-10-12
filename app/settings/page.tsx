@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import DiscountCodeSettings from "@/components/DiscountCodeSettings";
+import EmployeeUsersSettings from "@/components/EmployeeUsersSettings";
 import { supabase } from "@/lib/supabase";
 import {
   BusinessSettings,
@@ -24,7 +25,7 @@ type Vehicle = {
   sort_order: number;
 };
 
-type Section = "pricing" | "discounts" | "team" | "vehicles" | "inventory" | "security" | "integrations";
+type Section = "pricing" | "discounts" | "users" | "team" | "vehicles" | "inventory" | "security" | "integrations";
 
 type InventoryHealth = { healthy:boolean; stale:boolean; productCount:number; matchedCount:number; reviewCount:number; lastImport?:{status:string;completed_at:string|null;row_count:number;product_count:number;error:string|null}; reviewItems:Array<{canonical_key:string;tire_size:string;brand:string;model:string;confidence:number;reason:string}> };
 
@@ -277,6 +278,7 @@ export default function SettingsPage() {
             {([
               ["pricing", "Pricing & Fees"],
               ...(currentRole === "admin" ? [["discounts", "Discount Codes"]] : []),
+              ...(currentRole === "admin" ? [["users", "Users"]] : []),
               ["team", "Technicians"],
               ["vehicles", "Service Vehicles"],
               ["inventory", "Inventory Health"],
@@ -292,6 +294,7 @@ export default function SettingsPage() {
           <section style={content}>
             {loading ? <div style={card}>Loading settings...</div> : null}
             {!loading && section === "discounts" && currentRole === "admin" ? <DiscountCodeSettings /> : null}
+            {!loading && section === "users" && currentRole === "admin" ? <EmployeeUsersSettings /> : null}
 
             {!loading && section === "pricing" ? (
               <>
