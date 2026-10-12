@@ -67,6 +67,8 @@ const hasSplitFitment = (q: Quote, o: Option) =>
 
 function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
   const split = hasSplitFitment(q, option);
+  const creditPricing = q.payment_pricing_version === 1 && q.payment_status !== "paid";
+  const displayOption = creditPricing ? quotePaymentPrice(q, option, "regular").option : option;
   return (
     <div className={`quote-public-tires ${split ? "split" : ""}`}>
       <div className="quote-public-tire">
@@ -86,7 +88,7 @@ function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
           {q.tire_size || "Size TBD"} · Qty {q.quantity}
         </p>
         <div className="quote-price-each">
-          {q.payment_pricing_version === 1 && q.payment_status !== "paid" ? <>Credit ${quotePaymentPrice(q, option, "regular").option.price_per_tire.toFixed(2)} <span>per tire</span><small style={{display:"block"}}>ACH / debit / prepaid: ${Number(option.price_per_tire).toFixed(2)} per tire</small></> : <>${Number(option.price_per_tire).toFixed(2)} <span>per tire</span></>}
+          ${Number(displayOption.price_per_tire).toFixed(2)} <span>{creditPricing ? "per tire · Credit" : "per tire"}</span>
         </div>
       </div>
       {split ? (
@@ -107,7 +109,7 @@ function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
             {q.rear_tire_size || "Size TBD"} · Qty {q.rear_quantity || 0}
           </p>
           <div className="quote-price-each">
-            {q.payment_pricing_version === 1 && q.payment_status !== "paid" ? <>Credit ${Number(quotePaymentPrice(q, option, "regular").option.rear_price_per_tire).toFixed(2)} <span>per tire</span><small style={{display:"block"}}>ACH / debit / prepaid: ${Number(option.rear_price_per_tire || 0).toFixed(2)} per tire</small></> : <>${Number(option.rear_price_per_tire || 0).toFixed(2)} <span>per tire</span></>}
+            ${Number(displayOption.rear_price_per_tire || 0).toFixed(2)} <span>{creditPricing ? "per tire · Credit" : "per tire"}</span>
           </div>
         </div>
       ) : null}
@@ -244,6 +246,8 @@ export default function PublicQuote() {
     q.quote_options.find((o) => o.id === q.selected_option_id) ||
     q.quote_options[0];
   const options = (purchase || paid) && chosen ? [chosen] : q.quote_options;
+  const creditPricing = q.payment_pricing_version === 1 && !paid;
+  const displayFees = creditPricing && options[0] ? quotePaymentPrice(q, options[0], "regular").quote : q;
   const information = !paid && q.purchase_source !== "website" ? <QuoteCheckoutInformation value={details} onChange={value => { setDetails(value); setError(""); }} disabled={Boolean(paying || checkout)} /> : null;
   if (purchase)
     return (
@@ -411,10 +415,9 @@ export default function PublicQuote() {
               <p className="quote-highlights">{o.highlights}</p>
             ) : null}
             <div className="quote-installed-total">
-              <span>{paid && q.amount_paid != null ? "Total paid" : q.payment_pricing_version === 1 && !paid ? "Credit total (estimated tax)" : purchase ? "Order total" : "Installed total"}</span>
+              <span>{paid && q.amount_paid != null ? "Total paid" : creditPricing ? "Estimated total · Credit" : purchase ? "Order total" : "Installed total"}</span>
               <strong>${(paid && q.amount_paid != null ? Number(q.amount_paid) : q.payment_pricing_version === 1 && !paid ? (() => { const p=quotePaymentPrice(q,o,"regular"); return (p.subtotalCents+(q.tax_exempt?0:Math.round(p.taxableCents*Number(q.sales_tax_rate)/100)))/100; })() : total(q, o)).toFixed(2)}</strong>
             </div>
-            {q.payment_pricing_version === 1 && !paid && <p>ACH / debit / prepaid: <strong>${total(q,o).toFixed(2)}</strong><br /><small>Final tax and payment type verified before payment.</small></p>}
             <button
               className="quote-select-button"
               disabled={paid || Boolean(paying) || Boolean(checkout) || Boolean(search.get("payment") && q.payment_pricing_version !== 1)}
@@ -435,23 +438,23 @@ export default function PublicQuote() {
       </section>
       <section className="quote-form-card">
         <h2>{purchase ? "Order details" : "Included in every option"}</h2>
-        {q.payment_pricing_version === 1 && !paid && <p>Itemized service prices below are ACH / debit / prepaid prices. Both complete payment totals are shown above.</p>}
+        {creditPricing && <p>Prices shown are credit-card prices. Lower ACH, debit and prepaid prices are available at payment. Final tax and total are confirmed before you pay.</p>}
         {!paid && search.get("payment") && q.payment_pricing_version !== 1 && <p role="status">Checking payment confirmation. A submitted bank transfer may still be pending. Please do not submit another payment.</p>}
-        <AdditionalItemsSummary items={q.additional_items} />
+        <AdditionalItemsSummary items={displayFees.additional_items} />
         {q.discount_code_label && <p>Discount code {q.discount_code_label}: ${Number(q.discount_amount || 0).toFixed(2)} tire savings included in the prices above.{q.discount_organization ? ` Organization: ${q.discount_organization}.` : ""}</p>}
         <div className="quote-fee-summary">
           <span>
             Installation{" "}
-            <strong>${Number(q.installation_cost).toFixed(2)}</strong>
+            <strong>${Number(displayFees.installation_cost).toFixed(2)}</strong>
           </span>
           {Number(q.service_call_fee) > 0 ? (
             <span>
               Service call{" "}
-              <strong>${Number(q.service_call_fee).toFixed(2)}</strong>
+              <strong>${Number(displayFees.service_call_fee).toFixed(2)}</strong>
             </span>
           ) : null}
           <span>
-            Disposal <strong>${Number(q.disposal_fee).toFixed(2)}</strong>
+            Disposal <strong>${Number(displayFees.disposal_fee).toFixed(2)}</strong>
           </span>
           <span>
             NY state fee{" "}
