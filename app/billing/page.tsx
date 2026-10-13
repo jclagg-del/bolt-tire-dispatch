@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 import QuarterlyTaxReport from "@/components/QuarterlyTaxReport";
+import BillingReceiptDialog from "@/components/BillingReceiptDialog";
 
 type BillingJob = {
   id: string | number;
@@ -71,6 +72,8 @@ export default function BillingPage() {
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [sendingTextId, setSendingTextId] = useState<string | number | null>(null);
+  const [receiptJobId, setReceiptJobId] = useState<string | number | null>(null);
+  const [receiptMessage, setReceiptMessage] = useState("");
 
   const fetchJobs = async () => {
     const { data, error } = await supabase.from("jobs").select("*");
@@ -262,7 +265,7 @@ export default function BillingPage() {
           </p>
         </div>
 
-        <QuarterlyTaxReport />
+        {receiptMessage && <p role="status" style={{ padding: 14, background: "#ecfdf5", border: "1px solid #86efac", borderRadius: 10 }}>{receiptMessage}</p>}
         <div style={quickBooksConnected ? connectedCard : connectCard}>
           <div>
             <strong>{quickBooksConnected ? "QuickBooks connected" : "Connect QuickBooks Online"}</strong>
@@ -369,6 +372,7 @@ export default function BillingPage() {
 
                         <td style={td}>
                           <div style={actionButtons}>
+                          {isPaid && <button type="button" style={{ ...invoiceButton, minHeight: 44 }} onClick={event => { event.stopPropagation(); setReceiptMessage(""); setReceiptJobId(job.id); }}>Send receipt</button>}
                           {!job.invoice_number && quickBooksConnected ? (
                             <button
                               type="button"
@@ -435,7 +439,10 @@ export default function BillingPage() {
             )}
           </div>
         ))}
+        <QuarterlyTaxReport />
       </div>
+      {receiptJobId !== null && <BillingReceiptDialog key={String(receiptJobId)} jobId={receiptJobId} onClose={() => setReceiptJobId(null)}
+        onSent={email => { setReceiptJobId(null); setReceiptMessage(`Receipt sent to ${email}.`); }} />}
     </div>
   );
 }
