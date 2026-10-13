@@ -8,6 +8,8 @@ import QuoteCheckoutInformation from "@/components/QuoteCheckoutInformation";
 import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
 import { AdditionalItem, additionalItemAmount, additionalItemsTotals } from "@/lib/additional-items";
 import { quoteCheckoutDetails, quoteCheckoutDetailsError } from "@/lib/quote-checkout-details";
+import PurchaseTracking from "@/components/PurchaseTracking";
+import { rememberTrackingCheckout } from "@/lib/purchase-tracking";
 type Option = {
   id: string;
   tier: string;
@@ -193,6 +195,7 @@ export default function PublicQuote() {
       return setError(x.error);
     }
     setCheckout(x);
+    rememberTrackingCheckout(q.quote_number);
     setPaying(null);
     setTimeout(
       () =>
@@ -252,6 +255,7 @@ export default function PublicQuote() {
   if (purchase)
     return (
       <main className="direct-checkout-page">
+        <PurchaseTracking quote={q} />
         <header className="direct-checkout-header">
           <img src="/bolt-logo.png" alt="Bolt Tire" />
           <div>
@@ -336,6 +340,7 @@ export default function PublicQuote() {
     );
   return (
     <main className={`public-quote-page ${purchase ? "purchase-page" : ""}`}>
+      <PurchaseTracking quote={q} />
       <header className="public-quote-header">
         <img src="/bolt-logo.png" alt="Bolt Tire" />
         <div>

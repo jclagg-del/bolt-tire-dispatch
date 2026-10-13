@@ -1,4 +1,5 @@
 import AuthGate from "@/components/AuthGate";
+import PublicGoogleAnalytics from "@/components/PublicGoogleAnalytics";
 import "./globals.css";
 
 export default function RootLayout({
@@ -9,6 +10,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={body}>
+        <PublicGoogleAnalytics />
         <AuthGate>
           <div style={container}>{children}</div>
         </AuthGate>
