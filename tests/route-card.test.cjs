@@ -25,6 +25,7 @@ mod.require = id => {
   }
   if (id === '@/lib/route-order') return {};
   if (id === '@/components/RouteStopList') return { default: () => null };
+  if (id === '@/components/RouteAppointmentDialog') return { default: () => null };
   return require(id);
 };
 mod._compile(ts.transpileModule(source, {

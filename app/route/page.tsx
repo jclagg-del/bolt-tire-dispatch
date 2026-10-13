@@ -9,7 +9,8 @@ import { requireCompletedJha } from "@/lib/job-jha-client";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
 import RouteStopList from "@/components/RouteStopList";
-import { applyRouteOrder, type SavedRouteOrder } from "@/lib/route-order";
+import RouteAppointmentDialog from "@/components/RouteAppointmentDialog";
+import { applyRouteOrder, routeDate, routeDateTimeInput, type SavedRouteOrder } from "@/lib/route-order";
 
 type Job = {
   id: string | number;
@@ -49,57 +50,25 @@ type Assignment = {
   technician_name: string;
 };
 
-const NY_TIMEZONE = "America/New_York";
-
 const fallbackVehicles: Vehicle[] = [
   { id: "stepvan", name: "Stepvan", color: "#2563eb", active: true, sort_order: 1 },
   { id: "service", name: "Service Truck", color: "#facc15", active: true, sort_order: 2 },
   { id: "sprinter", name: "Sprinter", color: "#10b981", active: true, sort_order: 3 },
 ];
 
-function parseJobDate(input?: string | null) {
-  if (!input) return null;
-  const value = input.trim();
-  if (!value) return null;
-
-  const hasTimezone = value.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(value);
-
-  if (hasTimezone) {
-    const d = new Date(value);
-    return isNaN(d.getTime()) ? null : d;
-  }
-
-  const d = new Date(value.replace(" ", "T"));
-  return isNaN(d.getTime()) ? null : d;
-}
-
 function getNYDateKey(input: string | Date) {
-  const date = input instanceof Date ? input : parseJobDate(input) || new Date(input);
-  if (isNaN(date.getTime())) return "";
-
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: NY_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-
-  const year = parts.find((p) => p.type === "year")?.value ?? "";
-  const month = parts.find((p) => p.type === "month")?.value ?? "";
-  const day = parts.find((p) => p.type === "day")?.value ?? "";
-
-  return `${year}-${month}-${day}`;
+  return routeDate(input);
 }
 
 function formatTimeNY(input?: string | null) {
-  const date = parseJobDate(input);
-  if (!date) return "";
-
+  const local = routeDateTimeInput(input);
+  if (!local) return "";
+  // Format the stored wall clock without shifting it for the browser's zone.
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: NY_TIMEZONE,
+    timeZone: "UTC",
     hour: "numeric",
     minute: "2-digit",
-  }).format(date);
+  }).format(new Date(`${local}:00Z`));
 }
 
 function mapsUrl(address?: string | null) {
@@ -131,6 +100,10 @@ export default function RoutePage() {
   const [savingRoute, setSavingRoute] = useState(false);
   const routeSaveLock = useRef(false);
   const [routeMessage, setRouteMessage] = useState("");
+  const [pendingRouteMove, setPendingRouteMove] = useState<{
+    vehicleId: string; jobIds: string[]; revision: number; jobId: string;
+    expectedScheduled: string; current: string; suggested: string; customer: string;
+  } | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [completingId, setCompletingId] = useState<string | number | null>(null);
@@ -245,23 +218,33 @@ export default function RoutePage() {
     }
   }
 
-  async function saveRouteOrder(vehicleId: string, jobIds: string[]) {
-    if (!routeOrderReady || routeSaveLock.current) return;
+  function promptRouteMove(vehicleId: string, jobIds: string[], jobId: string, targetId: string) {
+    if (!routeOrderReady || routeSaveLock.current || pendingRouteMove) return;
+    const job = jobs.find(item => String(item.id) === jobId);
+    const target = jobs.find(item => String(item.id) === targetId);
+    if (!job?.scheduled || !target?.scheduled) return;
+    setPendingRouteMove({ vehicleId, jobIds, jobId, revision: routeOrders[vehicleId]?.revision || 0,
+      expectedScheduled: job.scheduled.replace(" ", "T"), current: routeDateTimeInput(job.scheduled),
+      suggested: routeDateTimeInput(target.scheduled), customer: `${job.customer || "Unnamed job"} · #${job.po_number || job.id}` });
+  }
+
+  async function saveRouteOrder(scheduled: string) {
+    if (!routeOrderReady || routeSaveLock.current || !pendingRouteMove) return;
+    const { vehicleId, jobIds, revision, jobId, expectedScheduled } = pendingRouteMove;
     routeSaveLock.current = true;
     setSavingRoute(true);
-    setRouteMessage("Saving route order…");
-    const previous = routeOrders[vehicleId];
-    setRouteOrders(current => ({ ...current, [vehicleId]: { vehicle_id: vehicleId, job_ids: jobIds, revision: previous?.revision || 0 } }));
+    setRouteMessage("Saving appointment and route…");
     try {
-      const result = await routeRequest("PUT", { date: todayKey, vehicleId, jobIds, revision: previous?.revision || 0 });
+      const result = await routeRequest("PUT", { date: todayKey, vehicleId, jobIds, revision, appointment: { jobId, expectedScheduled, scheduled } });
       setRouteOrders(current => ({ ...current, [vehicleId]: result.order }));
-      setRouteMessage("Route order saved. Appointment times are unchanged.");
+      setJobs(current => current.map(job => String(job.id) === jobId ? { ...job, scheduled: result.job.scheduled } : job));
+      setRouteMessage(`Appointment saved for ${scheduled.slice(0, 10)} at ${formatTimeNY(scheduled)}. Other appointments are unchanged.`);
     } catch (error) {
-      setRouteOrders(current => { const next = { ...current }; if (previous) next[vehicleId] = previous; else delete next[vehicleId]; return next; });
       // A lost response can mean the save succeeded. Reload before another edit.
       await Promise.all([fetchJobs(), fetchRouteOrders()]);
       setRouteMessage(error instanceof Error ? error.message : "Could not save route order. Please refresh.");
     } finally {
+      setPendingRouteMove(null);
       routeSaveLock.current = false;
       setSavingRoute(false);
     }
@@ -417,7 +400,7 @@ export default function RoutePage() {
           <div style={eyebrow}>Route</div>
           <h1 style={title}>Today&apos;s Route</h1>
           <p style={subtitle}>
-            Drag the handle on a job card to change its stop order within that vehicle, or use the arrows. Changes save for today across devices; appointment times stay unchanged.
+            Drag a job within its vehicle, or use the arrows, then confirm its new date and time. Other appointments stay unchanged.
           </p>
         </div>
 
@@ -471,7 +454,7 @@ export default function RoutePage() {
 
                 <div style={columnBody}>
                   {vehicleJobs.length > 0 ? (
-                    <RouteStopList jobs={vehicleJobs} disabled={!routeOrderReady || savingRoute || !!completingId || showCompleteModal} onReorder={ids => saveRouteOrder(vehicle.id, ids)} renderJob={(job, index) => (
+                    <RouteStopList jobs={vehicleJobs} disabled={!routeOrderReady || savingRoute || !!pendingRouteMove || !!completingId || showCompleteModal} onReorder={(ids, movedId, targetId) => promptRouteMove(vehicle.id, ids, movedId, targetId)} renderJob={(job, index) => (
                       <RouteCard
                         key={job.id}
                         job={job}
@@ -489,6 +472,10 @@ export default function RoutePage() {
           })}
         </div>
       </div>
+
+      {pendingRouteMove && <RouteAppointmentDialog customer={pendingRouteMove.customer} current={pendingRouteMove.current}
+        suggested={pendingRouteMove.suggested} today={todayKey} saving={savingRoute}
+        onCancel={() => { if (!routeSaveLock.current) setPendingRouteMove(null); }} onSave={saveRouteOrder} />}
 
       {showCompleteModal && selectedJob && (
         <div style={modalOverlay}>

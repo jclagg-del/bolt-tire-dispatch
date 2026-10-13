@@ -7,7 +7,7 @@ type Stop = { id: string | number; customer?: string | null; po_number?: string 
 type Target = { id: string; after: boolean };
 
 export default function RouteStopList<T extends Stop>({ jobs, disabled, onReorder, renderJob }: {
-  jobs: T[]; disabled: boolean; onReorder: (ids: string[]) => void; renderJob: (job: T, index: number) => ReactNode;
+  jobs: T[]; disabled: boolean; onReorder: (ids: string[], movedId: string, targetId: string) => void; renderJob: (job: T, index: number) => ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const gesture = useRef<{ id: string; x: number; y: number; currentY: number; currentX: number; active: boolean; target: Target | null } | null>(null);
@@ -48,7 +48,7 @@ export default function RouteStopList<T extends Stop>({ jobs, disabled, onReorde
   function move(source: string, destination: Target | null) {
     if (disabled || !destination) return;
     const next = moveRouteStop(ids, source, destination.id, destination.after);
-    if (next.some((id, index) => id !== ids[index])) onReorder(next);
+    if (next.some((id, index) => id !== ids[index])) onReorder(next, source, destination.id);
   }
   function step(index: number, direction: -1 | 1) {
     if (index + direction < 0 || index + direction >= ids.length) return;
