@@ -43,8 +43,8 @@ test('one, four and maximum label counts do not add spacer labels', () => {
   }
 });
 test('no active label job and server rendering do not change normal document printing', () => {
-  assert.equal(Print({ job: null }), null);
-  assert.equal(Print({ job }), null);
+  assert.equal(renderToStaticMarkup(React.createElement(Print, { job: null })), '');
+  assert.equal(renderToStaticMarkup(React.createElement(Print, { job })), '');
   const css = fs.readFileSync(require.resolve('../app/globals.css'), 'utf8');
   assert.doesNotMatch(css, /@page\s*\{/);
   assert.doesNotMatch(css, /body \*\s*\{visibility:hidden/);
@@ -62,13 +62,33 @@ test('print CSS removes surrounding layout and only breaks before subsequent lab
     assert.match(source, /flushSync\(\(\) => setLabelJob/);
   }
 });
-test('label geometry fits inside printable margins without a full-page fixed height or clipping', () => {
+test('label geometry reserves one safe page and fits all content without clipping', () => {
   const css = fs.readFileSync(require.resolve('../app/globals.css'), 'utf8');
   const label = css.match(/\.tire-receiving-label\{([^}]+)\}/)[1];
-  assert.match(css, /width:3\.7in;max-width:100%/);
-  assert.match(label, /height:auto;min-height:0/);
-  assert.match(label, /overflow:visible/);
-  assert.doesNotMatch(label, /height:[\d.]+in|overflow:hidden/);
+  assert.match(css, /width:3\.7in/);
+  assert.match(label, /height:5\.4in;min-height:0/);
+  assert.match(label, /overflow:hidden/, 'contain unscaled layout after measuring all text to fit');
   assert.match(css, /-webkit-text-size-adjust:100%;text-size-adjust:100%/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
+});
+
+test('auto-fit measures the complete label including footer, caps at 80%, and shrinks longer jobs', () => {
+  const { fitTireLabels } = mod.exports;
+  for (const [width, height] of [[355, 480], [355, 1000], [700, 500]]) {
+    const content = { scrollWidth: width, scrollHeight: height, offsetWidth: 355, style: {} };
+    const label = { clientWidth: 355, clientHeight: 518, querySelector: () => content };
+    fitTireLabels({ querySelectorAll: () => [label] });
+    const scale = Number(content.style.transform.match(/scale\((.+)\)/)[1]);
+    assert.ok(scale <= 0.8);
+    assert.ok(height * scale <= 516);
+    assert.ok(width * scale <= 353.001);
+    assert.ok(parseFloat(content.style.left) + width * scale <= 355.001);
+    const previous = content.style.transform;
+    fitTireLabels({ querySelectorAll: () => [label] });
+    assert.equal(content.style.transform, previous, 'beforeprint must not compound the scale');
+  }
+  const source = fs.readFileSync(require.resolve('../components/TireLabelPrint.tsx'), 'utf8');
+  assert.match(source, /useLayoutEffect/);
+  assert.match(source, /addEventListener\("beforeprint", fit\)/);
+  assert.match(render(), /class="tire-label-content"/);
 });

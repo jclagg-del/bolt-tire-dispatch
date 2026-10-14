@@ -1,6 +1,19 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { useLayoutEffect, useRef } from "react";
+
+// Fit the complete block, not individual fields. Keep the same physical geometry
+// on screen and in print so flushSync can measure it before iOS opens AirPrint.
+export function fitTireLabels(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>(".tire-receiving-label").forEach(label => {
+    const content = label.querySelector<HTMLElement>(".tire-label-content");
+    if (!content) return;
+    const scale = Math.min(0.8, (label.clientWidth - 2) / Math.max(content.scrollWidth, 1), (label.clientHeight - 2) / Math.max(content.scrollHeight, 1));
+    content.style.transform = `scale(${scale})`;
+    content.style.left = `${Math.max(0, (label.clientWidth - Math.max(content.offsetWidth, content.scrollWidth) * scale) / 2)}px`;
+  });
+}
 
 export type TireLabelJob = {
   id: string;
@@ -30,6 +43,13 @@ function scheduledDate(value?: string | null) {
 }
 
 export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const fit = () => { if (root.current) fitTireLabels(root.current); };
+    fit();
+    window.addEventListener("beforeprint", fit);
+    return () => window.removeEventListener("beforeprint", fit);
+  }, [job]);
   if (!job || typeof document === "undefined") return null;
   const quantity = Math.max(1, Math.min(24, Math.floor(Number(job.quantity) || 1)));
   const service = String(job.serviceType || "Tire Service").toUpperCase();
@@ -39,10 +59,11 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
   // visibility:hidden left the long receiving list occupying blank print pages.
   // Keep this synchronous: callers flushSync before opening iOS AirPrint.
   return createPortal(
-    <div className="tire-label-print-root" aria-hidden="true">
+    <div className="tire-label-print-root" aria-hidden="true" ref={root}>
       <style media="print">{"@page { size: 4in 6in; margin: 0.15in; }"}</style>
       {Array.from({ length: quantity }, (_, index) => (
         <section className="tire-receiving-label" key={index}>
+          <div className="tire-label-content">
           <header>
             <strong>BOLT TIRE</strong>
             <span>{service}</span>
@@ -65,6 +86,7 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
             <div><small>SERVICE DATE</small><strong>{scheduledDate(job.scheduled) || "—"}</strong></div>
           </div>
           {job.vehicle ? <p>{job.vehicle}</p> : null}
+          </div>
         </section>
       ))}
     </div>,
