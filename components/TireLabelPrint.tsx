@@ -9,7 +9,7 @@ export function fitTireLabels(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>(".tire-receiving-label").forEach(label => {
     const content = label.querySelector<HTMLElement>(".tire-label-content");
     if (!content) return;
-    const scale = Math.min(0.8, (label.clientWidth - 2) / Math.max(content.scrollWidth, 1), (label.clientHeight - 2) / Math.max(content.scrollHeight, 1));
+    const scale = Math.min(1, (label.clientWidth - 2) / Math.max(content.scrollWidth, 1), (label.clientHeight - 2) / Math.max(content.scrollHeight, 1));
     content.style.transform = `scale(${scale})`;
     content.style.left = `${Math.max(0, (label.clientWidth - Math.max(content.offsetWidth, content.scrollWidth) * scale) / 2)}px`;
   });

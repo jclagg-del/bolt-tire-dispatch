@@ -72,14 +72,15 @@ test('label geometry reserves one safe page and fits all content without clippin
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/);
 });
 
-test('auto-fit measures the complete label including footer, caps at 80%, and shrinks longer jobs', () => {
+test('auto-fit uses full size for ordinary labels and only shrinks when needed to keep the footer', () => {
   const { fitTireLabels } = mod.exports;
   for (const [width, height] of [[355, 480], [355, 1000], [700, 500]]) {
     const content = { scrollWidth: width, scrollHeight: height, offsetWidth: 355, style: {} };
     const label = { clientWidth: 355, clientHeight: 518, querySelector: () => content };
     fitTireLabels({ querySelectorAll: () => [label] });
     const scale = Number(content.style.transform.match(/scale\((.+)\)/)[1]);
-    assert.ok(scale <= 0.8);
+    assert.ok(scale <= 1);
+    if (width === 355 && height === 480) assert.ok(scale > 0.99, 'ordinary labels must not get an unnecessary 80% reduction');
     assert.ok(height * scale <= 516);
     assert.ok(width * scale <= 353.001);
     assert.ok(parseFloat(content.style.left) + width * scale <= 355.001);
