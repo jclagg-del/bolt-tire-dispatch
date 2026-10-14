@@ -30,6 +30,23 @@ test('normalization rejects truthy strings and strips client-supplied URL/extra 
   assert.deepEqual(value.photos, [{ path: '1/photo.jpg', caption: 'hello', category: 'Before work' }]);
   assert.doesNotThrow(() => jha.normalizeJha({ steps: [null, 4], photos: [null, false] }));
 });
+test('clear no-hazard responses are valid and preserved; unsafe qualifiers are never ignored', () => {
+  for (const reason of ['', 'safe', ' SAFE! ', 'None.', 'n/a', 'NA', 'No hazards', 'No   unresolved hazards.', 'no issues', 'Not applicable']) {
+    const value = { ...complete(), unsafeReason: reason };
+    assert.equal(jha.jhaHasWorkHold(reason), false, reason);
+    assert.equal(jha.jhaValidation(value, 'complete'), null, reason);
+    assert.match(jha.jhaValidation(value, 'unsafe'), /Describe/);
+    assert.equal(jha.normalizeJha(value).unsafeReason, reason.trim());
+  }
+  for (const reason of ['not safe', 'unsafe', 'safe except for traffic', 'no controls', 'none yet', 'traffic hazard']) {
+    assert.equal(jha.jhaHasWorkHold(reason), true, reason);
+    assert.match(jha.jhaValidation({ ...complete(), unsafeReason: reason }, 'complete'), /unresolved hazard/);
+  }
+  const issues = jha.jhaCompletionIssues(jha.emptyJha());
+  assert.equal(issues.length, 7);
+  assert.equal(issues.filter(issue => issue.step === 0).length, 6);
+  assert.equal(issues.filter(issue => issue.step === 2).length, 1);
+});
 test('completion requires matching job context and valid completed assessment', () => {
   const job = { service_type: 'Delivery', address: 'Example St', qty: 4, scheduled: '2026-10-06' };
   const record = { status: 'complete', assessment: complete(), context: jha.jhaContext(job) };
@@ -132,6 +149,15 @@ test('private photo links expire after fifteen minutes; invalid revision is reje
   assert.deepEqual(f.calls.signed, [{ path: '1/photo.jpg', seconds: 900 }]);
   assert.equal((await f.get('?revision=bogus')).status, 400);
 });
+test('card summary checks completeness without signing photos or returning assessment content', async () => {
+  const f = fixture({ record: { revision: 1, status: 'complete', context: jha.jhaContext({}), assessment: { ...complete(), unsafeReason: 'safe', photos: [{ path: '1/photo.jpg' }] } } });
+  const response = await f.get('?summary=1');
+  const data = await response.json();
+  assert.equal(data.ready, true);
+  assert.deepEqual(data.record, { status: 'complete' });
+  assert.deepEqual(f.calls.signed, []);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+});
 test('photo endpoint rejects empty, oversized and misleading content before uploading', async () => {
   const f = fixture();
   assert.equal((await f.photo(new FormData())).status, 400);
@@ -146,6 +172,7 @@ test('Route, job details and Tasks expose the JHA and recheck before completion'
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     assert.match(source, /!isDeliveryService\([^)]*\) && <JobJhaButton jobId=/); assert.match(source, /await requireCompletedJha\(/);
   }
+  assert.match(fs.readFileSync(path.join(__dirname, '../app/jobs/page.tsx'), 'utf8'), /!isDeliveryService\(job.service_type\) && <JobJhaButton jobId=/);
 });
 test('valid photo receives a server-generated job path and failed metadata save removes only that upload', async () => {
   for (const missingSchema of [false, true]) {
@@ -180,36 +207,54 @@ function uiFixture({ ready = false, readOnly = false, value = jha.emptyJha() } =
   } })('components/JobJhaButton.tsx').default;
   return { saves, render() { index = 0; return Component({ jobId: '1' }); } };
 }
-test('guided JHA opens, offers camera/library, validates, and only saves after explicit confirmation', async () => {
+test('guided JHA lists every missing item, offers camera/library, and saves only after confirmation', async () => {
   const old = global.document; global.document = { body: {} };
   try {
-    const ui = uiFixture(); await button(ui.render(), 'Complete JHA').props.onClick();
+    const ui = uiFixture(); await button(ui.render(), 'JHA — loading…').props.onClick();
     let tree = ui.render(); assert.equal(nodes(tree, 'dialog').length, 1);
     const html = renderToStaticMarkup(tree);
     assert.match(html, /Safety glasses — required/); assert.match(html, /Hearing protection — required/); assert.match(html, /Gloves — optional/);
+    assert.match(html, /7 items still needed/);
+    assert.equal(nodes(tree, 'button')[0].props['data-jha-state'], 'incomplete');
     button(tree, '2. Photos').props.onClick(); tree = ui.render();
     assert.equal(nodes(tree, 'input').some(n => n.props.capture === 'environment'), true);
     assert.equal(nodes(tree, 'input').some(n => n.props.multiple === true), true);
     button(tree, '3. Review').props.onClick(); tree = ui.render();
     await button(tree, 'Complete JHA').props.onClick(); assert.equal(ui.saves.length, 0);
     assert.match(renderToStaticMarkup(ui.render()), /Enter the technician/);
-    const ready = uiFixture({ value: complete() }); await button(ready.render(), 'Complete JHA').props.onClick();
+    const ready = uiFixture({ value: { ...complete(), unsafeReason: 'safe' } }); await button(ready.render(), 'JHA — loading…').props.onClick();
     button(ready.render(), '3. Review').props.onClick();
     assert.equal(ready.saves.length, 0); await button(ready.render(), 'Complete JHA').props.onClick();
     assert.equal(ready.saves[0].status, 'complete'); assert.match(renderToStaticMarkup(ready.render()), /JHA complete. You can now complete/);
+    assert.equal(ready.saves[0].assessment.unsafeReason, 'safe');
+    assert.equal(nodes(ready.render(), 'button')[0].props['data-jha-state'], 'complete');
   } finally { global.document = old; }
 });
 test('reassessment revokes prior completion and resets confirmations; historical view cannot save', async () => {
   const old = global.document; global.document = { body: {} };
   try {
-    const ui = uiFixture({ ready: true, value: complete() }); await button(ui.render(), 'Complete JHA').props.onClick();
+    const ui = uiFixture({ ready: true, value: complete() }); await button(ui.render(), 'JHA — loading…').props.onClick();
     assert.equal(nodes(ui.render(), 'fieldset')[0].props.disabled, true);
     await button(ui.render(), 'Reassess — reopen JHA').props.onClick();
     const saved = ui.saves[0]; assert.equal(saved.status, 'draft'); assert.equal(saved.assessment.acknowledged, false);
     assert.equal(saved.assessment.glasses, false); assert.equal(saved.assessment.hearing, false); assert.equal(saved.assessment.steps[0].controlled, false);
-    const historical = uiFixture({ readOnly: true, value: complete() }); await button(historical.render(), 'Complete JHA').props.onClick();
+    const historical = uiFixture({ readOnly: true, value: complete() }); await button(historical.render(), 'JHA — loading…').props.onClick();
     button(historical.render(), '3. Review').props.onClick(); const tree = historical.render();
     assert.equal(nodes(tree, 'fieldset')[0].props.disabled, true); assert.equal(button(tree, 'Save draft'), undefined);
     assert.equal(button(tree, 'Complete JHA'), undefined);
+  } finally { global.document = old; }
+});
+test('ordinary notes retain confirmation while safety edits visibly require reconfirmation', async () => {
+  const old = global.document; global.document = { body: {} };
+  try {
+    const ui = uiFixture({ value: complete() });
+    await button(ui.render(), 'JHA — loading…').props.onClick();
+    button(ui.render(), '3. Review').props.onClick();
+    nodes(ui.render(), 'textarea')[0].props.onChange({ target: { value: 'Job notes' } });
+    assert.equal(nodes(ui.render(), 'input').find(n => n.props.type === 'checkbox').props.checked, true);
+    nodes(ui.render(), 'textarea')[1].props.onChange({ target: { value: 'safe' } });
+    assert.equal(nodes(ui.render(), 'input').find(n => n.props.type === 'checkbox').props.checked, false);
+    assert.match(renderToStaticMarkup(ui.render()), /Safety answers changed/);
+    assert.match(renderToStaticMarkup(ui.render()), /1 item still needed/);
   } finally { global.document = old; }
 });

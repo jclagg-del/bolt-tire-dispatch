@@ -17,6 +17,14 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json({ job, record: null, context: jhaContext(job), required: false,
       ready: true, readOnly: true, history: [] }, { headers: { "Cache-Control": "no-store" } });
   }
+  // Card status needs no history or photo signing. Keep the same staff checks.
+  if (!revision && new URL(request.url).searchParams.get("summary") === "1") {
+    const { data: record, error } = await admin.from("job_jhas").select("status,context,assessment").eq("job_id", id).maybeSingle();
+    if (error) return jhaUnavailable();
+    return NextResponse.json({ job, record: record ? { status: record.status } : null,
+      ready: jhaReady(record, job), readOnly: !!job.complete || !!job.archived },
+    { headers: { "Cache-Control": "no-store" } });
+  }
   let query = admin.from(revision ? "job_jha_history" : "job_jhas").select("*").eq("job_id", id);
   if (revision) query = query.eq("revision", Number(revision));
   const [{ data: record, error }, { data: history, error: historyError }] = await Promise.all([

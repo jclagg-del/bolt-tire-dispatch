@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { emptyJha, jhaValidation, JHA_MAX_PHOTO_BYTES, type JhaAssessment, type JhaStatus } from "@/lib/job-jha";
+import { emptyJha, jhaCompletionIssues, jhaHasWorkHold, jhaValidation, JHA_MAX_PHOTO_BYTES, type JhaAssessment, type JhaStatus } from "@/lib/job-jha";
 import { jhaRequest, prepareJhaPhoto } from "@/lib/job-jha-client";
 import styles from "./JobJhaButton.module.css";
 
@@ -32,10 +32,17 @@ export default function JobJhaButton({ jobId }: { jobId: string | number }) {
     setData(result); setAssessment(stale ? { ...value, acknowledged: false, glasses: false, hearing: false, steps: value.steps.map(s => ({ ...s, controlled: false })) } : value); setDirty(false); setRevision(version);
     return result;
   }, [jobId]);
-  useEffect(() => { if (open) return; let active = true; jhaRequest(jobId).then(result => { if (active) setData(result); }).catch(() => { if (active) setError("JHA unavailable — open to retry."); }); return () => { active = false; }; }, [jobId, open]);
+  useEffect(() => { if (open) return; let active = true; jhaRequest(jobId, "?summary=1").then(result => { if (active) setData(result); }).catch(() => { if (active) { setData(null); setError("JHA unavailable — open to retry."); } }); return () => { active = false; }; }, [jobId, open]);
   useEffect(() => { if (open) dialog.current?.showModal(); }, [open]);
   const locked = !!data?.readOnly || !!data?.ready;
-  const change = (patch: Partial<JhaAssessment>) => { setAssessment(value => ({ ...value, acknowledged: false, ...patch })); setDirty(true); setMessage(""); };
+  const issues = jhaCompletionIssues(assessment);
+  const change = (patch: Partial<JhaAssessment>) => {
+    // Notes and photo captions do not change the technician's safety answers.
+    const safetyChanged = Object.keys(patch).some(key => !["notes", "photos", "acknowledged"].includes(key));
+    setAssessment(value => ({ ...value, ...(safetyChanged ? { acknowledged: false } : {}), ...patch }));
+    setDirty(true);
+    setMessage(safetyChanged && assessment.acknowledged ? "Safety answers changed. Please check the final confirmation again on Review." : "");
+  };
   const close = () => { if (busy || (dirty && !window.confirm("Discard unsaved JHA changes? Uploaded photos are not attached until you save."))) return; setOpen(false); };
   const show = async () => {
     setOpen(true); setBusy(true); setError(""); setMessage(""); setStep(0); setData(null);
@@ -44,7 +51,7 @@ export default function JobJhaButton({ jobId }: { jobId: string | number }) {
   const save = async (status: JhaStatus, value = assessment) => {
     if (!data || busy) return;
     const validation = jhaValidation(value, status);
-    if (validation) { setError(validation); return; }
+    if (validation) { setError(validation); if (status === "complete") setStep(jhaCompletionIssues(value)[0]?.step ?? 2); return; }
     setBusy(true); setError(""); setMessage("");
     try {
       await jhaRequest(jobId, "", { method: "PUT", body: JSON.stringify({ revision: data.record?.revision || 0, context: data.context, status, assessment: value }) });
@@ -63,14 +70,15 @@ export default function JobJhaButton({ jobId }: { jobId: string | number }) {
         if (blob.size > JHA_MAX_PHOTO_BYTES) throw new Error("This photo is too large. Choose a smaller photo.");
         const form = new FormData(); form.append("photo", blob, "photo.jpg");
         const result = await jhaRequest(jobId, "/photos", { method: "POST", body: form });
-        setAssessment(value => ({ ...value, acknowledged: false, photos: [...value.photos, result.photo] })); setDirty(true);
+        setAssessment(value => ({ ...value, photos: [...value.photos, result.photo] })); setDirty(true);
       }
       setMessage("Photos uploaded. Save the JHA to attach them to this assessment.");
     } catch (e) { setError(e instanceof Error ? e.message : "Photo upload failed."); } finally { uploadLock.current = false; setBusy(false); }
   };
-  const label = data?.ready ? "✓ JHA complete" : data?.readOnly ? "View JHA" : data?.record?.status === "unsafe" ? "JHA — work on hold" : error && !data ? "JHA — retry" : "Complete JHA";
+  const label = data?.ready ? "✓ JHA complete" : data?.record?.status === "unsafe" ? "JHA — work on hold" : data ? "JHA — incomplete" : error ? "JHA — retry" : "JHA — loading…";
+  const state = data?.ready ? "complete" : data ? "incomplete" : error ? "unavailable" : "loading";
   return <span onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
-    <button type="button" className={styles.launch} onClick={show}>{label}</button>
+    <button type="button" className={`${styles.launch} ${data?.ready ? styles.complete : data || error ? styles.incomplete : ""}`} data-jha-state={state} onClick={show}>{label}</button>
     {open && createPortal(<dialog ref={dialog} className={styles.dialog} aria-labelledby={`jha-title-${jobId}`} onCancel={event => { event.preventDefault(); close(); }} onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
       <header className={styles.header}><div><small>JOB HAZARD ANALYSIS</small><h2 id={`jha-title-${jobId}`}>Safety check</h2><p>{data?.job.customer || "Job / task"} · {data?.job.po_number || `#${jobId}`} · {data?.job.service_type || "Service"}</p></div><button type="button" aria-label="Close JHA" disabled={busy} onClick={close}>×</button></header>
       <div className={styles.body}>
@@ -79,6 +87,10 @@ export default function JobJhaButton({ jobId }: { jobId: string | number }) {
         {!data ? <p>{busy ? "Loading assessment…" : "Unable to load. Close and reopen to retry."}</p> : <>
           <p className={styles.notice}>{data.record?.status === "unsafe" ? "WORK ON HOLD — resolve the hazards and reassess before completing." : data.ready ? "Completed JHA saved for the current job details." : data.readOnly ? "Saved assessment — read only." : "Required before completing this job or task. Assess actual site conditions and controls; do not proceed with unresolved hazards."}</p>
           {data.record?.status === "complete" && !data.ready && !data.readOnly && <p className={styles.error}>Job details changed. Reassess the work and confirm the assessment again.</p>}
+          {!locked && <section className={issues.length ? styles.checklist : styles.success} aria-label="JHA completion checklist">
+            <strong>{issues.length ? `${issues.length} item${issues.length === 1 ? "" : "s"} still needed` : "All required fields and confirmations are ready"}</strong>
+            {issues.length > 0 && <ul>{issues.map((issue, index) => <li key={index}><button type="button" onClick={() => setStep(issue.step)}>{issue.message} <span>→ {issue.step === 0 ? "Assessment" : "Review"}</span></button></li>)}</ul>}
+          </section>}
           {data.history.length > 0 && <label className={styles.field}>Assessment history<select value={revision} disabled={busy} onChange={async event => { if (dirty && !window.confirm("Discard unsaved changes and view this revision?")) return; setBusy(true); setError(""); try { await load(event.target.value); } catch (e) { setError(String(e)); } finally { setBusy(false); } }}><option value="">Current assessment</option>{data.history.map(item => <option key={item.revision} value={item.revision}>Revision {item.revision} · {item.status} · {new Date(item.updated_at).toLocaleString()}</option>)}</select></label>}
           {data.ready && !data.readOnly && <button type="button" disabled={busy} onClick={() => save("draft", { ...assessment, acknowledged: false, glasses: false, hearing: false, steps: assessment.steps.map(s => ({ ...s, controlled: false })) })}>Reassess — reopen JHA</button>}
           <nav className={styles.tabs} aria-label="JHA steps">{["1. Assessment", "2. Photos", "3. Review"].map((title, index) => <button type="button" key={title} aria-current={step === index ? "step" : undefined} onClick={() => setStep(index)}>{title}</button>)}</nav>
@@ -115,7 +127,14 @@ export default function JobJhaButton({ jobId }: { jobId: string | number }) {
               {assessment.steps.map((s, i) => <section key={i} className={styles.card}><strong>{i + 1}. {s.task || "Task missing"}</strong><p>Hazards: {s.hazards || "Not entered"}</p><p>Controls: {s.controls || "Not entered"}</p><p>{s.controlled ? "✓ Controls confirmed" : "Controls not confirmed"}</p></section>)}
               <p>Safety glasses: {assessment.glasses ? "Confirmed" : "Not confirmed"} · Hearing protection: {assessment.hearing ? "Confirmed" : "Not confirmed"} · Gloves: {assessment.gloves ? "Selected" : "Not selected (optional)"}</p>
               <label className={styles.field}>Additional notes<textarea maxLength={3000} value={assessment.notes} onChange={e => change({ notes: e.target.value })} /></label>
-              <label className={styles.field}>Unresolved hazard / work hold reason<textarea maxLength={3000} value={assessment.unsafeReason} onChange={e => change({ unsafeReason: e.target.value })} placeholder="If unsafe, describe the issue and select Save work hold. Clear only after resolving and reassessing." /></label>
+              <section className={styles.hold}>
+                <strong>Any unresolved hazards?</strong>
+                <p>“Safe,” “none,” “no hazards,” or a blank answer means there is no work hold. If a hazard remains, describe it below and choose Save work hold.</p>
+                <label className={styles.field}>Unresolved hazard / work hold reason<textarea maxLength={3000} value={assessment.unsafeReason} onChange={e => change({ unsafeReason: e.target.value })} placeholder="Leave blank unless work must be put on hold." /></label>
+                {jhaHasWorkHold(assessment.unsafeReason) && !locked && <button type="button" onClick={() => {
+                  if (window.confirm("Have you reassessed the site and confirmed there are no unresolved hazards? This clears the work-hold reason in this revision; earlier saved revisions remain in history.")) change({ unsafeReason: "" });
+                }}>Resolve hold — clear reason</button>}
+              </section>
               <label className={styles.check}><input type="checkbox" checked={assessment.acknowledged} onChange={e => change({ acknowledged: e.target.checked })} />I have assessed this job, confirmed the controls and required PPE, and have no unresolved hazards.</label>
             </>}
           </fieldset>

@@ -20,16 +20,33 @@ export function normalizeJha(input: unknown): JhaAssessment {
     photos: (Array.isArray(x.photos) ? x.photos : []).slice(0, 12).map(p => ({ path: text(p?.path, 400), caption: text(p?.caption, 500), category: ["Before work", "Hazard / control", "After work"].includes(p?.category) ? p.category : "Before work" })),
   };
 }
+export type JhaIssue = { step: 0 | 2; message: string };
+// Exact, explicit no-hazard responses only. Never match substrings such as
+// “not safe”, “safe except for traffic”, or “no controls”. Preserve the raw text.
+export function jhaHasWorkHold(reason: string): boolean {
+  const value = reason.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "").trim();
+  return !["", "safe", "none", "n/a", "na", "no hazards", "no unresolved hazards", "no issues", "not applicable"].includes(value);
+}
+export function jhaCompletionIssues(assessment: JhaAssessment): JhaIssue[] {
+  const issues: JhaIssue[] = [];
+  if (!assessment.technician.trim()) issues.push({ step: 0, message: "Enter the technician’s name." });
+  if (!assessment.steps.length) issues.push({ step: 0, message: "Add at least one work step." });
+  assessment.steps.forEach((item, index) => {
+    for (const [key, label] of [["task", "task / work step"], ["hazards", "hazards"], ["controls", "controls"]] as const) {
+      if (!item[key].trim()) issues.push({ step: 0, message: `Step ${index + 1}: enter the ${label}.` });
+    }
+    if (!item.controlled) issues.push({ step: 0, message: `Step ${index + 1}: check “Controls are in place” after confirming them.` });
+  });
+  if (!assessment.glasses) issues.push({ step: 0, message: "Confirm safety glasses." });
+  if (!assessment.hearing) issues.push({ step: 0, message: "Confirm hearing protection." });
+  if (jhaHasWorkHold(assessment.unsafeReason)) issues.push({ step: 2, message: "An unresolved hazard is entered. Resolve and reassess it, then update the work-hold response on Review." });
+  if (!assessment.acknowledged) issues.push({ step: 2, message: "Check the final assessment confirmation on Review." });
+  return issues;
+}
 export function jhaValidation(assessment: JhaAssessment, status: JhaStatus): string | null {
-  if (status === "unsafe") return assessment.unsafeReason ? null : "Describe the unresolved hazard before recording a work hold.";
+  if (status === "unsafe") return jhaHasWorkHold(assessment.unsafeReason) ? null : "Describe the unresolved hazard before recording a work hold. If it is safe, choose Complete JHA instead.";
   if (status === "draft") return null;
-  if (!assessment.technician) return "Enter the technician’s name.";
-  if (!assessment.steps.length || assessment.steps.some(s => !s.task || !s.hazards || !s.controls)) return "Complete the task, hazards and controls for every job step.";
-  if (assessment.steps.some(s => !s.controlled)) return "Confirm each step’s controls are in place, or mark Unsafe to proceed.";
-  if (!assessment.glasses || !assessment.hearing) return "Confirm safety glasses and hearing protection. Gloves are optional unless the task or site requires them.";
-  if (!assessment.acknowledged) return "The technician must acknowledge the assessment.";
-  if (assessment.unsafeReason) return "Resolve the work hold and clear its reason only after reassessing the hazards.";
-  return null;
+  return jhaCompletionIssues(assessment)[0]?.message || null;
 }
 // Only supplier/job context, never changing payment or administrative fields.
 export function jhaContext(job: Record<string, unknown>) {

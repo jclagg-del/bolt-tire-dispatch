@@ -34,6 +34,7 @@ function renderJobs(queue, status='all') {
     'next/navigation':{useRouter:()=>({push(){}}),useSearchParams:()=>new URLSearchParams(queue?'queue=paid-tires-to-order':'payment=paid')},
     'next/link':{__esModule:true,default:({children,...props})=>React.createElement('a',props,children)},
     '@/components/AppHeader':{__esModule:true,default:()=>null},
+    '@/components/JobJhaButton':{__esModule:true,default:()=>React.createElement('button',null,'JHA — incomplete')},
     '@/lib/supabase':{supabase:{}}
   });
   return renderToStaticMarkup(React.createElement(load('app/jobs/page').default));

@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
+import JobJhaButton from "@/components/JobJhaButton";
+import { isDeliveryService } from "@/lib/job-completion";
 import { isPaidTiresToOrder } from "@/lib/paid-tires-queue";
 
 type Job = {
@@ -638,6 +640,7 @@ function JobsPageContent() {
                   </div>
 
                   <div style={infoTag}>{job.payment_status || "unpaid"}</div>
+                  {!isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
 
                   {total ? <div style={moneyTag}>{total}</div> : null}
 
