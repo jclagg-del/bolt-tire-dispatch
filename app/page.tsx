@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { paidTiresQueueUrl } from "@/lib/paid-tires-queue";
+import { completedRevenueForDay, revenueDateKey } from "@/lib/dashboard-revenue";
 
 type Job = {
   id: string | number;
@@ -15,6 +16,7 @@ type Job = {
   address?: string | null;
   scheduled?: string | null;
   complete?: boolean | null;
+  completed_at?: string | null;
   archived?: boolean | null;
   service_type?: string | null;
   po_number?: string | null;
@@ -125,7 +127,9 @@ export default function DashboardPage() {
   const [tiresToOrderCount, setTiresToOrderCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const todayKey = useMemo(() => getNYDateKey(new Date().toISOString()), []);
+  const [todayKey, setTodayKey] = useState(() => revenueDateKey(new Date()));
+  const [jobsError, setJobsError] = useState(false);
+  const jobsRequest = useRef(0);
 
   const fetchVehicles = async () => {
     const { data, error } = await supabase
@@ -188,34 +192,47 @@ export default function DashboardPage() {
   };
 
   const fetchJobs = async () => {
-    const { data, error } = await supabase.from("jobs").select(`
-      id,
-      customer,
-      vehicle,
-      vehicle_id,
-      unit_number,
-      address,
-      scheduled,
-      complete,
-      archived,
-      service_type,
-      po_number,
-      size,
-      qty,
-      job_total,
-      payment_status,
-      invoice_number,
-      job_status,
-      billing_name
-    `);
+    const request = ++jobsRequest.current;
+    const rows: Job[] = [];
+    // Read every page: revenue must not silently omit rows beyond the API cap.
+    try {
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from("jobs").select(`
+          id,
+          customer,
+          vehicle,
+          vehicle_id,
+          unit_number,
+          address,
+          scheduled,
+          complete,
+          completed_at,
+          archived,
+          service_type,
+          po_number,
+          size,
+          qty,
+          job_total,
+          payment_status,
+          invoice_number,
+          job_status,
+          billing_name
+        `).order("id", { ascending: true }).range(offset, offset + 499);
 
-    if (error) {
-      console.error("Dashboard fetch error:", error.message);
-      setJobs([]);
-      return;
+        if (request !== jobsRequest.current) return;
+        if (error) throw new Error(error.message);
+        rows.push(...((data as Job[]) || []));
+        if (!data || data.length < 500) break;
+      }
+      setJobsError(false);
+      setJobs(rows);
+    } catch (error) {
+      if (request === jobsRequest.current) {
+        console.error("Dashboard fetch error:", error);
+        setJobs([]);
+        setJobsError(true);
+      }
     }
-
-    setJobs((data as Job[]) || []);
   };
 
   const loadDashboard = async () => {
@@ -232,6 +249,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboard();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      setTodayKey(revenueDateKey(new Date()));
+      void fetchJobs();
+    };
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      ++jobsRequest.current;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
 
   const vehicleMap = useMemo(() => {
@@ -266,12 +297,7 @@ export default function DashboardPage() {
     return jobs.filter((j) => (j.payment_status || "unpaid") !== "paid");
   }, [jobs]);
 
-  const todayRevenue = useMemo(() => {
-    return todaysJobs.reduce((sum, job) => {
-      const value = Number(job.job_total || 0);
-      return Number.isNaN(value) ? sum : sum + value;
-    }, 0);
-  }, [todaysJobs]);
+  const todayRevenue = useMemo(() => completedRevenueForDay(jobs, todayKey), [jobs, todayKey]);
 
   const jobsByVehicleToday = useMemo(() => {
     const grouped: Record<string, Job[]> = {};
@@ -327,7 +353,7 @@ export default function DashboardPage() {
           <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />
           <QuickCard label="Completed" value={completedJobs.length} onClick={() => router.push("/completed")} />
           <QuickCard label="Billing" value={unpaidJobs.length} onClick={() => router.push("/billing")} />
-          <QuickCard label="Revenue Today" value={formatMoney(todayRevenue)} onClick={() => router.push("/billing")} />
+          <QuickCard label="Revenue Today" value={jobsError ? "Unavailable" : loading ? "Loading…" : formatMoney(todayRevenue)} description="Completed today · includes tax" onClick={() => router.push("/completed")} />
         </div>
 
         {loading && <div style={loadingBox}>Loading dashboard...</div>}
@@ -421,16 +447,19 @@ export default function DashboardPage() {
 function QuickCard({
   label,
   value,
+  description,
   onClick,
 }: {
   label: string;
   value: string | number;
+  description?: string;
   onClick: () => void;
 }) {
   return (
     <button type="button" style={quickCard} onClick={onClick}>
       <div style={quickLabel}>{label}</div>
       <div style={quickValue}>{value}</div>
+      {description && <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{description}</div>}
     </button>
   );
 }
