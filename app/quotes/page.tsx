@@ -40,6 +40,7 @@ export default function QuotesPage() {
       const { data, error: loadError } = await supabase
         .from("quotes")
         .select("id,quote_number,status,customer,vehicle,tire_size,quantity,created_at,expires_at")
+        .or("purchase_source.is.null,purchase_source.neq.website")
         .order("created_at", { ascending: false });
       setLoading(false);
       if (loadError) {
@@ -63,7 +64,7 @@ export default function QuotesPage() {
           <div>
             <div className="quote-eyebrow">Sales</div>
             <h1>Quotes</h1>
-            <p>Create tire comparisons and turn approved quotes into scheduled jobs.</p>
+            <p>Create tire comparisons and turn approved quotes into scheduled jobs. Website purchases are in <a href="/tire-shop-sales">Tire Shop Sales</a>.</p>
           </div>
           <button className="quote-primary" onClick={() => router.push("/quotes/new")}>+ New Quote</button>
         </div>

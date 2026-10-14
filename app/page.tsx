@@ -321,6 +321,7 @@ export default function DashboardPage() {
             onClick={() => router.push("/orders")}
           />
           <QuickCard label="Paid Tires to Order" value={tiresToOrderCount} onClick={() => router.push(paidTiresQueueUrl)} />
+          <QuickCard label="Tire Shop Sales" value="View payments" onClick={() => router.push("/tire-shop-sales")} />
           <QuickCard label="Open Jobs" value={scheduledJobs.length} onClick={() => router.push("/jobs")} />
           <QuickCard label="Today's Route" value={todaysJobs.length} onClick={() => router.push("/route")} />
           <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />

@@ -80,7 +80,7 @@ test('staff and both customer quote views show the same extras and tax-inclusive
   const quote={id:'q',quote_number:123,customer:'Example',quantity:4,installation_cost:100,service_call_fee:0,disposal_fee:14,ny_state_tire_fee:10,sales_tax_rate:8,tax_exempt:false,additional_items:items,quote_options:[{id:'opt',brand:'Test',model:'Tire',price_per_tire:100,sort_order:0}],selected_option_id:'opt'};
   for(const surface of ['staff','customer','direct']) {
     let index=0;
-    const Page=loader({react:{...React,useEffect(){},useState:initial=>[index++===0?quote:index===2&&surface==='staff'?false:initial,()=>{}]},'next/navigation':{useParams:()=>({id:'q',token:'token'}),useRouter:()=>({}),useSearchParams:()=>new URLSearchParams(surface==='direct'?'purchase=1':'')},'@/components/AppHeader':()=>null,'@/lib/supabase':{supabase:{}}})
+    const Page=loader({react:{...React,useEffect(){},useState:initial=>[index++===0?quote:index===2&&surface==='staff'?false:initial,()=>{}]},'next/navigation':{usePathname:()=>'/quotes/q',useParams:()=>({id:'q',token:'token'}),useRouter:()=>({}),useSearchParams:()=>new URLSearchParams(surface==='direct'?'purchase=1':'')},'@/components/AppHeader':()=>null,'@/lib/supabase':{supabase:{}}})
       (surface==='staff'?'app/quotes/[id]/page':'app/q/[token]/page').default;
     const html=renderToStaticMarkup(React.createElement(Page));
     for(const text of ['TPMS sensor','85.00','Additional service','30.00',surface==='direct'?'639.00':'686.92']) assert.ok(html.includes(text),`${surface}: ${text}`);

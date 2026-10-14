@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { supabase } from "@/lib/supabase";
 import { QuoteOption, QuoteStatus, quoteOptionTotal } from "@/lib/quotes";
 import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
 import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
 import { settledQuote } from "@/lib/quote-payment-pricing";
+import SalePaymentStatus from "@/components/SalePaymentStatus";
+import { isTireShopSale, tireShopSalePath, saleServiceLabel } from "@/lib/tire-shop-sales";
 
 type SavedQuote = {
   additional_items?: AdditionalItem[];
@@ -18,6 +20,8 @@ type SavedQuote = {
   tax_exempt: boolean; selected_option_id: string | null; expires_at: string | null; converted_job_id: string | null;
   public_token: string; payment_status: "unpaid" | "pending" | "paid" | "refunded"; amount_paid: number | null;
   stripe_sales_tax_amount: number | null;
+  paid_at?: string | null;
+  checkout_service?: string | null;
   discount_organization?: string | null;
   purchase_source?: string | null;
   requested_date?: string | null;
@@ -28,6 +32,7 @@ type SavedQuote = {
 export default function QuoteDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const salesView = usePathname().startsWith("/tire-shop-sales/");
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const [quote, setQuote] = useState<SavedQuote | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,15 +41,18 @@ export default function QuoteDetailPage() {
 
   const loadQuote = async () => {
     if (!id) return;
+    setLoading(true);
     const { data, error } = await supabase.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", id).single();
-    setLoading(false);
-    if (error) { setMessage(error.message); return; }
+    if (error) { setQuote(null); setLoading(false); setMessage(error.message); return; }
+    if (isTireShopSale(data) && !salesView) { router.replace(tireShopSalePath(data.id)); return; }
+    if (!isTireShopSale(data) && salesView) { router.replace(`/quotes/${data.id}`); return; }
     const next = settledQuote(data) as SavedQuote;
     next.quote_options = [...(next.quote_options || [])].sort((a, b) => a.sort_order - b.sort_order);
     setQuote(next);
+    setLoading(false);
   };
 
-  useEffect(() => { loadQuote(); }, [id]);
+  useEffect(() => { loadQuote(); }, [id, salesView]);
 
   const totals = useMemo(() => quote ? quote.quote_options.map((option) => quoteOptionTotal(
     { price_per_tire: String(option.price_per_tire), rear_price_per_tire: option.rear_price_per_tire == null ? "" : String(option.rear_price_per_tire) }, quote.quantity,
@@ -52,7 +60,7 @@ export default function QuoteDetailPage() {
   )) : [], [quote]);
 
   const selectOption = async (optionId: string) => {
-    if (!quote) return;
+    if (!quote || isTireShopSale(quote)) return;
     setSaving(true);
     const { error } = await supabase.from("quotes").update({ selected_option_id: optionId, status: "approved", updated_at: new Date().toISOString() }).eq("id", quote.id);
     setSaving(false);
@@ -62,7 +70,7 @@ export default function QuoteDetailPage() {
   };
 
   const updateStatus = async (status: QuoteStatus) => {
-    if (!quote) return;
+    if (!quote || isTireShopSale(quote)) return;
     setSaving(true);
     const { error } = await supabase.from("quotes").update({ status, updated_at: new Date().toISOString() }).eq("id", quote.id);
     setSaving(false);
@@ -72,14 +80,14 @@ export default function QuoteDetailPage() {
 
   const copyCustomerLink = async () => {
     if (!quote?.public_token) return setMessage("Save the quote before sharing it.");
-    const link = `${window.location.origin}/q/${quote.public_token}`;
+    const link = `${window.location.origin}/q/${quote.public_token}${isTireShopSale(quote) ? "?purchase=1" : ""}`;
     try {
       await navigator.clipboard.writeText(link);
       if (quote.status === "draft") {
         await supabase.from("quotes").update({ status: "sent", updated_at: new Date().toISOString() }).eq("id", quote.id);
         setQuote({ ...quote, status: "sent" });
       }
-      setMessage("Customer quote link copied. Paste it into a text or email.");
+      setMessage(isTireShopSale(quote) ? "Customer checkout link copied. This does not confirm payment." : "Customer quote link copied. Paste it into a text or email.");
     } catch {
       window.prompt("Copy this customer quote link:", link);
     }
@@ -102,7 +110,7 @@ export default function QuoteDetailPage() {
   };
 
   const emailCustomerQuote = async () => {
-    if (!quote) return;
+    if (!quote || isTireShopSale(quote)) return;
     if (!quote.email) return setMessage("Add a customer email address before sending.");
     setSaving(true);
     setMessage("");
@@ -124,7 +132,7 @@ export default function QuoteDetailPage() {
 
   const convertToJob = async () => {
     if (!quote || quote.converted_job_id) return;
-    if (quote.purchase_source === "website" && quote.discount_organization) { router.push("/orders"); return; }
+    if (isTireShopSale(quote)) return;
     const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id);
     if (!selected) return alert("Approve one tire option before converting this quote.");
     setSaving(true);
@@ -161,24 +169,32 @@ export default function QuoteDetailPage() {
     router.push(`/jobs/${job.id}`);
   };
 
-  if (loading) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-empty">Loading quote...</div></main></div>;
-  if (!quote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-error">{message || "Quote not found."}</div></main></div>;
+  if (loading) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-empty">{salesView ? "Checking sale and payment…" : "Loading quote..."}</div></main></div>;
+  if (!quote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-error">{message || (salesView ? "Sale not found." : "Quote not found.")}</div></main></div>;
 
   return <div className="quote-shell"><AppHeader /><main className="quote-page">
-    <div className="quote-page-header"><div><div className="quote-eyebrow">Quote #{quote.quote_number}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, `${quote.quantity} front/primary · ${quote.tire_size || "size TBD"}`, quote.rear_tire_size ? `${quote.rear_quantity} rear · ${quote.rear_tire_size}` : null].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
+    <div className="quote-page-header"><div><div className="quote-eyebrow">{salesView ? `Tire Shop Sale · BT-${quote.quote_number}` : `Quote #${quote.quote_number}`}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, `${quote.quantity} front/primary · ${quote.tire_size || "size TBD"}`, quote.rear_tire_size ? `${quote.rear_quantity} rear · ${quote.rear_tire_size}` : null].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
+      {salesView ? <>
+        <button onClick={() => router.push("/tire-shop-sales")}>All Tire Shop Sales</button>
+        <button onClick={loadQuote}>Refresh payment</button>
+        <button onClick={copyCustomerLink}>Copy Customer Checkout Link</button>
+        {quote.converted_job_id ? <button className="quote-primary" onClick={() => router.push(`/jobs/${quote.converted_job_id}`)}>Open Job #{quote.converted_job_id}</button> : quote.payment_status === "paid" && quote.discount_organization ? <button className="quote-primary" onClick={() => router.push("/orders")}>Manage in Orders</button> : null}
+      </> : <>
       <select value={quote.status} onChange={(event) => updateStatus(event.target.value as QuoteStatus)} disabled={saving || quote.status === "converted"}><option value="draft">Draft</option><option value="sent">Sent</option><option value="viewed">Viewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="expired">Expired</option><option value="converted">Converted</option></select>
       <button onClick={() => router.push(`/quotes/new?edit=${quote.id}`)} disabled={saving || quote.status === "converted" || quote.payment_status === "paid"}>Edit Quote</button>
       <button className="quote-primary" onClick={emailCustomerQuote} disabled={saving || !quote.email}>{saving ? "Sending..." : "Email Quote"}</button>
       <button onClick={copyCustomerLink} disabled={saving}>Copy Customer Link</button>
       <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : quote.purchase_source === "website" && quote.discount_organization ? "Manage in Orders" : "Convert to Job"}</button>
+      </>}
     </div></div>
-    {quote.payment_status === "paid" ? <div className="quote-paid-banner"><strong>Paid${quote.amount_paid != null ? ` — $${Number(quote.amount_paid).toFixed(2)}` : ""}</strong><span>Stripe payment received. This quote is ready to schedule or convert to a job.</span></div> : quote.payment_status === "pending" ? <div className="quote-message">Customer checkout has started; payment has not been confirmed yet.</div> : null}
+    {salesView ? <SalePaymentStatus record={quote} /> : quote.payment_status === "paid" ? <div className="quote-paid-banner"><strong>Paid${quote.amount_paid != null ? ` — $${Number(quote.amount_paid).toFixed(2)}` : ""}</strong><span>Stripe payment received. This quote is ready to schedule or convert to a job.</span></div> : quote.payment_status === "pending" ? <div className="quote-message">Customer checkout has started; payment has not been confirmed yet.</div> : null}
+    {salesView && <p>Payment does not order tires from a supplier. {quote.converted_job_id ? "Use the linked job to check tire ordering and scheduling." : quote.payment_status === "paid" ? quote.discount_organization ? "Manage this paid purchase in Orders." : "Payment is confirmed; the job link is not available yet. Refresh or ask the office to check fulfillment before creating another job." : "This checkout is not confirmed as paid. No new job can be created from this sales screen."}</p>}
     {message ? <div className="quote-message">{message}</div> : null}
     {quote.requested_date && <div className="quote-message"><strong>Requested service date: {new Date(`${quote.requested_date}T12:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</strong> — confirm scheduling with the customer.</div>}
 
     {(() => { const selected = quote.quote_options.find((option) => option.id === quote.selected_option_id); return selected?.supplier_product_id ? <section className="quote-ordering-card"><div><span>SUPPLIER ORDERING</span><h2>{selected.supplier || "Supplier"} · {selected.supplier_product_id}</h2><p>{selected.brand} {selected.model} · {quote.quantity} tires</p></div><dl><div><dt>Manufacturer part #</dt><dd>{selected.manufacturer_product_id || "—"}</dd></div><div><dt>Last verified cost</dt><dd>{selected.wholesale_cost != null ? `$${Number(selected.wholesale_cost).toFixed(2)} each` : "Confirm with supplier"}</dd></div><div><dt>Availability when selected</dt><dd>{selected.supplier_availability ? `Local ${selected.supplier_availability.local || 0} · Nearby ${selected.supplier_availability.localPlus || 0} · Network ${selected.supplier_availability.nationwide || 0}` : selected.availability || "Confirm availability"}</dd></div></dl><button type="button" onClick={copyOrderingDetails}>Copy Order Details</button></section> : null; })()}
 
-    <section className="quote-customer-summary"><div><strong>{quote.contact_name || "Customer contact"}</strong><span>{quote.phone || "No phone"}</span><span>{quote.email || "No email"}</span></div><div><strong>Service</strong><span>{quote.service_category}</span><span>{quote.address || "No service address"}</span></div><div><strong>Quote expires</strong><span>{quote.expires_at ? new Date(`${quote.expires_at}T12:00:00`).toLocaleDateString() : "No expiration"}</span></div></section>
+    <section className="quote-customer-summary"><div><strong>{quote.contact_name || "Customer contact"}</strong><span>{quote.phone || "No phone"}</span><span>{quote.email || "No email"}</span></div><div><strong>Service</strong><span>{salesView ? saleServiceLabel(quote.checkout_service) : quote.service_category}</span><span>{quote.address || "No service address"}</span></div><div><strong>{salesView ? "Sale reference" : "Quote expires"}</strong><span>{salesView ? `BT-${quote.quote_number}` : quote.expires_at ? new Date(`${quote.expires_at}T12:00:00`).toLocaleDateString() : "No expiration"}</span></div></section>
 
     <section className="quote-comparison-grid">
       {quote.quote_options.map((option, index) => {
@@ -191,8 +207,8 @@ export default function QuoteDetailPage() {
           {option.rear_model ? <div className="quote-split-tire"><strong>Rear: {option.rear_brand || option.brand} {option.rear_model}</strong><span>{quote.rear_tire_size} · ${Number(option.rear_price_per_tire || 0).toFixed(2)} each · qty {quote.rear_quantity}</span></div> : null}
           <dl className="quote-specs"><div><dt>Warranty</dt><dd>{option.warranty_miles ? `${Number(option.warranty_miles).toLocaleString()} miles` : "—"}</dd></div><div><dt>Type</dt><dd>{option.tire_type || "—"}</dd></div><div><dt>Load / speed</dt><dd>{option.load_speed_rating || "—"}</dd></div><div><dt>Snow rating</dt><dd>{option.snow_rating || "—"}</dd></div><div><dt>Availability</dt><dd>{option.availability || "Confirm availability"}</dd></div></dl>
           {option.highlights ? <p className="quote-highlights">{option.highlights}</p> : null}
-          <div className="quote-installed-total"><span>Installed total</span><strong>${totals[index].toFixed(2)}</strong></div>
-          <button className={selected ? "quote-selected-button" : "quote-select-button"} onClick={() => selectOption(option.id)} disabled={saving || quote.status === "converted"}>{selected ? "✓ Approved choice" : "Choose this tire"}</button>
+          <div className="quote-installed-total"><span>{salesView ? quote.payment_status === "paid" ? "Amount paid" : "Estimated order total · before payment verification" : "Installed total"}</span><strong>${(salesView && quote.payment_status === "paid" && quote.amount_paid != null ? Number(quote.amount_paid) : totals[index]).toFixed(2)}</strong></div>
+          {salesView ? <p>{selected ? "Selected tire" : "Tire option"}</p> : <button className={selected ? "quote-selected-button" : "quote-select-button"} onClick={() => selectOption(option.id)} disabled={saving || quote.status === "converted"}>{selected ? "✓ Approved choice" : "Choose this tire"}</button>}
         </article>;
       })}
     </section>

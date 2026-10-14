@@ -111,7 +111,7 @@ test('normal and direct sent-quote pages keep the editable form visible after va
 });
 test('staff quote displays requested date and retains it when converting to a job', () => {
   let index = 0; const row = { ...quote, ...details };
-  const Page = loader({ react: { ...React, useEffect() {}, useState: initial => [index++ === 0 ? row : index === 2 ? false : initial, () => {}] }, 'next/navigation': { useParams: () => ({ id: 'quote' }), useRouter: () => ({}) }, '@/lib/supabase': { supabase: {} }, '@/components/AppHeader': () => null })('app/quotes/[id]/page.tsx').default;
+  const Page = loader({ react: { ...React, useEffect() {}, useState: initial => [index++ === 0 ? row : index === 2 ? false : initial, () => {}] }, 'next/navigation': { usePathname: () => '/quotes/quote', useParams: () => ({ id: 'quote' }), useRouter: () => ({}) }, '@/lib/supabase': { supabase: {} }, '@/components/AppHeader': () => null })('app/quotes/[id]/page.tsx').default;
   const html = renderToStaticMarkup(React.createElement(Page));
   assert.match(html, /Requested service date: October 15, 2026/);
   for (const value of [details.phone, details.email, details.address]) assert.ok(html.includes(value));
