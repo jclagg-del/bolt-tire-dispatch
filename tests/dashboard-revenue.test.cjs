@@ -12,7 +12,7 @@ function loader(stubs = {}) {
     return mod.exports;
   };
 }
-const { revenueDateKey, completedRevenueForDay } = loader()('lib/dashboard-revenue');
+const { revenueDateKey, completedRevenueForDay, dashboardRevenueForDay } = loader()('lib/dashboard-revenue');
 const day = '2026-10-14';
 const job = (patch = {}) => ({ id: 1, complete: true, completed_at: '2026-10-14T19:00:00Z', job_total: '100.25', ...patch });
 test('revenue uses actual completion date, includes paid/unpaid and archived completed work', () => {
@@ -57,7 +57,7 @@ test('dashboard renders completed revenue independently of the open route and ex
     })('app/page.tsx').default;
     const html = renderToStaticMarkup(React.createElement(Component));
     assert.match(html, /Revenue Today/);
-    assert.match(html, /Completed today · includes tax/);
+    assert.match(html, failure ? /Unable to load revenue/ : /Completed today · Scheduled today: \$0.00 · includes tax/);
     assert.match(html, failure ? /Unavailable/ : /\$100.25/);
     assert.match(html, /No jobs scheduled for today/);
   }
@@ -66,9 +66,25 @@ test('dashboard loads completion timestamps with pagination and refreshes on ret
   const source = fs.readFileSync(path.resolve(__dirname, '../app/page.tsx'), 'utf8');
   assert.match(source, /complete,\s+completed_at,/);
   assert.match(source, /\.order\("id", \{ ascending: true \}\)\.range\(offset, offset \+ 499\)/);
-  assert.match(source, /completedRevenueForDay\(jobs, todayKey\)/);
+  assert.match(source, /dashboardRevenueForDay\(jobs, todayKey\)/);
   assert.match(source, /setTodayKey\(revenueDateKey\(new Date\(\)\)\)/);
   assert.match(source, /addEventListener\("focus", refresh\)/);
   assert.match(source, /setInterval\(refresh, 60000\)/);
   assert.match(source, /setJobsError\(true\)/);
+});
+test('morning shows the whole scheduled plan, then switches to completed totals without shrinking the plan', () => {
+  const first = job({ complete: false, completed_at: null, scheduled: '2026-10-14T09:00:00', job_total: 100 });
+  const second = job({ id: 2, complete: false, completed_at: null, scheduled: '2026-10-14T10:00:00', job_total: 200 });
+  assert.deepEqual(dashboardRevenueForDay([first, second], day), { mode: 'scheduled', total: 300, completedCount: 0, completedTotal: 0, scheduledTotal: 300 });
+  const finished = { ...first, complete: true, completed_at: '2026-10-14T13:30:00Z' };
+  assert.deepEqual(dashboardRevenueForDay([finished, second], day), { mode: 'completed', total: 100, completedCount: 1, completedTotal: 100, scheduledTotal: 300 });
+  const both = dashboardRevenueForDay([finished, { ...second, complete: true, completed_at: '2026-10-14T15:00:00Z' }], day);
+  assert.equal(both.total, 300); assert.equal(both.scheduledTotal, 300);
+});
+test('zero-dollar completions still switch to actuals; other-day completions do not', () => {
+  const scheduled = job({ complete: false, scheduled: '2026-10-14T08:00:00', completed_at: null, job_total: 500 });
+  assert.equal(dashboardRevenueForDay([scheduled, job({ job_total: 0 })], day).mode, 'completed');
+  assert.equal(dashboardRevenueForDay([scheduled, job({ job_total: 0 })], day).total, 0);
+  assert.equal(dashboardRevenueForDay([scheduled, job({ completed_at: '2026-10-13T12:00:00Z' })], day).total, 500);
+  assert.equal(dashboardRevenueForDay([job({ complete: false, scheduled: '2026-10-14T01:00:00', archived: true })], day).total, 0);
 });

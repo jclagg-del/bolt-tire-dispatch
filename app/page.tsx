@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { paidTiresQueueUrl } from "@/lib/paid-tires-queue";
-import { completedRevenueForDay, revenueDateKey } from "@/lib/dashboard-revenue";
+import { dashboardRevenueForDay, revenueDateKey } from "@/lib/dashboard-revenue";
 
 type Job = {
   id: string | number;
@@ -297,7 +297,7 @@ export default function DashboardPage() {
     return jobs.filter((j) => (j.payment_status || "unpaid") !== "paid");
   }, [jobs]);
 
-  const todayRevenue = useMemo(() => completedRevenueForDay(jobs, todayKey), [jobs, todayKey]);
+  const todayRevenue = useMemo(() => dashboardRevenueForDay(jobs, todayKey), [jobs, todayKey]);
 
   const jobsByVehicleToday = useMemo(() => {
     const grouped: Record<string, Job[]> = {};
@@ -353,7 +353,11 @@ export default function DashboardPage() {
           <QuickCard label="Schedule" value="Open" onClick={() => router.push("/schedule")} />
           <QuickCard label="Completed" value={completedJobs.length} onClick={() => router.push("/completed")} />
           <QuickCard label="Billing" value={unpaidJobs.length} onClick={() => router.push("/billing")} />
-          <QuickCard label="Revenue Today" value={jobsError ? "Unavailable" : loading ? "Loading…" : formatMoney(todayRevenue)} description="Completed today · includes tax" onClick={() => router.push("/completed")} />
+          <QuickCard label="Revenue Today" value={jobsError ? "Unavailable" : loading ? "Loading…" : formatMoney(todayRevenue.total)}
+            description={jobsError ? "Unable to load revenue" : loading ? "Checking today's jobs" : todayRevenue.mode === "completed"
+              ? `Completed today · Scheduled today: ${formatMoney(todayRevenue.scheduledTotal)} · includes tax`
+              : "Scheduled today · includes tax"}
+            onClick={() => router.push(todayRevenue.mode === "completed" ? "/completed" : "/route")} />
         </div>
 
         {loading && <div style={loadingBox}>Loading dashboard...</div>}
