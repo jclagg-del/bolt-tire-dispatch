@@ -1,5 +1,8 @@
 "use client";
 
+import WheelTorqueInput from "@/components/WheelTorqueInput";
+import { wheelTorqueError } from "@/lib/job-completion";
+
 type Props = {
   show: boolean;
   completing: boolean;
@@ -7,6 +10,8 @@ type Props = {
   mileageMissing: boolean;
   mileageConfirmed: boolean;
   torqueConfirmed: boolean;
+  torqueFtLb: string;
+  onTorqueValueChange: (value: string) => void;
   onMileageChange: (value: boolean) => void;
   onTorqueChange: (value: boolean) => void;
   onCancel: () => void;
@@ -20,6 +25,8 @@ export default function CompletionModal({
   mileageMissing,
   mileageConfirmed,
   torqueConfirmed,
+  torqueFtLb,
+  onTorqueValueChange,
   onMileageChange,
   onTorqueChange,
   onCancel,
@@ -28,7 +35,7 @@ export default function CompletionModal({
   if (!show) return null;
 
   const canComplete =
-    (deliveryOnly || (!mileageMissing && mileageConfirmed && torqueConfirmed)) && !completing;
+    (deliveryOnly || (!mileageMissing && mileageConfirmed && torqueConfirmed && !wheelTorqueError(torqueFtLb))) && !completing;
 
   return (
     <div style={modalOverlay}>
@@ -60,6 +67,7 @@ export default function CompletionModal({
           />
           <span>All wheels have been torqued properly</span>
         </label>
+        <WheelTorqueInput value={torqueFtLb} onChange={onTorqueValueChange} disabled={completing} />
         </>}
 
         <div style={modalButtonRow}>
@@ -97,6 +105,8 @@ const modalOverlay: React.CSSProperties = {
 };
 
 const modalCard: React.CSSProperties = {
+  maxHeight: "calc(100dvh - 32px)",
+  overflowY: "auto",
   width: "100%",
   maxWidth: 460,
   background: "white",

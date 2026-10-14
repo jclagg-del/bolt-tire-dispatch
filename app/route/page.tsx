@@ -7,7 +7,8 @@ import AppHeader from "@/components/AppHeader";
 import JobJhaButton from "@/components/JobJhaButton";
 import { requireCompletedJha } from "@/lib/job-jha-client";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
-import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
+import { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
+import WheelTorqueInput from "@/components/WheelTorqueInput";
 import RouteStopList from "@/components/RouteStopList";
 import RouteAppointmentDialog from "@/components/RouteAppointmentDialog";
 import { applyRouteOrder, routeDate, routeDateTimeInput, type SavedRouteOrder } from "@/lib/route-order";
@@ -114,6 +115,7 @@ export default function RoutePage() {
   const [routeMileage, setRouteMileage] = useState("");
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
   const [torqueConfirmed, setTorqueConfirmed] = useState(false);
+  const [torqueFtLb, setTorqueFtLb] = useState("");
 
   const todayKey = useMemo(() => getNYDateKey(new Date()), []);
 
@@ -319,6 +321,7 @@ export default function RoutePage() {
     setRouteMileage(job.vehicle_mileage || "");
     setMileageConfirmed(!!(job.vehicle_mileage || "").trim());
     setTorqueConfirmed(false);
+    setTorqueFtLb("");
     setShowCompleteModal(true);
   };
 
@@ -329,12 +332,13 @@ export default function RoutePage() {
     setRouteMileage("");
     setMileageConfirmed(false);
     setTorqueConfirmed(false);
+    setTorqueFtLb("");
   };
 
   const handleComplete = async () => {
     if (!selectedJob || completingId) return;
 
-    const completionError = jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed);
+    const completionError = jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed, torqueFtLb);
     if (completionError) {
       alert(completionError);
       return;
@@ -347,6 +351,7 @@ export default function RoutePage() {
       .from("jobs")
       .update({
         ...completionMileageUpdate(selectedJob.service_type, routeMileage),
+        ...completionTorqueUpdate(selectedJob.service_type, torqueFtLb),
         complete: true,
         job_status: "completed",
         completed_at: new Date().toISOString(),
@@ -389,7 +394,7 @@ export default function RoutePage() {
   const mileageMissing = !routeMileage.trim();
   const deliveryOnly = isDeliveryService(selectedJob?.service_type);
   const canComplete =
-    !!selectedJob && !jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed) && !completingId;
+    !!selectedJob && !jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed, torqueFtLb) && !completingId;
 
   return (
     <div style={shell}>
@@ -519,6 +524,7 @@ export default function RoutePage() {
               />
               <span>All wheels have been torqued properly</span>
             </label>
+            <WheelTorqueInput value={torqueFtLb} onChange={setTorqueFtLb} disabled={!!completingId} />
             </>}
 
             <div style={modalButtonRow}>
@@ -948,6 +954,8 @@ const modalOverlay: React.CSSProperties = {
 };
 
 const modalCard: React.CSSProperties = {
+  maxHeight: "calc(100dvh - 32px)",
+  overflowY: "auto",
   width: "100%",
   maxWidth: 460,
   background: "white",

@@ -12,7 +12,7 @@ import { requireCompletedJha } from "@/lib/job-jha-client";
 import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
-import { isDeliveryService, jobCompletionError, completionMileageUpdate } from "@/lib/job-completion";
+import { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
 import BluetoothLabelButton from "@/components/BluetoothLabelButton";
 
@@ -105,6 +105,8 @@ export default function EditJobPage() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
   const [torqueConfirmed, setTorqueConfirmed] = useState(false);
+  const [torqueFtLb, setTorqueFtLb] = useState("");
+  const [savedTorqueFtLb, setSavedTorqueFtLb] = useState<number | null>(null);
 
   const fetchJob = async () => {
     if (!id) return;
@@ -122,6 +124,7 @@ export default function EditJobPage() {
         tire_position,
         license_plate,
         vehicle_mileage,
+        wheel_torque_ft_lb,
         tires,
         size,
         qty,
@@ -186,6 +189,7 @@ export default function EditJobPage() {
     );
 
     setSavedServiceType(data.service_type || "");
+    setSavedTorqueFtLb(data.wheel_torque_ft_lb == null ? null : Number(data.wheel_torque_ft_lb));
     setForm({
       customer: data.customer || "",
       contact_name: data.contact_name || "",
@@ -518,6 +522,7 @@ export default function EditJobPage() {
 
     setMileageConfirmed(Boolean(form.vehicle_mileage.trim()));
     setTorqueConfirmed(false);
+    setTorqueFtLb("");
     setShowCompleteModal(true);
   };
 
@@ -527,12 +532,13 @@ export default function EditJobPage() {
     setShowCompleteModal(false);
     setMileageConfirmed(false);
     setTorqueConfirmed(false);
+    setTorqueFtLb("");
   };
 
   const handleComplete = async () => {
     if (!id || !form || completing) return;
 
-    const completionError = jobCompletionError(savedServiceType, form.vehicle_mileage, mileageConfirmed, torqueConfirmed);
+    const completionError = jobCompletionError(savedServiceType, form.vehicle_mileage, mileageConfirmed, torqueConfirmed, torqueFtLb);
     if (completionError) {
       alert(completionError);
       return;
@@ -545,6 +551,7 @@ export default function EditJobPage() {
       .from("jobs")
       .update({
         ...completionMileageUpdate(savedServiceType, form.vehicle_mileage),
+        ...completionTorqueUpdate(savedServiceType, torqueFtLb),
         complete: true,
         job_status: "completed",
         completed_at: new Date().toISOString(),
@@ -742,6 +749,11 @@ export default function EditJobPage() {
             <Field>
               <label style={fieldLabel}>Vehicle Mileage</label>
               <input name="vehicle_mileage" value={form.vehicle_mileage} onChange={handleChange} style={input} placeholder="Vehicle Mileage" inputMode="numeric" />
+            </Field>
+
+            <Field>
+              <label style={fieldLabel}>Recorded wheel torque</label>
+              <div style={{ ...input, background: "#f8fafc" }}>{savedTorqueFtLb == null ? "Not recorded" : `${savedTorqueFtLb} ft-lb`}</div>
             </Field>
 
             <Field fullWidth>
@@ -985,6 +997,8 @@ export default function EditJobPage() {
         mileageMissing={mileageMissing}
         mileageConfirmed={mileageConfirmed}
         torqueConfirmed={torqueConfirmed}
+        torqueFtLb={torqueFtLb}
+        onTorqueValueChange={setTorqueFtLb}
         onMileageChange={setMileageConfirmed}
         onTorqueChange={setTorqueConfirmed}
         onCancel={closeCompleteModal}
