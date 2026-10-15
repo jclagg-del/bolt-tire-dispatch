@@ -81,6 +81,9 @@ export function tireImageModel(brand: string, model: string): string {
   let key = model.toLowerCase().replace(/[^a-z0-9]/g, "");
   const make = tireImageBrand(brand);
   if (make && key.startsWith(make)) key = key.slice(make.length);
+  // USAF's flotation designation is the same Open Country M/T tread photo.
+  // This alias is photo-only; SKU/load-range matching remains independent.
+  if (make === "toyo" && key === "opencountrymtflotation") return "opencountrymt";
   return key;
 }
 export function tireImageKey(brand: string, model: string): string {

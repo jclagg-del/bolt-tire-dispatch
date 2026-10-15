@@ -98,3 +98,27 @@ test('staff and customer shops share the corrected card grouping and supplier ma
  assert.match(staff,/<TireShoppingBeta internal/);assert.match(customer,/<TireShoppingBeta/);
  assert.match(shared,/uniqueTireCards\(products/);assert.match(shared,/return supplierOffers\(tire, products\)/);
 });
+
+test('Toyo flotation exact parts group across suppliers, preserving both M/T ply versions',()=>{
+ const products=[];
+ for(const [part,model,ply,speed] of [['360340','Open Country M/T','10','118 Q'],['360810','Open Country M/T','12','122 Q'],['355930','Open Country A/T III','12','122 Q'],['354370','Open Country R/T Trail','12','122 Q'],['358140','Open Country R/T Pro','12','122 Q']]){
+  const a={...atd,brand:'Toyo',id:part,atdProductNumber:part,manufacturerProductNumber:part,model,size:`33X12.50R18LT/${ply}`,loadSpeed:speed,loadRange:ply==='10'?'E':'F',sidewall:'BW'};
+  const b={...a,id:`USAF-${part}`,supplier:'USAF',brand:'TOYO',size:'33125018',model:model==='Open Country M/T'?'Toyo OPEN COUNTRY MT FLOTATION':model,loadSpeed:`${ply} ply`,loadRange:'',sidewall:'BSW',manufacturerProductNumber:`upc-${part}`};
+  assert.equal(sameTireVariant(a,b),true);products.push(a,b);
+ }
+ for(const source of [products,[...products].reverse()]){
+  assert.equal(uniqueTireCards(source).length,5);
+  for(const card of uniqueTireCards(source))assert.deepEqual(supplierOffers(card,source).map(p=>p.supplier),['ATD','USAF']);
+ }
+});
+
+test('flotation aliases work across brands while part, ply, service rating and dimensions remain protected',()=>{
+ for(const size of ['33X12.50R18/10','33x12.5R18LT/10PR','LT33X1250R18/10','33125018'])assert.equal(tireSizeIdentity(size).dimensions,'33X12.50R18');
+ assert.equal(tireSizeIdentity('22570195').dimensions,'22570195');
+ const a={...atd,brand:'Toyo',size:'33X12.50R18/10',loadSpeed:'118 Q',loadRange:'E',sidewall:'BW'};
+ const b={...usaf,brand:'TOYO',size:'33125018',loadSpeed:'10 ply',loadRange:'',sidewall:'BSW'};
+ assert.equal(sameTireVariant(a,b),true);
+ assert.equal(sameTireVariant(a,{...b,loadSpeed:'Load E · 10 ply'}),true);
+ for(const change of [{loadSpeed:'12 ply'},{loadRange:'F'},{loadSpeed:'122 Q'},{size:'35125018'},{size:'33135018'},{size:'33125020'},{size:'33X12.50R18/10/UNKNOWN'},{atdProductNumber:'different',manufacturerProductNumber:'different'},{sidewall:'OWL'},{oeMarking:'BMW',runFlat:true}])assert.equal(sameTireVariant({...a,runFlat:false},{...b,...change}),false,JSON.stringify(change));
+ for(const brand of ['Nitto','General','Kumho'])assert.equal(sameTireVariant({...a,brand},{...b,brand}),true);
+});

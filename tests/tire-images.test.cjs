@@ -153,3 +153,36 @@ test('a broken supplier photo can use the verified detail image and unmatched su
  assert.equal(keys.tireImageKey('ADVANTA','Advanta ATX-850'),keys.tireImageKey('ARGUS ADVANTA','ATX-850'));
  assert.notEqual(keys.tireImageKey('Goodyear','Wrangler Territory AT (Tread Design B)'),keys.tireImageKey('Goodyear','Wrangler Territory AT'));
 });
+
+test('Toyo M/T flotation shares the verified supplier photo without copying ratings or prices',async()=>{
+ await withFetch(async url=>{
+  if(String(url).includes('/rebate?'))return json({data:[]});
+  if(String(url).includes('/catalog?'))return json({results:{data:[]}});
+  return new Response(null,{headers:{'content-type':'image/jpeg'}});
+ },async load=>{
+  const source=[product({brand:'Toyo',model:'Open Country M/T',size:'33X12.50R18/10',imageUrl:good}),product({brand:'TOYO',model:'Toyo OPEN COUNTRY MT FLOTATION',size:'33125018',atdProductNumber:'360810',loadSpeed:'12 ply',cost:300})];
+  const result=await load('lib/tire-library.ts').enrichWithTireLibrary(source);
+  assert.equal(result[1].imageUrl,good);assert.equal(result[1].imageVerified,true);
+  assert.equal(result[1].loadSpeed,'12 ply');assert.equal(result[1].cost,300);assert.equal(result[1].atdProductNumber,'360810');
+  const {tireImageKey}=load('lib/tire-image-health.ts');
+  assert.equal(tireImageKey('Toyo','Open Country M/T'),tireImageKey('TOYO','Toyo OPEN COUNTRY MT FLOTATION'));
+  for(const model of ['Open Country M/T II','Open Country R/T','Open Country A/T III'])assert.notEqual(tireImageKey('Toyo',model),tireImageKey('Toyo','Open Country M/T'));
+ });
+});
+
+test('M/T flotation can recover the M/T library photo even without another supplier in the results',async()=>{
+ let searched=false;
+ await withFetch(async url=>{
+  url=String(url);
+  if(url.includes('/rebate?'))return json({data:[]});
+  if(url.includes('/tires/catalog?')){
+   assert.equal(new URL(url).searchParams.get('search'),'Open Country M/T');searched=true;
+   return json({results:{data:[{id:88,make_name:'Toyo',model_name:'Open Country M/T',thumbnail_image:good}]}});
+  }
+  if(url.includes('/tires/88?'))return json({id:88,front_image:good});
+  return new Response(null,{headers:{'content-type':'image/jpeg'}});
+ },async load=>{
+  const [result]=await load('lib/tire-library.ts').enrichWithTireLibrary([product({brand:'TOYO',model:'Toyo OPEN COUNTRY MT FLOTATION',size:'33125018',loadSpeed:'12 ply'})]);
+  assert.equal(searched,true);assert.equal(result.imageUrl,good);assert.equal(result.loadSpeed,'12 ply');
+ });
+});

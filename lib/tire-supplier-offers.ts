@@ -21,14 +21,36 @@ export function normalizeTireSidewall(value: string): string {
 }
 const identifiers = (tire: SupplierProduct) => [tire.atdProductNumber, tire.manufacturerProductNumber].map(normalize).filter(Boolean);
 const lightTruck = (tire: SupplierProduct) => /^lt/i.test(tire.size.trim())
+  || /LT(?:\/\d+(?:PR)?)?$/i.test(tire.size.trim())
   || /^(?:load\s*)?[c-h]$/i.test(tire.loadRange.trim())
-  || /\d+\s*\/\s*\d+/.test(tire.loadSpeed);
+  || /\d+\s*\/\s*\d+/.test(tire.loadSpeed)
+  || plyRatings(tire).some(ply => Number(ply) >= 6);
+
+// USAF may supply "10 ply" in the load/speed field, not a service rating.
+// Compare that against the other supplier's size suffix or load range instead.
+const rangePly: Record<string, string> = { C: "6", D: "8", E: "10", F: "12", G: "14", H: "16" };
+function loadSpecs(tire: SupplierProduct) {
+  const metadata = tire.loadSpeed.trim().match(/^(?:Load\s+([C-H])(?:\s*·\s*)?)?(?:(\d{1,2})\s*(?:ply|PR))?$/i);
+  return { speed: metadata ? "" : tire.loadSpeed, range: tire.loadRange || metadata?.[1] || "", ply: metadata?.[2] };
+}
+function plyRatings(tire: SupplierProduct): string[] {
+  const specs = loadSpecs(tire);
+  return [tireSizeIdentity(tire.size).ply, specs.ply, rangePly[specs.range.toUpperCase().replace(/^LOAD\s*/, "")]].filter((value): value is string => Boolean(value));
+}
 
 // Supplier metric sizes may append ply rating: LT285/60R20/10. The /10
 // is not part of the rim diameter. Parse only known formats; unfamiliar
 // annotations stay intact so they cannot silently collapse distinct variants.
 export function tireSizeIdentity(value: string): { dimensions: string; ply: string | null } {
   const text = value.toUpperCase().replace(/\s/g, "");
+  const flotation = text.match(/^(?:LT)?(\d{2}(?:\.\d)?)X(\d{1,2}\.\d{1,2}|\d{3,4})R(\d{2}(?:\.5)?)(?:LT)?(?:\/(\d{1,2})(?:PR)?)?$/);
+  // Only known flotation dimensions; don't reinterpret compact metric/truck sizes.
+  const compactFlotation = text.match(/^([2-5]\d)(0[5-9]\d{2}|1\d{3})(1\d|2\d)$/);
+  if (flotation || compactFlotation) {
+    const parts = (flotation || compactFlotation)!;
+    const width = parts[2].includes(".") ? Number(parts[2]) : Number(parts[2]) / 100;
+    return { dimensions: `${Number(parts[1])}X${width.toFixed(2)}R${parts[3]}`, ply: flotation?.[4] || null };
+  }
   const metric = text.match(/^(?:LT|P|ST|T)?(\d{3})\/?(\d{2})(?:ZR|R)?(\d{2}(?:\.5)?)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
   if (!metric) return { dimensions: text, ply: null };
   return { dimensions: `${metric[1]}/${metric[2]}R${metric[3]}`, ply: metric[4] || null };
@@ -42,10 +64,13 @@ export function sameTireVariant(a: SupplierProduct, b: SupplierProduct): boolean
   if (normalize(a.brand) !== normalize(b.brand) || !a.size || !b.size ||
       sizeA.dimensions !== sizeB.dimensions || lightTruck(a) !== lightTruck(b) ||
       (a.fitmentPosition || "both") !== (b.fitmentPosition || "both")) return false;
-  if (sizeA.ply && sizeB.ply && sizeA.ply !== sizeB.ply) return false;
+  if (new Set([...plyRatings(a), ...plyRatings(b)]).size > 1) return false;
+  const specsA = loadSpecs(a), specsB = loadSpecs(b);
   for (const field of ["loadSpeed", "loadRange", "sidewall", "oeMarking"] as const) {
     const spec = (value: string) => field === "loadSpeed" ? value.toLowerCase().replace(/\s/g, "") : field === "sidewall" ? normalizeTireSidewall(value) : normalize(value);
-    if (a[field] && b[field] && spec(a[field]!) !== spec(b[field]!)) return false;
+    const valueA = field === "loadSpeed" ? specsA.speed : field === "loadRange" ? specsA.range : a[field];
+    const valueB = field === "loadSpeed" ? specsB.speed : field === "loadRange" ? specsB.range : b[field];
+    if (valueA && valueB && spec(valueA) !== spec(valueB)) return false;
   }
   if (typeof a.runFlat === "boolean" && typeof b.runFlat === "boolean" && a.runFlat !== b.runFlat) return false;
   const ids = new Set(identifiers(a));

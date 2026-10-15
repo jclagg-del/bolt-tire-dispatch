@@ -284,7 +284,8 @@ async function activeRebatesByPattern() {
 // Search outside the requested size for a photo only, never for SKU/specification data.
 async function tireLibraryModelImage(brand: string, model: string): Promise<string | null> {
   const make = tireImageBrand(brand) === "advanta" ? "Argus Advanta" : brand;
-  const search = model.toLowerCase().startsWith(brand.toLowerCase()) ? model.slice(brand.length).trim() : model;
+  const search = tireImageKey(brand, model) === "toyo:opencountrymt" ? "Open Country M/T"
+    : model.toLowerCase().startsWith(brand.toLowerCase()) ? model.slice(brand.length).trim() : model;
   if (!tireImageBrand(brand) || !tireImageModel(brand, model)) return null;
   const params = new URLSearchParams({ make_name: make, search, per_page: "100" });
   const catalog = await tireLibraryRequest<{ results?: TireLibraryPage }>(`tires/catalog?${params}`);
