@@ -33,7 +33,7 @@ function block(page: PDFPage, value: unknown, font: PDFFont, x: number, top: num
     lines.forEach((line, index) => page.drawText(line, { x, y: top - size - index * leading, size, font }));
     return;
   }
-  throw new Error("There is too much text for a 4 x 6 label. Shorten the job's tire or customer information and try again.");
+  throw new Error("There is too much text for a 4 x 6 label. Shorten the job's tire or facility information and try again.");
 }
 
 export async function tireLabelPdf(job: TireLabelJob, scalePercent = 80): Promise<Uint8Array> {
@@ -60,8 +60,8 @@ export async function tireLabelPdf(job: TireLabelJob, scalePercent = 80): Promis
     block(page,[job.tires,job.size].filter(Boolean).join(" - ") || "Tire information not entered",bold,14,250,260,82,16,9);
     block(page,`Part #: ${job.productNumber || "Not provided"}`,regular,14,161,260,30,11);
     rule(122);
-    caption("CUSTOMER / FACILITY",14,108); caption("SERVICE DATE",172,108);
-    block(page,job.facilityName || job.customer,bold,14,102,148,50,12);
+    caption("FACILITY",14,108); caption("SERVICE DATE",172,108);
+    block(page,job.facilityName?.trim() || "Facility not set",bold,14,102,148,50,12);
     block(page,serviceDate,bold,172,102,102,50,11);
     if (job.vehicle) block(page,job.vehicle,regular,14,43,260,29,10);
     const scale = scalePercent / 100;

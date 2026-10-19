@@ -17,12 +17,12 @@ mod._compile(ts.transpileModule(fs.readFileSync(require.resolve('../components/T
 const Print = mod.exports.default;
 const job = { id: 'test-label-job', jobNumber: '3097885', moNumber: '919205', quantity: 2,
   serviceType: 'Delivery', tires: 'Goodyear Assurance ComfortDrive', size: '235/40R18', productNumber: '413134582' };
-function render(quantity = 2) {
+function render(quantity = 2, overrides = {}) {
   const previous = global.document;
   const body = {};
   global.document = { body };
   try {
-    const html = renderToStaticMarkup(React.createElement(Print, { job: { ...job, quantity } }));
+    const html = renderToStaticMarkup(React.createElement(Print, { job: { ...job, quantity, ...overrides } }));
     assert.equal(portalTarget, body);
     return html;
   } finally {
@@ -41,6 +41,20 @@ test('one, four and maximum label counts do not add spacer labels', () => {
   for (const [quantity, count] of [[1, 1], [4, 4], [24, 24], [99, 24], [0, 1]]) {
     assert.equal((render(quantity).match(/<section /g) || []).length, count);
   }
+});
+test('labels show only the destination facility, never the billing customer fallback', () => {
+  const html = render(2, { customer: 'Kingdom Support Services', facilityName: ' Wallkill ' });
+  assert.match(html, /<small>FACILITY<\/small><strong>Wallkill<\/strong>/);
+  assert.doesNotMatch(html, /CUSTOMER|Kingdom Support Services/);
+  for (const facilityName of [null, '', '   ']) {
+    const missing = render(1, { customer: 'Kingdom Support Services', facilityName });
+    assert.match(missing, /Facility not set/);
+    assert.doesNotMatch(missing, /Kingdom Support Services/);
+  }
+  const edit = fs.readFileSync(require.resolve('../app/jobs/[id]/page.tsx'), 'utf8');
+  assert.match(edit, /setFacilityName\(data\.facility_name \|\| null\)/);
+  assert.match(edit, /customer: form\.customer,\s+facilityName,/);
+  assert.match(edit, /<BluetoothLabelButton[^\n]*facilityName/);
 });
 test('no active label job and server rendering do not change normal document printing', () => {
   assert.equal(renderToStaticMarkup(React.createElement(Print, { job: null })), '');

@@ -93,6 +93,7 @@ export default function EditJobPage() {
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [form, setForm] = useState<JobForm | null>(null);
+  const [facilityName, setFacilityName] = useState<string | null>(null);
   const [savedServiceType, setSavedServiceType] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -116,6 +117,7 @@ export default function EditJobPage() {
       .select(`
         id,
         customer,
+        facility_name,
         contact_name,
         phone,
         email,
@@ -189,6 +191,7 @@ export default function EditJobPage() {
     );
 
     setSavedServiceType(data.service_type || "");
+    setFacilityName(data.facility_name || null);
     setSavedTorqueFtLb(data.wheel_torque_ft_lb == null ? null : Number(data.wheel_torque_ft_lb));
     setForm({
       customer: data.customer || "",
@@ -503,6 +506,7 @@ export default function EditJobPage() {
     flushSync(() => setLabelJob({
       id: String(id),
       customer: form.customer,
+      facilityName,
       jobNumber: form.po_number,
       moNumber: form.mo_number,
       serviceType: form.service_type,
@@ -693,7 +697,7 @@ export default function EditJobPage() {
               >
                 🏷️ Print Tire Labels
               </button>
-              <BluetoothLabelButton style={labelButton} job={{id:String(id),customer:form.customer,jobNumber:form.po_number,moNumber:form.mo_number,serviceType:form.service_type,tires:form.tires,size:form.size,productNumber:form.tire_product_number,quantity:Number(form.qty)||1,vehicle:form.vehicle,scheduled:form.scheduled}} />
+              <BluetoothLabelButton style={labelButton} job={{id:String(id),customer:form.customer,facilityName,jobNumber:form.po_number,moNumber:form.mo_number,serviceType:form.service_type,tires:form.tires,size:form.size,productNumber:form.tire_product_number,quantity:Number(form.qty)||1,vehicle:form.vehicle,scheduled:form.scheduled}} />
             </div>
           </div>
         </div>

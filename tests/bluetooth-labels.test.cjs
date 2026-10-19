@@ -7,6 +7,16 @@ mod._compile(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../lib/tire
 const {tireLabelPdf,smoothPrintUrl,labelCount}=mod.exports;
 const job={id:'sample',jobNumber:'3097885',moNumber:'919205',customer:'Sample Fleet',facilityName:'North Facility',serviceType:'Delivery',tires:'GOODYEAR Assurance ComfortDrive',size:'235/40R18 95W XL',productNumber:'413134582',quantity:2,vehicle:'2017 Honda Civic - White',scheduled:'2026-10-08T16:00:00Z'};
 function content(doc,page){return page.node.Contents().asArray().map(ref=>Buffer.from(decodePDFRawStream(doc.context.lookup(ref)).decode()).toString()).join('\n');}
+test('Bluetooth PDF prints FACILITY and never substitutes the customer name',async()=>{
+ for(const facilityName of ['North Facility',null,'   ']){
+  const doc=await PDFDocument.load(await tireLabelPdf({...job,facilityName}));
+  for(const page of doc.getPages()){
+   const text=[...content(doc,page).matchAll(/<([0-9A-F]+)>\s*Tj/gi)].map(m=>Buffer.from(m[1],'hex').toString('latin1')).join(' ');
+   assert.match(text,/FACILITY/);assert.doesNotMatch(text,/CUSTOMER|Sample Fleet/);
+   assert.ok(text.includes(facilityName?.trim() || 'Facility not set'));
+  }
+ }
+});
 test('Bluetooth labels have exact 4x6 pages, default 80% content and no spacer pages',async()=>{
  const bytes=await tireLabelPdf(job);const doc=await PDFDocument.load(bytes);
  assert.equal(doc.getPageCount(),2);

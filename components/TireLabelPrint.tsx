@@ -82,7 +82,7 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
             {job.productNumber ? <span>Product #: {job.productNumber}</span> : null}
           </div>
           <div className="tire-label-grid tire-label-bottom">
-            <div><small>CUSTOMER / FACILITY</small><strong>{job.facilityName || job.customer || "—"}</strong></div>
+            <div><small>FACILITY</small><strong>{job.facilityName?.trim() || "Facility not set"}</strong></div>
             <div><small>SERVICE DATE</small><strong>{scheduledDate(job.scheduled) || "—"}</strong></div>
           </div>
           {job.vehicle ? <p>{job.vehicle}</p> : null}
