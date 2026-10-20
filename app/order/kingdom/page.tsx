@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import KingdomPortalGate from "@/components/KingdomPortalGate";
+import { FLEET_APPOINTMENT_TIMES as APPOINTMENT_TIMES, fleetOrderRequirementsError } from "@/lib/fleet-order-requirements";
 
 type OrderForm = {
   customer: "" | "Kingdom Support Services" | "HPR";
@@ -52,14 +53,6 @@ const NY_TIMEZONE = "America/New_York";
 const APPOINTMENT_LENGTH_MINUTES = 90;
 const TRAVEL_BUFFER_MINUTES = 30;
 const ELIGIBLE_VEHICLES = ["stepvan", "sprinter"];
-
-const APPOINTMENT_TIMES: AppointmentTime[] = [
-  { value: "08:00", label: "8:00 AM" },
-  { value: "09:30", label: "9:30 AM" },
-  { value: "11:00", label: "11:00 AM" },
-  { value: "12:30", label: "12:30 PM" },
-  { value: "14:00", label: "2:00 PM" },
-];
 
 const initialForm: OrderForm = {
   customer: "",
@@ -404,6 +397,8 @@ export default function KingdomOrderPage() {
     if (!form.requested_date) return "Please select a requested service date.";
     if (!isWeekday(form.requested_date)) return "Online appointments are available Monday through Friday.";
     if (!form.requested_time) return "Please select an available service time.";
+    const requirementsError = fleetOrderRequirementsError(form);
+    if (requirementsError) return requirementsError;
 
     if (!availableTimes.some((time) => time.value === form.requested_time)) {
       return "That appointment time is no longer available. Please choose another time.";
@@ -528,8 +523,8 @@ export default function KingdomOrderPage() {
       license_plate: form.license_plate.trim() || null,
       requested_date: form.requested_date,
       requested_time: form.requested_time,
-      job_number: form.job_number.trim() || null,
-      mo_number: form.mo_number.trim() || null,
+      job_number: form.job_number.trim(),
+      mo_number: form.mo_number.trim(),
       tire_position: form.tire_position.trim(),
       qty: Number(form.qty),
       tire_size: form.tire_size.trim(),
@@ -794,7 +789,8 @@ export default function KingdomOrderPage() {
                 <div style={sectionHeading}>Requested Appointment</div>
                 <p style={sectionHelp}>
                   Choose a preferred date. Only appointment times that are
-                  currently available will appear.
+                  currently available will appear. No appointment starts between
+                  12:00 PM and 1:00 PM (Eastern time).
                 </p>
 
                 <FieldLabel text="Requested Date" required />
@@ -873,20 +869,22 @@ export default function KingdomOrderPage() {
               <section style={formSection}>
                 <div style={sectionHeading}>Work Order Information</div>
 
-                <FieldLabel text="Job Number" />
+                <FieldLabel text="Job / PO Number" required />
                 <input
                   type="text"
                   name="job_number"
+                  required
                   value={form.job_number}
                   onChange={handleChange}
                   style={input}
                   placeholder="Job or work-order number"
                 />
 
-                <FieldLabel text="MO Number" />
+                <FieldLabel text="MO Number" required />
                 <input
                   type="text"
                   name="mo_number"
+                  required
                   value={form.mo_number}
                   onChange={handleChange}
                   style={input}

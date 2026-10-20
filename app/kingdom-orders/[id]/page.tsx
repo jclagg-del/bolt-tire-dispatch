@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import KingdomPortalGate from "@/components/KingdomPortalGate";
+import { FLEET_APPOINTMENT_TIMES, fleetOrderRequirementsError, isFleetLunchTime } from "@/lib/fleet-order-requirements";
 
 type EditableOrder = {
   id: number; customer: "Kingdom Support Services" | "HPR"; goodyear_order: boolean; service_method: "installed" | "delivery" | "pickup" | "delivery_pickup" | null;
@@ -55,6 +56,8 @@ export default function KingdomOrderEditPage() {
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (!order || order.job?.complete || order.payment_status === "paid") return;
+    const requirementsError = fleetOrderRequirementsError(order);
+    if (requirementsError) return setMessage(requirementsError);
     setWorking(true); setMessage("");
     const response = await fetch(`/api/public/kingdom/orders/${order.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(order) });
     const result = await response.json(); setWorking(false);
@@ -91,11 +94,16 @@ export default function KingdomOrderEditPage() {
 
       <h2 style={sectionTitle}>Appointment</h2>
       {order.job?.scheduled && <p style={{ color: "#166534", fontWeight: 700 }}>Scheduled appointment: {new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }).format(new Date(order.job.scheduled))}</p>}
-      <div style={grid2}><Field label="Requested Date" type="date" value={order.requested_date} onChange={(value) => change("requested_date", value)} /><label style={label}>Requested Time<select value={(order.requested_time || "").substring(0,5)} onChange={(event) => change("requested_time", event.target.value)} style={input}><option value="08:00">8:00 AM</option><option value="09:30">9:30 AM</option><option value="11:00">11:00 AM</option><option value="12:30">12:30 PM</option><option value="14:00">2:00 PM</option></select></label></div>
+      <p style={{ color: "#475569" }}>No appointment starts between 12:00 PM and 1:00 PM (Eastern time).</p>
+      <div style={grid2}><Field label="Requested Date" type="date" value={order.requested_date} onChange={(value) => change("requested_date", value)} /><label style={label}>Requested Time<select required value={(order.requested_time || "").substring(0,5)} onChange={(event) => change("requested_time", event.target.value)} style={input}>
+        <option value="">Choose a requested time</option>
+        {order.requested_time && !FLEET_APPOINTMENT_TIMES.some(time => time.value === order.requested_time.slice(0,5)) && <option value={order.requested_time.slice(0,5)} disabled={isFleetLunchTime(order.requested_time)}>{order.requested_time.slice(0,5)}{isFleetLunchTime(order.requested_time) ? " — unavailable; choose another time" : " (current)"}</option>}
+        {FLEET_APPOINTMENT_TIMES.map(time => <option key={time.value} value={time.value}>{time.label}</option>)}
+      </select></label></div>
 
       <h2 style={sectionTitle}>Vehicle</h2><div style={grid3}><Field label="Year" value={order.vehicle_year} onChange={(value) => change("vehicle_year", value)} /><Field label="Make" value={order.vehicle_make} onChange={(value) => change("vehicle_make", value)} /><Field label="Model" value={order.vehicle_model} onChange={(value) => change("vehicle_model", value)} /></div>
       <div style={grid2}><Field label="Color" value={order.vehicle_color || ""} onChange={(value) => change("vehicle_color", value)} /><Field label="License Plate" value={order.license_plate || ""} onChange={(value) => change("license_plate", value)} /></div>
-      <h2 style={sectionTitle}>References</h2><div style={grid2}><Field label="Job / PO Number" value={order.job_number || ""} onChange={(value) => change("job_number", value)} /><Field label="MO Number" value={order.mo_number || ""} onChange={(value) => change("mo_number", value)} /></div>
+      <h2 style={sectionTitle}>References</h2><div style={grid2}><Field label="Job / PO Number" required value={order.job_number || ""} onChange={(value) => change("job_number", value)} /><Field label="MO Number" required value={order.mo_number || ""} onChange={(value) => change("mo_number", value)} /></div>
       <h2 style={sectionTitle}>Tires</h2><div style={grid2}><Field label="Tire Position" value={order.tire_position || ""} onChange={(value) => change("tire_position", value)} /><Field label="Quantity" type="number" value={String(order.qty)} onChange={(value) => change("qty", Number(value))} /><Field label="Tire Size" value={order.tire_size} onChange={(value) => change("tire_size", value)} /><Field label="Product Number" value={order.tire_product_number || ""} onChange={(value) => change("tire_product_number", value)} /></div>
       <label style={label}>Notes<textarea value={order.notes || ""} onChange={(event) => change("notes", event.target.value)} style={textarea} /></label>
       </fieldset>
@@ -104,7 +112,7 @@ export default function KingdomOrderEditPage() {
   </div></main></KingdomPortalGate>;
 }
 
-function Field({ label: text, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) { return <label style={label}>{text}<input type={type} min={type === "number" ? 1 : undefined} value={value} onChange={(event) => onChange(event.target.value)} style={input} /></label>; }
+function Field({ label: text, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) { return <label style={label}>{text}{required ? " *" : ""}<input required={required} type={type} min={type === "number" ? 1 : undefined} value={value} onChange={(event) => onChange(event.target.value)} style={input} /></label>; }
 const shell:React.CSSProperties={minHeight:"100vh",background:"#f8fafc",color:"#111827"};const page:React.CSSProperties={maxWidth:820,margin:"0 auto",padding:"24px 16px 50px"};
 const back:React.CSSProperties={display:"inline-flex",marginBottom:14,color:"#1d4ed8",fontWeight:800,textDecoration:"none"};const card:React.CSSProperties={padding:22,border:"1px solid #e2e8f0",borderRadius:18,background:"white",boxShadow:"0 3px 12px rgba(15,23,42,.06)"};
 const eyebrow:React.CSSProperties={fontSize:12,fontWeight:800,textTransform:"uppercase",color:"#2563eb"};const title:React.CSSProperties={fontSize:28,margin:"7px 0 16px"};const sectionTitle:React.CSSProperties={fontSize:17,margin:"24px 0 4px",paddingTop:16,borderTop:"1px solid #e5e7eb"};

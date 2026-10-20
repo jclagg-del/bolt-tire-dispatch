@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasKingdomAccess } from "@/lib/kingdom-auth";
 import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
+import { fleetOrderRequirementsError, fleetRequestedTime } from "@/lib/fleet-order-requirements";
 
 export async function GET() {
   if (!await hasKingdomAccess()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,6 +36,9 @@ export async function POST(request: Request) {
   const missing = required.find((field) => !String(body[field] ?? "").trim());
   if (missing) return NextResponse.json({ error: "Please complete all required order fields." }, { status: 400 });
 
+  const requirementsError = fleetOrderRequirementsError(body);
+  if (requirementsError) return NextResponse.json({ error: requirementsError }, { status: 400 });
+
   const quantity = Number(body.qty);
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 24) {
     return NextResponse.json({ error: "A valid tire quantity is required." }, { status: 400 });
@@ -56,9 +60,9 @@ export async function POST(request: Request) {
     vehicle_color: String(body.vehicle_color || "").trim() || null,
     license_plate: String(body.license_plate || "").trim() || null,
     requested_date: String(body.requested_date),
-    requested_time: String(body.requested_time),
-    job_number: String(body.job_number || "").trim() || null,
-    mo_number: String(body.mo_number || "").trim() || null,
+    requested_time: fleetRequestedTime(body.requested_time),
+    job_number: String(body.job_number).trim(),
+    mo_number: String(body.mo_number).trim(),
     tire_position: String(body.tire_position).trim(),
     qty: quantity,
     tire_size: String(body.tire_size).trim(),

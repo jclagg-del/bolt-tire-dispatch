@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hasKingdomAccess } from "@/lib/kingdom-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
+import { fleetOrderRequirementsError, fleetRequestedTime } from "@/lib/fleet-order-requirements";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,8 @@ export async function PATCH(request: Request, { params }: Context) {
   }
 
   if (order.payment_status === "paid") return NextResponse.json({ error: "This order was paid online. Please contact Bolt Tire to change tire quantities, products, or service so the payment can be adjusted correctly." }, { status: 409 });
+  const requirementsError = fleetOrderRequirementsError(body);
+  if (requirementsError) return NextResponse.json({ error: requirementsError }, { status: 400 });
   const requestedServiceMethod = String(body.service_method || "").toLowerCase();
   const serviceMethod =
     requestedServiceMethod === "delivered"
@@ -44,7 +47,7 @@ export async function PATCH(request: Request, { params }: Context) {
   const customer = body.customer === "HPR" ? "HPR" : "Kingdom Support Services";
   const qty = Number(body.qty);
   const requestedDate = String(body.requested_date || "").trim();
-  const requestedTime = String(body.requested_time || "").trim().substring(0, 5);
+  const requestedTime = fleetRequestedTime(body.requested_time);
   const appointmentChanged = requestedDate !== order.requested_date || requestedTime !== String(order.requested_time || "").slice(0, 5);
   if (!String(body.submitted_by || "").trim() || !String(body.contact_name || "").trim() || !String(body.contact_number || "").trim()) {
     return NextResponse.json({ error: "Submitted by, contact name, and contact number are required." }, { status: 400 });
@@ -79,8 +82,8 @@ export async function PATCH(request: Request, { params }: Context) {
     vehicle_model: String(body.vehicle_model).trim(),
     vehicle_color: String(body.vehicle_color || "").trim() || null,
     license_plate: String(body.license_plate || "").trim() || null,
-    job_number: String(body.job_number || "").trim() || null,
-    mo_number: String(body.mo_number || "").trim() || null,
+    job_number: String(body.job_number).trim(),
+    mo_number: String(body.mo_number).trim(),
     tire_position: String(body.tire_position || "").trim() || null,
     qty,
     tire_size: String(body.tire_size).trim(),
