@@ -27,6 +27,7 @@ type Job = {
   vehicle_id?: string | null;
   service_type?: string | null;
   po_number?: string | null;
+  mo_number?: string | null;
   billing_name?: string | null;
   job_total?: string | number | null;
   payment_status?: string | null;
@@ -236,6 +237,7 @@ function JobsPageContent() {
         vehicle_id,
         service_type,
         po_number,
+        mo_number,
         billing_name,
         job_total,
         payment_status,
@@ -351,6 +353,7 @@ function JobsPageContent() {
           job.size,
           job.service_type,
           job.po_number,
+          job.mo_number,
           job.billing_name,
           job.invoice_number,
           job.job_status,
@@ -466,7 +469,8 @@ function JobsPageContent() {
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           style={searchInput}
-          placeholder="Search customer, vehicle, address, PO, invoice, notes..."
+          aria-label="Search jobs"
+          placeholder="Search customer, vehicle, address, PO, MO, invoice, notes..."
         />
 
         <div style={quickDateRow}>
@@ -617,6 +621,7 @@ function JobsPageContent() {
                   {job.phone ? <div style={sub}>📞 {job.phone}</div> : null}
                   {job.service_type ? <div style={sub}>🔧 {job.service_type}</div> : null}
                   {job.po_number ? <div style={sub}>📄 PO: {job.po_number}</div> : null}
+                  {job.mo_number ? <div style={sub}>MO: {job.mo_number}</div> : null}
                   {job.billing_name ? <div style={sub}>💵 Bill To: {job.billing_name}</div> : null}
                   {tireText ? <div style={sub}>🛞 {tireText}</div> : null}
                   {job.notes ? <div style={notes}>📝 {job.notes}</div> : null}

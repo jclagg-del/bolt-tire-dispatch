@@ -25,9 +25,9 @@ test('paid tire queue includes unscheduled paid jobs and matches exact dashboard
   const dashboard=fs.readFileSync(path.resolve(__dirname,'../app/page.tsx'),'utf8');
   assert.match(dashboard,/label="Paid Tires to Order"[^\n]*router.push\(paidTiresQueueUrl\)/);
 });
-function renderJobs(queue, status='all') {
-  const rows=[pending,{...pending,id:339,customer:'Already ordered customer',tires_ordered:true},{...pending,id:340,customer:'Unpaid customer',payment_status:'unpaid'}];
-  const states=[rows,[],false,'','all',status,'paid','all','all','',''];
+function renderJobs(queue, status='all', search='') {
+  const rows=[{...pending,mo_number:'00906600'},{...pending,id:339,customer:'Already ordered customer',tires_ordered:true,mo_number:null},{...pending,id:340,customer:'Unpaid customer',payment_status:'unpaid',mo_number:'00906600'}];
+  const states=[rows,[],false,search,'all',status,'paid','all','all','',''];
   let index=0;
   const load=loader({
     react:{...React,useState:()=>[states[index++],()=>{}],useEffect:()=>{},useMemo:fn=>fn()},
@@ -52,4 +52,16 @@ test('ordinary paid jobs view remains available without the tire-order queue res
   assert.ok(html.includes('All Jobs'));
   assert.ok(html.includes('Already ordered customer'));
   assert.ok(!html.includes('Unpaid customer'));
+});
+test('Jobs searches full and partial MO numbers, preserves leading zeros and retains other filters',()=>{
+  const source=fs.readFileSync(path.resolve(__dirname,'../app/jobs/page.tsx'),'utf8');
+  assert.match(source,/\.select\(`[\s\S]*?mo_number,[\s\S]*?`\)/);
+  for(const search of ['00906600','9066',' 00906600 ']){
+    const html=renderJobs(false,'all',search);
+    assert.ok(html.includes('Unscheduled paid customer'));
+    assert.ok(html.includes('MO: <!-- -->00906600') || html.includes('MO: 00906600'));
+    assert.ok(!html.includes('Already ordered customer'));
+    assert.ok(!html.includes('Unpaid customer'),'payment filter stays active');
+  }
+  assert.ok(renderJobs(false,'all','missing-mo').includes('No jobs found.'));
 });
