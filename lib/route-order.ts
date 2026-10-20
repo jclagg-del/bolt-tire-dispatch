@@ -1,5 +1,33 @@
 export type SavedRouteOrder = { vehicle_id: string; job_ids: string[]; revision: number };
 
+export function validRouteDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+export function shiftRouteDate(value: string, days: number): string {
+  if (!validRouteDate(value) || !Number.isInteger(days)) return value;
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  const shifted = date.toISOString().slice(0, 10);
+  return validRouteDate(shifted) ? shifted : value;
+}
+
+export function routeDayLabel(value: string): string {
+  return validRouteDate(value) ? new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC", weekday: "long", month: "long", day: "numeric", year: "numeric",
+  }).format(new Date(`${value}T12:00:00Z`)) : "";
+}
+
+export function routeJobsForDate<T extends { scheduled?: string | null; complete?: boolean | null; archived?: boolean | null }>(jobs: T[], date: string, today: string): T[] {
+  return jobs.filter(job => {
+    if (!job.scheduled || routeDate(job.scheduled) !== date) return false;
+    if (date < today) return !job.archived || !!job.complete;
+    return !job.complete && !job.archived;
+  }).sort((a, b) => (a.scheduled || "").localeCompare(b.scheduled || ""));
+}
+
 // Jobs store New York wall-clock timestamps, not UTC instants.
 export function validRouteDateTime(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/.test(value)) return false;

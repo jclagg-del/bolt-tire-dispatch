@@ -32,12 +32,16 @@ mod.require = id => {
 mod._compile(ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
 }).outputText + '\nexports.TestRouteCard = RouteCard;', __filename);
-function render(part, service_type) {
+function render(part, service_type, readOnly = false) {
   return renderToStaticMarkup(React.createElement(mod.exports.TestRouteCard, {
     job: { id: 1, customer: 'Route test', po_number: '3094589', mo_number: 'MO123', tires: 'Goodyear Assurance', size: '225/60R17', qty: 2, tire_product_number: part, service_type },
-    stopNumber: 1, onComplete() {}, isCompleting: false,
+    stopNumber: 1, onComplete() {}, isCompleting: false, readOnly,
   }));
 }
+test('other-day cards can be viewed without route completion or JHA edit controls', () => {
+  const html=render('00123','Installation',true);
+  assert.match(html,/View job/);assert.doesNotMatch(html,/Complete JHA|>Complete<|>Edit</);
+});
 test('route query loads the stored tire part number and card preserves leading zeros', () => {
   assert.match(source, /\.select\(`[\s\S]*?tire_product_number,[\s\S]*?`\)/);
   const html = render('  00110822702  ');

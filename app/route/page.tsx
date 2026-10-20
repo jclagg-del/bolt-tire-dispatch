@@ -11,7 +11,7 @@ import { isDeliveryService, jobCompletionError, completionMileageUpdate, complet
 import WheelTorqueInput from "@/components/WheelTorqueInput";
 import RouteStopList from "@/components/RouteStopList";
 import RouteAppointmentDialog from "@/components/RouteAppointmentDialog";
-import { applyRouteOrder, routeDate, routeDateTimeInput, type SavedRouteOrder } from "@/lib/route-order";
+import { applyRouteOrder, routeDate, routeDateTimeInput, validRouteDate, shiftRouteDate, routeDayLabel, routeJobsForDate, type SavedRouteOrder } from "@/lib/route-order";
 
 type Job = {
   id: string | number;
@@ -117,13 +117,28 @@ export default function RoutePage() {
   const [torqueConfirmed, setTorqueConfirmed] = useState(false);
   const [torqueFtLb, setTorqueFtLb] = useState("");
 
-  const todayKey = useMemo(() => getNYDateKey(new Date()), []);
+  const todayKey = getNYDateKey(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => getNYDateKey(new Date()));
+  const loadGeneration = useRef(0);
+  const selectedDateRef = useRef(selectedDate);
+  const readOnlyDay = selectedDate !== todayKey;
+  const dateNavigationLocked = savingRoute || !!savingTech || !!completingId || showCompleteModal || !!pendingRouteMove;
+
+  function changeRouteDate(date: string) {
+    if (!validRouteDate(date) || date === selectedDate || dateNavigationLocked) return;
+    // Invalidate in-flight responses immediately, before the next render/effect.
+    loadGeneration.current++;
+    selectedDateRef.current = date;
+    setSelectedDate(date);
+    setLoading(true);
+    setJobs([]); setAssignments({}); setRouteOrders({});
+    setRouteOrderReady(false); setRouteMessage(""); setErrorText("");
+  }
 
   const fetchVehicles = async () => {
     const { data, error } = await supabase
       .from("vehicles")
       .select("id,name,color,active,sort_order")
-      .eq("active", true)
       .order("sort_order", { ascending: true });
 
     if (error || !data || data.length === 0) {
@@ -134,11 +149,13 @@ export default function RoutePage() {
     setVehicles(data as Vehicle[]);
   };
 
-  const fetchAssignments = async () => {
+  const fetchAssignments = async (date = selectedDateRef.current, generation = loadGeneration.current) => {
     const { data, error } = await supabase
       .from("vehicle_daily_assignments")
       .select("assignment_date,vehicle_id,technician_name")
-      .eq("assignment_date", todayKey);
+      .eq("assignment_date", date);
+
+    if (generation !== loadGeneration.current) return;
 
     if (error) {
       console.error("Error loading technician assignments:", error.message);
@@ -154,7 +171,7 @@ export default function RoutePage() {
     setAssignments(map);
   };
 
-  const fetchJobs = async () => {
+  const fetchJobs = async (date = selectedDateRef.current, generation = loadGeneration.current) => {
     setErrorText("");
 
     const { data, error } = await supabase
@@ -180,7 +197,11 @@ export default function RoutePage() {
         mo_number,
         job_status,
         vehicle_mileage
-      `);
+      `)
+      .gte("scheduled", `${shiftRouteDate(date, -1)}T00:00:00`)
+      .lt("scheduled", `${shiftRouteDate(date, 2)}T00:00:00`);
+
+    if (generation !== loadGeneration.current) return;
 
     if (error) {
       setErrorText(error.message);
@@ -191,15 +212,21 @@ export default function RoutePage() {
     setJobs((data as Job[]) || []);
   };
 
-  const loadPage = async () => {
+  const loadPage = async (date: string) => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
-    await Promise.all([fetchVehicles(), fetchAssignments(), fetchJobs(), fetchRouteOrders()]);
-    setLoading(false);
+    try {
+      await Promise.all([fetchVehicles(), fetchAssignments(date, generation), fetchJobs(date, generation), fetchRouteOrders(date, generation)]);
+    } catch (error) {
+      if (generation === loadGeneration.current) setErrorText(error instanceof Error ? error.message : "Could not load this route. Please retry.");
+    } finally {
+      if (generation === loadGeneration.current) setLoading(false);
+    }
   };
 
-  async function routeRequest(method: "GET" | "PUT", body?: unknown) {
+  async function routeRequest(method: "GET" | "PUT", body?: unknown, date = selectedDateRef.current) {
     const { data } = await supabase.auth.getSession();
-    const response = await fetch(`/api/route-order?date=${todayKey}`, {
+    const response = await fetch(`/api/route-order?date=${date}`, {
       method, cache: "no-store",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token || ""}` },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -209,19 +236,21 @@ export default function RoutePage() {
     return result;
   }
 
-  async function fetchRouteOrders() {
+  async function fetchRouteOrders(date = selectedDateRef.current, generation = loadGeneration.current) {
     try {
-      const result = await routeRequest("GET");
+      const result = await routeRequest("GET", undefined, date);
+      if (generation !== loadGeneration.current) return;
       setRouteOrders(Object.fromEntries((result.orders as SavedRouteOrder[]).map(order => [order.vehicle_id, order])));
       setRouteOrderReady(true);
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       setRouteOrderReady(false);
       setRouteMessage(error instanceof Error ? error.message : "Could not load saved route order. Refresh to retry.");
     }
   }
 
   function promptRouteMove(vehicleId: string, jobIds: string[], jobId: string, targetId: string) {
-    if (!routeOrderReady || routeSaveLock.current || pendingRouteMove) return;
+    if (readOnlyDay || loading || !routeOrderReady || routeSaveLock.current || pendingRouteMove) return;
     const job = jobs.find(item => String(item.id) === jobId);
     const target = jobs.find(item => String(item.id) === targetId);
     if (!job?.scheduled || !target?.scheduled) return;
@@ -231,7 +260,7 @@ export default function RoutePage() {
   }
 
   async function saveRouteOrder(scheduled: string) {
-    if (!routeOrderReady || routeSaveLock.current || !pendingRouteMove) return;
+    if (readOnlyDay || !routeOrderReady || routeSaveLock.current || !pendingRouteMove) return;
     const { vehicleId, jobIds, revision, jobId, expectedScheduled } = pendingRouteMove;
     routeSaveLock.current = true;
     setSavingRoute(true);
@@ -253,17 +282,11 @@ export default function RoutePage() {
   }
 
   useEffect(() => {
-    loadPage();
-  }, []);
+    loadPage(selectedDate);
+    return () => { loadGeneration.current++; };
+  }, [selectedDate]);
 
-  const todaysJobs = useMemo(() => {
-    return jobs
-      .filter((job) => {
-        if (!job.scheduled || job.complete || job.archived) return false;
-        return getNYDateKey(job.scheduled) === todayKey;
-      })
-      .sort((a, b) => (a.scheduled || "").localeCompare(b.scheduled || ""));
-  }, [jobs, todayKey]);
+  const selectedDayJobs = useMemo(() => routeJobsForDate(jobs, selectedDate, todayKey), [jobs, selectedDate, todayKey]);
 
   const jobsByVehicle = useMemo(() => {
     const grouped: Record<string, Job[]> = {};
@@ -272,7 +295,7 @@ export default function RoutePage() {
       grouped[vehicle.id] = [];
     });
 
-    todaysJobs.forEach((job) => {
+    selectedDayJobs.forEach((job) => {
       const vehicleId = job.vehicle_id || "stepvan";
 
       if (!grouped[vehicleId]) {
@@ -284,9 +307,11 @@ export default function RoutePage() {
 
     for (const vehicleId of Object.keys(grouped)) grouped[vehicleId] = applyRouteOrder(grouped[vehicleId], routeOrders[vehicleId]?.job_ids);
     return grouped;
-  }, [todaysJobs, vehicles, routeOrders]);
+  }, [selectedDayJobs, vehicles, routeOrders]);
 
   const saveTechnician = async (vehicleId: string, technicianName: string) => {
+    if (readOnlyDay || loading || selectedDateRef.current !== todayKey) return;
+    const generation = loadGeneration.current;
     setSavingTech(vehicleId);
 
     const { error } = await supabase
@@ -309,6 +334,7 @@ export default function RoutePage() {
       return;
     }
 
+    if (generation !== loadGeneration.current) return;
     setAssignments((prev) => ({
       ...prev,
       [vehicleId]: technicianName,
@@ -316,7 +342,10 @@ export default function RoutePage() {
   };
 
   const openCompleteModal = async (job: Job) => {
+    if (readOnlyDay || loading || job.complete) return;
+    const date = selectedDateRef.current;
     if (!(await requireCompletedJha(job.id))) return;
+    if (selectedDateRef.current !== date) return;
     setSelectedJob(job);
     setRouteMileage(job.vehicle_mileage || "");
     setMileageConfirmed(!!(job.vehicle_mileage || "").trim());
@@ -380,17 +409,6 @@ export default function RoutePage() {
     await fetchJobs();
   };
 
-  if (loading) {
-    return (
-      <div style={shell}>
-        <AppHeader />
-        <div style={loadingPage}>
-          <div style={loadingBox}>Loading today&apos;s route...</div>
-        </div>
-      </div>
-    );
-  }
-
   const mileageMissing = !routeMileage.trim();
   const deliveryOnly = isDeliveryService(selectedJob?.service_type);
   const canComplete =
@@ -403,17 +421,29 @@ export default function RoutePage() {
       <div style={page}>
         <div style={headerWrap}>
           <div style={eyebrow}>Route</div>
-          <h1 style={title}>Today&apos;s Route</h1>
+          <h1 style={title}>{readOnlyDay ? "Route" : "Today’s Route"}</h1>
+          <p style={{ ...subtitle, fontWeight: 700, color: "#0f172a" }} aria-live="polite">{routeDayLabel(selectedDate)}</p>
+          <div role="group" aria-label="Route date navigation" style={dateControls}>
+            <button type="button" aria-label="Previous day" disabled={dateNavigationLocked} onClick={() => changeRouteDate(shiftRouteDate(selectedDate, -1))} style={dateButton}>← Previous day</button>
+            <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 700 }}>
+              Route date
+              <input type="date" aria-label="Route date" value={selectedDate} disabled={dateNavigationLocked} onChange={event => changeRouteDate(event.target.value)} style={{ ...dateButton, fontSize: 16 }} />
+            </label>
+            <button type="button" aria-label="Next day" disabled={dateNavigationLocked} onClick={() => changeRouteDate(shiftRouteDate(selectedDate, 1))} style={dateButton}>Next day →</button>
+            <button type="button" disabled={dateNavigationLocked} onClick={() => changeRouteDate(getNYDateKey(new Date()))} style={{ ...dateButton, background: "#2563eb", color: "white", borderColor: "#2563eb" }}>Today</button>
+          </div>
           <p style={subtitle}>
-            Drag a job within its vehicle, or use the arrows, then confirm its new date and time. Other appointments stay unchanged.
+            {readOnlyDay
+              ? `Viewing ${routeDayLabel(selectedDate)}. This route is read-only. ${selectedDate < todayKey ? "Completed stops are included." : "Return to Today to rearrange or complete stops."}`
+              : "Drag a job within its vehicle, or use the arrows, then confirm its new date and time. Other appointments stay unchanged."}
           </p>
         </div>
 
-        {errorText ? <div style={errorBanner}>Error: {errorText}</div> : null}
+        {errorText ? <div style={errorBanner}>Error: {errorText} <button type="button" onClick={() => loadPage(selectedDate)} disabled={loading || dateNavigationLocked}>Retry</button></div> : null}
         <p role="status" aria-live="polite">{routeMessage}</p>
 
-        <div style={columnsWrap}>
-          {vehicles.map((vehicle) => {
+        {loading ? <div role="status" style={loadingBox}>Loading route for {routeDayLabel(selectedDate)}…</div> : <div style={columnsWrap}>
+          {vehicles.filter(vehicle => vehicle.active || (jobsByVehicle[vehicle.id]?.length || 0) > 0).map((vehicle) => {
             const vehicleJobs = jobsByVehicle[vehicle.id] || [];
             const techName = assignments[vehicle.id] || "";
             const textColor = getReadableTextColor(vehicle.color);
@@ -431,10 +461,11 @@ export default function RoutePage() {
                 </div>
 
                 <div style={techBox}>
-                  <label style={techLabel}>Technician Today</label>
+                  <label style={techLabel}>{readOnlyDay ? "Technician for this date" : "Technician Today"}</label>
                   <div style={techRow}>
                     <input
                       value={techName}
+                      disabled={readOnlyDay}
                       onChange={(e) =>
                         setAssignments((prev) => ({
                           ...prev,
@@ -443,39 +474,40 @@ export default function RoutePage() {
                       }
                       onBlur={(e) => saveTechnician(vehicle.id, e.target.value)}
                       style={techInput}
-                      placeholder="Technician name"
+                      placeholder={readOnlyDay ? "No technician assigned" : "Technician name"}
                     />
 
-                    <button
+                    {!readOnlyDay && <button
                       type="button"
                       style={techSaveButton}
                       onClick={() => saveTechnician(vehicle.id, techName)}
                       disabled={savingTech === vehicle.id}
                     >
                       {savingTech === vehicle.id ? "Saving..." : "Save"}
-                    </button>
+                    </button>}
                   </div>
                 </div>
 
                 <div style={columnBody}>
                   {vehicleJobs.length > 0 ? (
-                    <RouteStopList jobs={vehicleJobs} disabled={!routeOrderReady || savingRoute || !!pendingRouteMove || !!completingId || showCompleteModal} onReorder={(ids, movedId, targetId) => promptRouteMove(vehicle.id, ids, movedId, targetId)} renderJob={(job, index) => (
+                    <RouteStopList jobs={vehicleJobs} disabled={readOnlyDay || !routeOrderReady || savingRoute || !!pendingRouteMove || !!completingId || showCompleteModal} onReorder={(ids, movedId, targetId) => promptRouteMove(vehicle.id, ids, movedId, targetId)} renderJob={(job, index) => (
                       <RouteCard
                         key={job.id}
                         job={job}
                         stopNumber={index + 1}
                         isCompleting={completingId === job.id}
+                        readOnly={readOnlyDay}
                         onComplete={() => openCompleteModal(job)}
                       />
                     )} />
                   ) : (
-                    <div style={empty}>No {vehicle.name} jobs today</div>
+                    <div style={empty}>No {vehicle.name} jobs {readOnlyDay ? "on this date" : "today"}</div>
                   )}
                 </div>
               </div>
             );
           })}
-        </div>
+        </div>}
       </div>
 
       {pendingRouteMove && <RouteAppointmentDialog customer={pendingRouteMove.customer} current={pendingRouteMove.current}
@@ -557,11 +589,13 @@ function RouteCard({
   stopNumber,
   onComplete,
   isCompleting,
+  readOnly = false,
 }: {
   job: Job;
   stopNumber: number;
   onComplete: () => void;
   isCompleting: boolean;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const phone = job.phone || "";
@@ -580,7 +614,7 @@ function RouteCard({
       <div style={cardTop}>
         <div style={stopBadge}>Stop {stopNumber}</div>
         <button type="button" onClick={() => router.push(`/jobs/${job.id}`)} style={editBtn}>
-          Edit
+          {readOnly ? "View job" : "Edit"}
         </button>
       </div>
 
@@ -599,13 +633,13 @@ function RouteCard({
         <Info label="MO Number" value={job.mo_number || "-"} />
         <Info label="Tires" value={tireText} />
         <Info label="Part number" value={job.tire_product_number?.trim() || "Not provided"} strong />
-        <Info label="Status" value={job.job_status || "scheduled"} />
+        <Info label="Status" value={job.complete ? "Completed" : job.job_status || "scheduled"} />
       </div>
 
       {job.notes && <div style={notes}>📝 {job.notes}</div>}
 
       <div style={buttonRow}>
-        {!isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
+        {!readOnly && !isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
         {job.address ? (
           <a href={mapsUrl(job.address)} target="_blank" rel="noreferrer" style={goBtn}>
             Go
@@ -630,9 +664,9 @@ function RouteCard({
           <span style={btnDisabled}>Text</span>
         )}
 
-        <button type="button" onClick={onComplete} style={completeBtn} disabled={isCompleting}>
+        {!readOnly && <button type="button" onClick={onComplete} style={completeBtn} disabled={isCompleting}>
           {isCompleting ? "Completing..." : "Complete"}
-        </button>
+        </button>}
       </div>
       {quoCallUrl ? <div style={quoHint}>Calls and texts open in Quo</div> : null}
     </div>
@@ -670,6 +704,9 @@ const page: React.CSSProperties = {
 const headerWrap: React.CSSProperties = {
   marginBottom: 16,
 };
+
+const dateControls: React.CSSProperties = { display: "flex", alignItems: "end", gap: 10, flexWrap: "wrap", margin: "16px 0" };
+const dateButton: React.CSSProperties = { minHeight: 44, padding: "10px 14px", border: "1px solid #cbd5e1", borderRadius: 10, background: "white", color: "#0f172a", fontWeight: 700, cursor: "pointer" };
 
 const eyebrow: React.CSSProperties = {
   fontSize: 12,

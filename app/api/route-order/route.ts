@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
-import { routeDate, validRouteChange, validRouteAppointment } from "@/lib/route-order";
+import { routeDate, validRouteDate, validRouteChange, validRouteAppointment } from "@/lib/route-order";
 
 async function staff(request: Request) {
   const user = await requireApiUser(request);
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   const admin = await staff(request);
   if (!admin) return NextResponse.json({ error: "Staff sign-in is required." }, { status: 403 });
   const date = new URL(request.url).searchParams.get("date");
-  if (date !== routeDate(new Date())) return NextResponse.json({ error: "Refresh the Route page for today's jobs." }, { status: 400 });
+  if (!validRouteDate(date)) return NextResponse.json({ error: "Choose a valid route date." }, { status: 400 });
   const { data, error } = await admin.from("route_day_orders").select("vehicle_id,job_ids,revision").eq("route_date", date);
   if (error) return NextResponse.json({ error: "Saved route order could not be loaded. Refresh before rearranging stops." }, { status: 503 });
   return NextResponse.json({ orders: data || [] }, { headers: { "Cache-Control": "no-store" } });

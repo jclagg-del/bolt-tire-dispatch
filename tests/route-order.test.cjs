@@ -38,7 +38,7 @@ test('invalid, duplicate and excessive order payloads are rejected', () => {
 });
 function fixture({authenticated=true, role='admin', failure=false, rpcError=null}={}) {
   let saved=null;
-  const rpcCalls=[];
+  const rpcCalls=[], readDates=[];
   const today=helpers.routeDate(new Date());
   const jobs=[{id:'a',vehicle_id:'stepvan',scheduled:today+'T16:00:00Z'}, {id:'b',vehicle_id:null,scheduled:today+'T17:00:00Z'}, {id:'c',vehicle_id:'service',scheduled:today+'T18:00:00Z'}];
   const admin={async rpc(name,args){rpcCalls.push({name,args});return rpcError?{error:{code:rpcError}}:{data:{order:{vehicle_id:args.p_vehicle_id,job_ids:args.p_job_ids,revision:args.p_revision+1},job:{id:args.p_job_id,scheduled:args.p_scheduled}}}},from(table){
@@ -50,7 +50,7 @@ function fixture({authenticated=true, role='admin', failure=false, rpcError=null
       else {
         assert.equal(table,'route_day_orders');
         if(failure) result={error:{code:'unavailable'}};
-        else if(op==='select') result={data:saved?[saved]:[]};
+        else if(op==='select') {readDates.push(filters.route_date);result={data:saved?[saved]:[]};}
         else if(op==='insert') {if(saved) result={error:{code:'23505'}};else {saved={...values};result={data:saved};}}
         else if(saved?.revision!==filters.revision) result={data:null};
         else {saved={...saved,...values};result={data:saved};}
@@ -60,8 +60,32 @@ function fixture({authenticated=true, role='admin', failure=false, rpcError=null
   }};
   const api=load('app/api/route-order/route.ts',{'@/lib/supabase/admin':{requireApiUser:async()=>authenticated?{id:'staff'}:null,createAdminClient:()=>admin}});
   const body={date:today,vehicleId:'stepvan',jobIds:['b','a'],revision:0};
-  return {jobs, body, rpcCalls, get saved(){return saved},get:()=>api.GET(new Request(`http://localhost/api/route-order?date=${today}`)),put:(changes={})=>api.PUT(new Request('http://localhost/api/route-order',{method:'PUT',body:JSON.stringify({...body,...changes})}))};
+  return {jobs, body, rpcCalls, readDates, get saved(){return saved},get:(date=today)=>api.GET(new Request(`http://localhost/api/route-order?date=${date}`)),put:(changes={})=>api.PUT(new Request('http://localhost/api/route-order',{method:'PUT',body:JSON.stringify({...body,...changes})}))};
 }
+test('staff can read past/future day orders, while non-today writes remain blocked',async()=>{
+  const f=fixture();
+  for(const date of ['2025-12-31','2027-01-01']) {
+    assert.equal((await f.get(date)).status,200);
+    assert.equal(f.readDates.at(-1),date);
+    assert.equal((await f.put({date})).status,400);
+  }
+  for(const date of ['', '2026-02-30', '2026-13-01', 'tomorrow', '2026-10-20T12:00']) assert.equal((await f.get(date)).status,400);
+  assert.equal(f.readDates.length,2);assert.equal(f.rpcCalls.length,0);
+  assert.equal((await fixture({authenticated:false}).get('2027-01-01')).status,403);
+});
+
+test('route day navigation is calendar-based across DST, months and leap years',()=>{
+  for(const [day,offset,expected] of [['2026-03-08',1,'2026-03-09'],['2026-11-01',-1,'2026-10-31'],['2026-12-31',1,'2027-01-01'],['2028-02-28',1,'2028-02-29'],['2026-03-01',-1,'2026-02-28']]) assert.equal(helpers.shiftRouteDate(day,offset),expected);
+  assert.equal(helpers.shiftRouteDate('invalid',1),'invalid');
+  assert.equal(helpers.routeDayLabel('2026-10-20'),'Tuesday, October 20, 2026');
+});
+
+test('past route views include completed archived stops, but not cancelled archived stops',()=>{
+  const rows=[{id:1,scheduled:'2026-10-19T09:00:00',complete:true,archived:true},{id:2,scheduled:'2026-10-19T10:00:00',complete:false,archived:false},{id:3,scheduled:'2026-10-19T11:00:00',complete:false,archived:true},{id:4,scheduled:'2026-10-20T09:00:00',complete:true},{id:5,scheduled:'2026-10-20T10:00:00',complete:false}];
+  assert.deepEqual(helpers.routeJobsForDate(rows,'2026-10-19','2026-10-20').map(j=>j.id),[1,2]);
+  assert.deepEqual(helpers.routeJobsForDate(rows,'2026-10-20','2026-10-20').map(j=>j.id),[5]);
+  assert.deepEqual(helpers.routeJobsForDate(rows,'2026-10-21','2026-10-20'),[]);
+});
 test('route API persists per-day vehicle ordering and rejects stale concurrent saves',async()=>{
   const f=fixture();
   assert.equal((await f.put()).status,200);
