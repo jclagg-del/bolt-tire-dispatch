@@ -8,6 +8,7 @@ import AppHeader from "@/components/AppHeader";
 import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
 import { AdditionalItem, additionalItemsError, additionalItemsTotals } from "@/lib/additional-items";
 import JobJhaButton from "@/components/JobJhaButton";
+import CompletionTextButton, { type CompletionTextJob } from "@/components/CompletionTextButton";
 import { requireCompletedJha } from "@/lib/job-jha-client";
 import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
@@ -93,6 +94,7 @@ export default function EditJobPage() {
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
   const [form, setForm] = useState<JobForm | null>(null);
+  const [completionTextJob, setCompletionTextJob] = useState<CompletionTextJob | null>(null);
   const [facilityName, setFacilityName] = useState<string | null>(null);
   const [savedServiceType, setSavedServiceType] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
@@ -120,6 +122,7 @@ export default function EditJobPage() {
         facility_name,
         contact_name,
         phone,
+        review_request_sent_at,
         email,
         vehicle,
         submitted_by,
@@ -167,6 +170,7 @@ export default function EditJobPage() {
     }
 
     if (!data) return;
+    setCompletionTextJob(data);
 
     const { data: creationData } = await supabase
       .from("jobs")
@@ -645,6 +649,7 @@ export default function EditJobPage() {
             </div>
 
             <div style={heroActions}>
+              {completionTextJob && <CompletionTextButton key={String(completionTextJob.id)} job={completionTextJob} />}
               {id && !isDeliveryService(savedServiceType) && <JobJhaButton jobId={id} />}
               <button
                 type="button"

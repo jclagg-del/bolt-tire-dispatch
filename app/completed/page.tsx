@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import CompletionTextButton from "@/components/CompletionTextButton";
 
 type Job = {
   id: string | number;
@@ -44,7 +45,6 @@ function formatDateTimeNY(input?: string | null) {
 export default function CompletedPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [reopeningId, setReopeningId] = useState<string | number | null>(null);
-  const [sendingTextId, setSendingTextId] = useState<string | number | null>(null);
   const router = useRouter();
 
   const fetchJobs = async () => {
@@ -88,23 +88,6 @@ export default function CompletedPage() {
     await fetchJobs();
   };
 
-  const sendCompletionText = async (job: Job) => {
-    if (sendingTextId !== null || job.review_request_sent_at) return;
-    if (!window.confirm(`Send the completed-work text to ${job.phone || job.contact_number}?`)) return;
-    setSendingTextId(job.id);
-    const { data } = await supabase.auth.getSession();
-    const response = await fetch("/api/notifications/job-completed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token || ""}` },
-      body: JSON.stringify({ jobId: job.id, mode: "review_text" }),
-    });
-    const result = await response.json().catch(() => ({}));
-    setSendingTextId(null);
-    if (!response.ok) return alert(result.error || "The completion text could not be sent.");
-    if (result.review?.skipped) return alert(result.review.reason === "no-valid-phone" ? "Add a valid customer phone number first." : "The completion text was not sent.");
-    setJobs((current) => current.map((item) => item.id === job.id ? { ...item, review_request_sent_at: new Date().toISOString() } : item));
-  };
-
   return (
     <div style={shell}>
       <AppHeader />
@@ -131,13 +114,7 @@ export default function CompletedPage() {
                 <div style={customer}>{job.customer || "Unnamed Job"}</div>
 
                 <div style={cardActions}>
-                  {job.customer !== "Kingdom Support Services" && job.customer !== "HPR" && (job.phone || job.contact_number) ? <button
-                    onClick={() => sendCompletionText(job)}
-                    style={textBtn}
-                    disabled={sendingTextId === job.id || Boolean(job.review_request_sent_at)}
-                  >
-                    {job.review_request_sent_at ? "Text Sent" : sendingTextId === job.id ? "Sending..." : "Send Completion Text"}
-                  </button> : null}
+                  <CompletionTextButton key={String(job.id)} job={job} />
                   <button
                     onClick={() => router.push(`/jobs/${job.id}`)}
                     style={editBtn}
@@ -262,6 +239,7 @@ const cardTop: React.CSSProperties = {
 
 const cardActions: React.CSSProperties = {
   display: "flex",
+  flexWrap: "wrap",
   gap: 8,
 };
 
@@ -289,16 +267,6 @@ const editBtn: React.CSSProperties = {
   color: "white",
   borderRadius: 8,
   border: "none",
-};
-
-const textBtn: React.CSSProperties = {
-  padding: "8px 12px",
-  background: "#2563eb",
-  color: "white",
-  borderRadius: 8,
-  border: "none",
-  fontWeight: 700,
-  cursor: "pointer",
 };
 
 const reopenBtn: React.CSSProperties = {

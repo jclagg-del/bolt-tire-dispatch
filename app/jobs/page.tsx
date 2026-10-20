@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import JobJhaButton from "@/components/JobJhaButton";
+import CompletionTextButton from "@/components/CompletionTextButton";
 import { isDeliveryService } from "@/lib/job-completion";
 import { isPaidTiresToOrder } from "@/lib/paid-tires-queue";
 
@@ -13,6 +14,7 @@ type Job = {
   id: string | number;
   customer?: string | null;
   phone?: string | null;
+  review_request_sent_at?: string | null;
   vehicle?: string | null;
   unit_number?: string | null;
   address?: string | null;
@@ -221,6 +223,7 @@ function JobsPageContent() {
         id,
         customer,
         phone,
+        review_request_sent_at,
         vehicle,
         unit_number,
         address,
@@ -640,6 +643,7 @@ function JobsPageContent() {
                   </div>
 
                   <div style={infoTag}>{job.payment_status || "unpaid"}</div>
+                  <CompletionTextButton key={String(job.id)} job={job} />
                   {!isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
 
                   {total ? <div style={moneyTag}>{total}</div> : null}

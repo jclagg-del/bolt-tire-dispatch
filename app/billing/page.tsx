@@ -6,10 +6,19 @@ import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
 import QuarterlyTaxReport from "@/components/QuarterlyTaxReport";
 import BillingReceiptDialog from "@/components/BillingReceiptDialog";
+import CompletionTextButton from "@/components/CompletionTextButton";
+import { matchesBillingSearch } from "@/lib/billing-search";
 
 type BillingJob = {
   id: string | number;
   customer?: string | null;
+  contact_name?: string | null;
+  facility_name?: string | null;
+  po_number?: string | null;
+  mo_number?: string | null;
+  email?: string | null;
+  address?: string | null;
+  license_plate?: string | null;
   unit_number?: string | null;
   vehicle?: string | null;
   scheduled?: string | Date | null;
@@ -71,19 +80,29 @@ export default function BillingPage() {
   const [linkingId, setLinkingId] = useState<string | number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [sendingTextId, setSendingTextId] = useState<string | number | null>(null);
+  const [search, setSearch] = useState("");
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [jobsError, setJobsError] = useState("");
   const [receiptJobId, setReceiptJobId] = useState<string | number | null>(null);
   const [receiptMessage, setReceiptMessage] = useState("");
 
   const fetchJobs = async () => {
-    const { data, error } = await supabase.from("jobs").select("*");
-
-    if (error) {
-      alert(`Error loading billing jobs: ${error.message}`);
-      return;
+    setLoadingJobs(true); setJobsError("");
+    try {
+      const allJobs: BillingJob[] = [];
+      // Load every page so searching doesn't silently omit older paid jobs.
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from("jobs").select("*").order("id").range(offset, offset + 499);
+        if (error) throw new Error(error.message);
+        allJobs.push(...(data || []));
+        if (!data || data.length < 500) break;
+      }
+      setJobs(allJobs);
+    } catch (error) {
+      setJobsError(error instanceof Error ? error.message : "Could not load billing jobs.");
+    } finally {
+      setLoadingJobs(false);
     }
-
-    setJobs(data || []);
   };
 
   useEffect(() => {
@@ -208,29 +227,6 @@ export default function BillingPage() {
     await fetchJobs();
   };
 
-  const sendCompletionText = async (job: BillingJob) => {
-    if (sendingTextId !== null || job.review_request_sent_at) return;
-    const phone = job.phone || job.contact_number;
-    if (!phone) return alert("Add a valid customer phone number first.");
-    if (!window.confirm(`Send the completed-work text to ${phone}?`)) return;
-
-    setSendingTextId(job.id);
-    const response = await authenticatedFetch("/api/notifications/job-completed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId: job.id, mode: "review_text" }),
-    });
-    const result = await response.json().catch(() => ({}));
-    setSendingTextId(null);
-
-    if (!response.ok) return alert(result.error || "The completion text could not be sent.");
-    if (result.review?.skipped) {
-      return alert(result.review.reason === "no-valid-phone" ? "Add a valid customer phone number first." : "The completion text was not sent.");
-    }
-
-    setJobs((current) => current.map((item) => item.id === job.id ? { ...item, review_request_sent_at: new Date().toISOString() } : item));
-  };
-
   const readyToBill = jobs.filter((job) => {
     const status = job.job_status || (job.complete ? "completed" : "scheduled");
     return job.complete && !["billed", "paid"].includes(status) && job.payment_status !== "paid";
@@ -310,23 +306,36 @@ export default function BillingPage() {
           </div>
         </div>
 
+        <div style={{ ...sectionCard, padding: 16 }}>
+          <label htmlFor="billing-search" style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Search billing</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input id="billing-search" type="search" value={search} onChange={event => setSearch(event.target.value)}
+              placeholder="Name, job / PO, MO, invoice, vehicle, phone or email…"
+              style={{ flex: 1, minWidth: 0, minHeight: 44, border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16 }} />
+            {search && <button type="button" onClick={() => setSearch("")} style={linkButton}>Clear</button>}
+          </div>
+          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 0 }}>Searches Ready to bill, Billed / unpaid and Paid. Summary totals and the sales-tax report stay unchanged.</p>
+          {loadingJobs && <p role="status">Loading billing jobs…</p>}
+          {jobsError && <p role="alert">Could not refresh billing: {jobsError} <button type="button" onClick={fetchJobs} disabled={loadingJobs}>Retry</button></p>}
+        </div>
+
         {[
           { title: "Ready to bill", jobs: readyToBill, paidSection: false },
           { title: "Billed, unpaid", jobs: billedUnpaid, paidSection: false, amount: billedUnpaidTotal },
           { title: "Paid", jobs: paidJobs, paidSection: true },
-        ].map((section) => (
+        ].map(section => ({ ...section, totalCount: section.jobs.length, jobs: section.jobs.filter(job => matchesBillingSearch(job, search)) })).map((section) => (
           <div key={section.title} style={sectionCard}>
             <div style={sectionHeader}>
               <h2 style={sectionTitle}>
-                {section.title} ({section.jobs.length})
+                {section.title} ({section.jobs.length}{search.trim() ? ` of ${section.totalCount}` : ""})
               </h2>
               {section.amount !== undefined && (
-                <strong style={sectionAmount}>{formatMoney(section.amount)} outstanding</strong>
+                <strong style={sectionAmount}>{formatMoney(section.amount)} outstanding{search.trim() ? " (all jobs)" : ""}</strong>
               )}
             </div>
 
             {section.jobs.length === 0 ? (
-              <div style={emptyState}>No jobs in this section.</div>
+              <div style={emptyState}>{loadingJobs ? "Loading…" : jobsError && !jobs.length ? "Billing could not be loaded. Please retry." : search.trim() ? "No matching jobs in this section." : "No jobs in this section."}</div>
             ) : (
               <table style={table}>
                 <thead>
@@ -351,7 +360,9 @@ export default function BillingPage() {
                         onClick={() => router.push(`/jobs/${job.id}`)}
                         style={clickableRow}
                       >
-                        <td style={td}>{job.customer || "—"}</td>
+                        <td style={td}>{job.customer || "—"}
+                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Job / PO: {job.po_number || job.id}{job.mo_number ? ` · MO: ${job.mo_number}` : ""}</div>
+                        </td>
                         <td style={td}>
                           {job.unit_number || job.vehicle || "—"}
                         </td>
@@ -419,16 +430,7 @@ export default function BillingPage() {
                               </button>
                             </>
                           )}
-                          {job.complete && job.customer !== "Kingdom Support Services" && job.customer !== "HPR" && (job.phone || job.contact_number) ? (
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); sendCompletionText(job); }}
-                              style={textButton}
-                              disabled={sendingTextId === job.id || Boolean(job.review_request_sent_at)}
-                            >
-                              {job.review_request_sent_at ? "Text Sent" : sendingTextId === job.id ? "Sending..." : "Send Completion Text"}
-                            </button>
-                          ) : null}
+                          <CompletionTextButton key={String(job.id)} job={job} />
                           </div>
                         </td>
                       </tr>
@@ -486,7 +488,6 @@ const quickBooksButton: React.CSSProperties = { padding: "10px 14px", border: 0,
 const invoiceButton: React.CSSProperties = { ...quickBooksButton, background: "#2563eb", padding: "8px 12px" };
 const numberButton: React.CSSProperties = { ...quickBooksButton, background: "#7c3aed", padding: "8px 12px" };
 const linkButton: React.CSSProperties = { ...quickBooksButton, background: "#0369a1", padding: "8px 12px" };
-const textButton: React.CSSProperties = { ...quickBooksButton, background: "#111827", padding: "8px 12px" };
 const actionButtons: React.CSSProperties = { display: "flex", gap: 6, flexWrap: "wrap" };
 const disconnectButton: React.CSSProperties = { ...quickBooksButton, background: "#6b7280" };
 
