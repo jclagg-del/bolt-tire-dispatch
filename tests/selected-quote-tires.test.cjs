@@ -7,6 +7,10 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const mod = new Module(__filename, module);
 mod.paths = module.paths;
+const designation = new Module(__filename, module);
+designation.paths = module.paths;
+designation._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/tire-designation.ts'), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText, __filename);
+mod.require = id => id === '@/lib/tire-designation' ? designation.exports : require(id);
 mod._compile(ts.transpileModule(fs.readFileSync(require.resolve('../components/SelectedQuoteTires.tsx'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
 }).outputText, __filename);
@@ -33,4 +37,9 @@ test('unchecking targets the exact supplier product and rerender updates the lis
 });
 test('no selection leaves no empty list',()=>{
   assert.equal(renderToStaticMarkup(React.createElement(SelectedQuoteTires,{tires:[],onRemove:()=>{}})),'');
+});
+test('selected LT tire keeps its readable designation while preserving exact supplier part',()=>{
+  const row={...tires[0],size:'2756520',loadSpeed:'126/123 S',loadRange:'',atdProductNumber:'28840025'};
+  const html=renderToStaticMarkup(React.createElement(SelectedQuoteTires,{tires:[row],onRemove:()=>{}}));
+  assert.ok(html.includes('LT275/65R20'));assert.ok(html.includes('28840025'));assert.equal(row.size,'2756520');
 });

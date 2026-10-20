@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { hasSupplierCost, installedTotal, supplierCostLabel, tireGrossProfit, withQuotePrice } from "@/lib/tire-shop-pricing";
 import StaffTireCard from "@/components/StaffTireCard";
+import { tireDisplaySize, tireIsLightTruck } from "@/lib/tire-designation";
 import { sameTireVariant, supplierOffers, uniqueTireCards } from "@/lib/tire-supplier-offers";
 import { matchesBrands, tireBrands } from "@/lib/tire-brand-filter";
 import { hasTireStock, matchesTireStock } from "@/lib/tire-stock-filter";
@@ -1247,10 +1248,11 @@ export default function TireShoppingBeta({
                     </div>
                     <h2>{tire.model}</h2>
                     <strong>
-                      {tire.size || tire.description}
+                      {tireDisplaySize(tire) || tire.description}
                       {tire.loadSpeed ? ` · ${tire.loadSpeed}` : ""}
                     </strong>
                     <div className="tire-beta-tags">
+                      {tireIsLightTruck(tire) && <span>Light truck (LT)</span>}
                       <span>{tire.category}</span>
                       {tire.warranty && <span>{tire.warranty} warranty</span>}
                       {tire.loadRange && <span>Load {tire.loadRange}</span>}

@@ -2,6 +2,7 @@
 
 import { hasSupplierCost, hasReportedFet, installedTotal, tireGrossProfit } from "@/lib/tire-shop-pricing";
 import { hasTireStock } from "@/lib/tire-stock-filter";
+import { tireDisplaySize, tireIsLightTruck } from "@/lib/tire-designation";
 import styles from "./StaffTireCard.module.css";
 
 type Tire = {
@@ -43,7 +44,8 @@ export default function StaffTireCard<T extends Tire>({ tire, offers, price, qua
             else onImageFailed();
           }} /><span>Enlarge</span>
         </button> : <div className={styles.photo}><span>No image available</span></div>}
-        <div><div className={styles.brand}>{tire.brand}</div><h2>{tire.model}</h2><strong>{tire.size || tire.description}{tire.loadSpeed ? ` · ${tire.loadSpeed}` : ""}</strong>
+        <div><div className={styles.brand}>{tire.brand}</div><h2>{tire.model}</h2><strong>{tireDisplaySize(tire) || tire.description}{tire.loadSpeed ? ` · ${tire.loadSpeed}` : ""}</strong>
+          {tireIsLightTruck(tire) && <div className={styles.tags}><span>Light truck (LT)</span></div>}
           <div className={styles.tags}>{tire.fitmentPosition !== "both" && <span>{tire.fitmentPosition} fitment</span>}{tire.category && tire.category !== "Undefined" && <span>{tire.category}</span>}{tire.warranty && <span>{tire.warranty} warranty</span>}{tire.loadRange && <span>Load {tire.loadRange}</span>}{tire.snowRated && <span>3PMSF</span>}{tire.runFlat && <span>Run-flat</span>}{tire.discontinued && <span>Discontinued</span>}</div>
         </div>
       </div>

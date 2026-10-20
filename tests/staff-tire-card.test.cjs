@@ -4,10 +4,23 @@ const fs=require('node:fs'),Module=require('node:module'),ts=require('typescript
 const {renderToStaticMarkup}=require('react-dom/server');
 function load(file,stubs={}){const m=new Module(__filename,module);m.paths=module.paths;m.require=id=>Object.hasOwn(stubs,id)?stubs[id]:require(id);m._compile(ts.transpileModule(fs.readFileSync(require.resolve(file),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,__filename);return m.exports;}
 const pricing=load('../lib/tire-shop-pricing.ts'),stock=load('../lib/tire-stock-filter.ts');
-const Card=load('../components/StaffTireCard.tsx',{'@/lib/tire-shop-pricing':pricing,'@/lib/tire-stock-filter':stock,'./StaffTireCard.module.css':{__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})}}).default;
+const designation=load('../lib/tire-designation.ts');
+const Card=load('../components/StaffTireCard.tsx',{'@/lib/tire-designation':designation,'@/lib/tire-shop-pricing':pricing,'@/lib/tire-stock-filter':stock,'./StaffTireCard.module.css':{__esModule:true,default:new Proxy({},{get:(_,key)=>String(key)})}}).default;
 const tire={id:'usaf-1',supplier:'USAF',brand:'NITTO',model:'Terra Grappler G3',size:'275/55R20',description:'Tire',loadSpeed:'117 T',loadRange:'XL',warranty:'70000',category:'All-terrain',snowRated:true,cost:220.99,fet:0,map:302,suggestedPrice:281,quotePrice:302,installedPrice:370,estimatedTotals:{2:800,4:1595},imageUrl:'https://example.com/tire.jpg',atdProductNumber:'224060',manufacturerProductNumber:'224060',fitmentPosition:'both',availability:{local:0,localPlus:9,nationwide:9},runFlat:false,discontinued:false,treadDepth:'13',utqg:'600',sidewall:'BSW',oeMarking:''};
 const atd={...tire,id:'atd-1',supplier:'ATD',cost:228.5,availability:{local:8,localPlus:69,nationwide:80}};
 const props={tire,offers:[tire,atd,{...tire,id:'ntw',supplier:'NTW',cost:undefined}],price:'302.00',quantity:4,staggered:false,selected:false,quoteFull:false,imageFailed:false,onImageFailed(){},onImage(){},onSupplier(){},onPrice(){},onQuantity(){},onQuote(){},onOrder(){},onDetails(){},onWarehouses(){},warehouses:[],warehouseLoading:false,warehouseError:''};
+test('Falken 28840025 with compact size and dual load index displays LT without inventing load range or changing prices',()=>{
+  const falken={...tire,brand:'FALKEN',model:'Wildpeak A/T4W',size:'2756520',loadSpeed:'126/123 S',loadRange:'',atdProductNumber:'28840025',quotePrice:457};
+  const html=renderToStaticMarkup(React.createElement(Card,{...props,tire:falken,offers:[falken],price:'457'}));
+  assert.ok(html.includes('LT275/65R20'));assert.ok(html.includes('Light truck (LT)'));assert.ok(!html.includes('Load E'));assert.equal(falken.size,'2756520');assert.equal(falken.quotePrice,457);
+  assert.ok(!renderToStaticMarkup(React.createElement(Card,props)).includes('Light truck (LT)'),'XL must not be LT');
+});
+test('designation supports supplier size variations without treating XL, van, trailer or medium truck as LT',()=>{
+  for(const row of [{size:'LT275/65R20/10'},{size:'33X12.50R18LT/12'},{size:'2756520',loadRange:'E'},{size:'2856020',loadSpeed:'10 ply'},{size:'2756520',loadSpeed:'126/123 S'}])assert.equal(designation.tireIsLightTruck(row),true,JSON.stringify(row));
+  for(const row of [{size:'2756520',loadRange:'XL'},{size:'2756520',loadRange:'SL'},{size:'P275/65R20',loadSpeed:'126/123 S'},{size:'ST235/80R16',loadRange:'E'},{size:'225/75R16C',loadSpeed:'121/120 R'},{size:'11R22.5',loadRange:'H'},{size:'225/70R19.5',loadSpeed:'128/126 L'},{size:'2756520',category:'Light Truck & SUV'},{size:'2756520'},{size:'not a size',loadRange:'E'}])assert.equal(designation.tireIsLightTruck(row),false,JSON.stringify(row));
+  assert.equal(designation.tireDisplaySize({size:'LT275/65R20/10'}),'LT275/65R20');
+  assert.equal(designation.tireDisplaySize({size:'33X12.50R18LT/12'}),'LT33X12.50R18');
+});
 function walk(node,predicate,found=[]){if(!node||typeof node!=='object')return found;if(Array.isArray(node)){node.forEach(n=>walk(n,predicate,found));return found;}if(predicate(node))found.push(node);walk(node.props?.children,predicate,found);return found;}
 test('supplier cards and selected totals include FET, and profit subtracts the combined cost only once',()=>{
   const offer={...atd,...pricing.supplierCostBreakdown(309,32.14),quotePrice:387};

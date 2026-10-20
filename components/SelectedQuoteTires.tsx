@@ -1,5 +1,7 @@
 "use client";
 
+import { tireDisplaySize } from "@/lib/tire-designation";
+
 type SelectedTire = {
   id: string;
   brand: string;
@@ -25,10 +27,10 @@ export default function SelectedQuoteTires({ tires, onRemove }: {
       {tires.map((tire) => <li key={tire.id}>
         <label>
           <input type="checkbox" checked onChange={() => onRemove(tire.id)}
-            aria-label={`Include ${tire.brand} ${tire.model}, ${tire.size}, ${tire.supplier || "supplier"} ${tire.atdProductNumber} in quote`} />
+            aria-label={`Include ${tire.brand} ${tire.model}, ${tireDisplaySize(tire)}, ${tire.supplier || "supplier"} ${tire.atdProductNumber} in quote`} />
           <span className="tire-beta-quote-selected-info">
             <strong>{tire.brand} {tire.model}</strong>
-            <span>{[tire.size, tire.loadSpeed, tire.loadRange ? `Load ${tire.loadRange}` : "", tire.fitmentPosition === "front" ? "Front" : tire.fitmentPosition === "rear" ? "Rear" : ""].filter(Boolean).join(" · ")}</span>
+            <span>{[tireDisplaySize(tire), tire.loadSpeed, tire.loadRange ? `Load ${tire.loadRange}` : "", tire.fitmentPosition === "front" ? "Front" : tire.fitmentPosition === "rear" ? "Rear" : ""].filter(Boolean).join(" · ")}</span>
             <span>{tire.supplier === "USAF" ? "U.S. AutoForce" : tire.supplier || "Supplier"}{tire.atdProductNumber ? ` · #${tire.atdProductNumber}` : ""}</span>
           </span>
           <strong className="tire-beta-quote-selected-price">{tire.quotePrice.toLocaleString("en-US", { style: "currency", currency: "USD" })} each</strong>
