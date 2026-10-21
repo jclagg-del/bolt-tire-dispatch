@@ -114,11 +114,24 @@ test('Toyo flotation exact parts group across suppliers, preserving both M/T ply
 
 test('flotation aliases work across brands while part, ply, service rating and dimensions remain protected',()=>{
  for(const size of ['33X12.50R18/10','33x12.5R18LT/10PR','LT33X1250R18/10','33125018'])assert.equal(tireSizeIdentity(size).dimensions,'33X12.50R18');
- assert.equal(tireSizeIdentity('22570195').dimensions,'22570195');
+ assert.equal(tireSizeIdentity('22570195').dimensions,'225/70R19.5');
  const a={...atd,brand:'Toyo',size:'33X12.50R18/10',loadSpeed:'118 Q',loadRange:'E',sidewall:'BW'};
  const b={...usaf,brand:'TOYO',size:'33125018',loadSpeed:'10 ply',loadRange:'',sidewall:'BSW'};
  assert.equal(sameTireVariant(a,b),true);
  assert.equal(sameTireVariant(a,{...b,loadSpeed:'Load E · 10 ply'}),true);
  for(const change of [{loadSpeed:'12 ply'},{loadRange:'F'},{loadSpeed:'122 Q'},{size:'35125018'},{size:'33135018'},{size:'33125020'},{size:'33X12.50R18/10/UNKNOWN'},{atdProductNumber:'different',manufacturerProductNumber:'different'},{sidewall:'OWL'},{oeMarking:'BMW',runFlat:true}])assert.equal(sameTireVariant({...a,runFlat:false},{...b,...change}),false,JSON.stringify(change));
  for(const brand of ['Nitto','General','Kumho'])assert.equal(sameTireVariant({...a,brand},{...b,brand}),true);
+});
+
+test('compact commercial half-inch sizes match formatted sizes without merging different parts or ply ratings',()=>{
+ for(const [compact,formatted] of [['22570195','225/70R19.5'],['21575175','215/75R17.5'],['25570225','255/70R22.5'],['28575245','285/75R24.5'],['23575165','235/75R16.5']]) {
+  assert.equal(tireSizeIdentity(compact).dimensions,formatted);
+  assert.deepEqual(tireSizeIdentity(compact+'/14PR'),{dimensions:formatted,ply:'14'});
+  const a={...atd,size:formatted+'/14',loadSpeed:'128/126 N',loadRange:'G'};
+  const b={...usaf,size:compact,loadSpeed:'14 ply',loadRange:''};
+  assert.equal(sameTireVariant(a,b),true);
+  for(const patch of [{loadSpeed:'16 ply'},{loadRange:'H'},{atdProductNumber:'different',manufacturerProductNumber:'different'}]) assert.equal(sameTireVariant(a,{...b,...patch}),false);
+ }
+ for(const size of ['225/70R195','22570195/14/EXTRA','22570185','22570195UNKNOWN']) assert.notEqual(tireSizeIdentity(size).dimensions,'225/70R19.5');
+ assert.notEqual(tireSizeIdentity('22570195').dimensions,tireSizeIdentity('22570225').dimensions);
 });

@@ -89,3 +89,17 @@ test('payment-pending, paid, refunded and converted quotes cannot enter tire edi
   for (const state of [{ payment_status:'pending' }, {payment_status:'paid'}, {payment_status:'refunded'}, {status:'converted'}, {converted_job_id:'job'}]) assert.equal(canEditQuoteTires(state), false);
   for (const status of ['draft','sent','viewed','approved']) assert.equal(canEditQuoteTires({status,payment_status:'unpaid'}), true);
 });
+
+test('Goodyear, Michelin and Falken 225/70R19.5 options from screenshot can be saved together', () => {
+  const value=draft([option(0),option(1)],false,{tire_size:'22570195',quantity:'2'});
+  const selected=[
+    {...value.products[0],brand:'GOODYEAR',model:'Goodyear G647 RSS HWY',atdProductNumber:'139172053',quotePrice:385,loadSpeed:'14 ply'},
+    {...value.products[1],brand:'MICHELIN',model:'Michelin AGILIS HD Z',atdProductNumber:'44835',quotePrice:491,loadSpeed:'14 ply'},
+    catalog({brand:'Falken',model:'RI151 Plus',size:'225/70R19.5/14',atdProductNumber:'267051700',quotePrice:281,loadSpeed:'128/126 N',loadRange:'G'}),
+  ];
+  const result=applyQuoteShopSelection(value,selected);
+  assert.equal(filled(result).length,3); assert.equal(result.form.quantity,'2');
+  assert.deepEqual(filled(result).map(o=>o.price_per_tire),['385','491','281']);
+  assert.equal(filled(result)[2].supplier_product_id,'267051700');
+  assert.throws(()=>applyQuoteShopSelection(value,[...selected.slice(0,2),{...selected[2],size:'225/70R22.5/14'}]),/same tire size/);
+});

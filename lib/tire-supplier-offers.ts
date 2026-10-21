@@ -51,6 +51,11 @@ export function tireSizeIdentity(value: string): { dimensions: string; ply: stri
     const width = parts[2].includes(".") ? Number(parts[2]) : Number(parts[2]) / 100;
     return { dimensions: `${Number(parts[1])}X${width.toFixed(2)}R${parts[3]}`, ply: flotation?.[4] || null };
   }
+  // Commercial supplier shorthand omits the decimal too: 22570195 means
+  // 225/70R19.5. Accept only compact metric sizes and known half-inch rims;
+  // do not reinterpret malformed formatted sizes such as 225/70R195.
+  const compactHalfInch = text.match(/^(?:LT|P|ST|T)?([1-4]\d{2})(\d{2})(165|175|195|225|245)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
+  if (compactHalfInch) return { dimensions: `${compactHalfInch[1]}/${compactHalfInch[2]}R${Number(compactHalfInch[3]) / 10}`, ply: compactHalfInch[4] || null };
   const metric = text.match(/^(?:LT|P|ST|T)?(\d{3})\/?(\d{2})(?:ZR|R)?(\d{2}(?:\.5)?)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
   if (!metric) return { dimensions: text, ply: null };
   return { dimensions: `${metric[1]}/${metric[2]}R${metric[3]}`, ply: metric[4] || null };
