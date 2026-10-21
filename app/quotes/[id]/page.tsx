@@ -10,6 +10,7 @@ import AdditionalItemsSummary from "@/components/AdditionalItemsSummary";
 import { settledQuote } from "@/lib/quote-payment-pricing";
 import SalePaymentStatus from "@/components/SalePaymentStatus";
 import { isTireShopSale, tireShopSalePath, saleServiceLabel } from "@/lib/tire-shop-sales";
+import { canEditQuoteTires } from "@/lib/quote-shop-edit";
 
 type SavedQuote = {
   additional_items?: AdditionalItem[];
@@ -181,7 +182,8 @@ export default function QuoteDetailPage() {
         {quote.converted_job_id ? <button className="quote-primary" onClick={() => router.push(`/jobs/${quote.converted_job_id}`)}>Open Job #{quote.converted_job_id}</button> : quote.payment_status === "paid" && quote.discount_organization ? <button className="quote-primary" onClick={() => router.push("/orders")}>Manage in Orders</button> : null}
       </> : <>
       <select value={quote.status} onChange={(event) => updateStatus(event.target.value as QuoteStatus)} disabled={saving || quote.status === "converted"}><option value="draft">Draft</option><option value="sent">Sent</option><option value="viewed">Viewed</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="expired">Expired</option><option value="converted">Converted</option></select>
-      <button onClick={() => router.push(`/quotes/new?edit=${quote.id}`)} disabled={saving || quote.status === "converted" || quote.payment_status === "paid"}>Edit Quote</button>
+      <button onClick={() => router.push(`/quotes/new?edit=${quote.id}`)} disabled={saving || !canEditQuoteTires(quote)}>Edit Quote</button>
+      <button onClick={() => router.push(`/quotes/new?edit=${quote.id}&shop=1`)} disabled={saving || !canEditQuoteTires(quote)}>Add tires</button>
       <button className="quote-primary" onClick={emailCustomerQuote} disabled={saving || !quote.email}>{saving ? "Sending..." : "Email Quote"}</button>
       <button onClick={copyCustomerLink} disabled={saving}>Copy Customer Link</button>
       <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : quote.purchase_source === "website" && quote.discount_organization ? "Manage in Orders" : "Convert to Job"}</button>

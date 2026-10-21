@@ -12,6 +12,7 @@ import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
 import { AdditionalItem, additionalItemsError } from "@/lib/additional-items";
 import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
+import { quoteShopKey, quoteShopProducts, applyQuoteShopSelection, canEditQuoteTires, type QuoteShopDraft } from "@/lib/quote-shop-edit";
 
 type QuoteForm = {
   additional_items?: AdditionalItem[];
@@ -34,6 +35,8 @@ export default function NewQuotePage() {
   const editId = searchParams.get("edit");
   const savedQuoteId = useRef<string | null>(null);
   const saveInFlight = useRef(false);
+  const quoteVersion = useRef("");
+  const launchedShop = useRef(false);
   const [form, setForm] = useState<QuoteForm>(initialForm);
   const selectedCustomer = useRef<QuoteCustomer | null>(null);
   const shopSelection = useRef<string | null>(null);
@@ -44,6 +47,7 @@ export default function NewQuotePage() {
   const [draggingTier, setDraggingTier] = useState<string | null>(null);
   const [loadingQuote, setLoadingQuote] = useState(Boolean(editId));
   const [splitFitment, setSplitFitment] = useState(false);
+  const [quoteLoadError, setQuoteLoadError] = useState("");
 
   useEffect(() => {
     const initialize = async () => {
@@ -59,13 +63,28 @@ export default function NewQuotePage() {
     if (editId) {
       const { data, error } = await supabase.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", editId).single();
       if (error || !data) {
+        setQuoteLoadError(error?.message || "Quote not found");
         setLoadingQuote(false);
         return alert(`Could not load quote: ${error?.message || "Quote not found"}`);
       }
-      if (data.converted_job_id || ["paid", "pending"].includes(data.payment_status)) {
+      if (!canEditQuoteTires(data)) {
+        setQuoteLoadError("This quote is locked for editing.");
         setLoadingQuote(false);
         alert("Quotes with payment pending, paid quotes, and converted quotes cannot be edited.");
         return router.push(`/quotes/${editId}`);
+      }
+      quoteVersion.current = data.updated_at;
+      if (searchParams.get("from") === "tire-shop") {
+        const draft = readShoppingSession<QuoteShopDraft<QuoteForm>>(sessionStorage, quoteShopKey(editId));
+        if (!draft || draft.quoteId !== editId || draft.version !== data.updated_at) {
+          setQuoteLoadError("This shopping draft expired or the quote changed while you were shopping. Reopen the quote to start again; no changes have been saved.");
+          setLoadingQuote(false); return;
+        }
+        try {
+          const updated = applyQuoteShopSelection(draft, draft.result || draft.products);
+          setForm(updated.form); setOptions(updated.options); setSplitFitment(draft.splitFitment);
+          setLoadingQuote(false); return;
+        } catch (e) { setQuoteLoadError(e instanceof Error ? e.message : "Could not restore selected tires."); setLoadingQuote(false); return; }
       }
       setForm({
         additional_items: data.additional_items || [],
@@ -205,12 +224,21 @@ export default function NewQuotePage() {
       updated_at: new Date().toISOString(),
     };
     const existingId = editId || savedQuoteId.current;
+    if (editId) {
+      const current = await supabase.from("quotes").select("payment_status,converted_job_id,status,updated_at").eq("id", editId).single();
+      if (current.error || !current.data || !canEditQuoteTires(current.data) || current.data.updated_at !== quoteVersion.current) {
+        return alert("This quote has changed or is no longer editable. Reopen it before saving; your draft has not been applied.");
+      }
+    }
+    let quoteUpdate = supabase.from("quotes").update({ ...quoteValues, ...(editId ? { selected_option_id: null, status: "draft" } : {}) }).eq("id", existingId || "");
+    if (editId) quoteUpdate = quoteUpdate.eq("updated_at", quoteVersion.current).is("converted_job_id", null).not("payment_status", "in", "(paid,pending,refunded)");
     const quoteRequest = existingId
-      ? supabase.from("quotes").update(quoteValues).eq("id", existingId).select("id,selected_option_id").single()
-      : supabase.from("quotes").insert({...quoteValues,...(paymentMethodPricingEnabled()?{payment_pricing_version:1}:{})}).select("id,selected_option_id").single();
+      ? quoteUpdate.select("id,selected_option_id,updated_at").single()
+      : supabase.from("quotes").insert({...quoteValues,...(paymentMethodPricingEnabled()?{payment_pricing_version:1}:{})}).select("id,selected_option_id,updated_at").single();
     const { data: quote, error } = await quoteRequest;
     if (error || !quote) { setSaving(false); return alert(`Could not save quote: ${error?.message || "Unknown error"}`); }
     savedQuoteId.current = quote.id;
+    if (editId) quoteVersion.current = quote.updated_at;
     const optionValues = (option: QuoteOption) => ({
       quote_id: quote.id, tier: option.tier, brand: option.brand.trim(), model: option.model.trim(),
       image_url: option.image_url.trim() || null, price_per_tire: Number(option.price_per_tire) || 0,
@@ -242,8 +270,8 @@ export default function NewQuotePage() {
     }
     setSaving(false);
     if (optionError) return alert(`Quote saved, but options failed: ${optionError.message}`);
-    sessionStorage.removeItem(quoteDraftKey);
-    sessionStorage.removeItem(shopSessionKey);
+    if (editId) sessionStorage.removeItem(quoteShopKey(editId));
+    else { sessionStorage.removeItem(quoteDraftKey); sessionStorage.removeItem(shopSessionKey); }
     router.push(`/quotes/${quote.id}`);
     } catch (error) {
       alert(`Could not finish saving. Your entries are still here; please try again. ${error instanceof Error ? error.message : ""}`);
@@ -255,18 +283,31 @@ export default function NewQuotePage() {
 
   const backToShop = () => {
     try {
+      if (editId) {
+        const products = quoteShopProducts(options, form, splitFitment);
+        saveShoppingSession(sessionStorage, quoteShopKey(editId), { quoteId: editId, version: quoteVersion.current, form, options, splitFitment, products } satisfies QuoteShopDraft<QuoteForm>);
+        router.push(`/tire-shop?quote=${encodeURIComponent(editId)}`);
+        return;
+      }
       saveShoppingSession(sessionStorage, quoteDraftKey, { form, options, splitFitment, selection: shopSelection.current });
     } catch { alert("Your browser could not preserve this draft. Save the quote before leaving so your information is not lost."); return; }
     router.push("/tire-shop");
   };
 
+  useEffect(() => {
+    if (editId && searchParams.get("shop") === "1" && !loadingQuote && !quoteLoadError && !launchedShop.current) {
+      launchedShop.current = true; backToShop();
+    }
+  }, [editId, loadingQuote, quoteLoadError]);
+
   if (loadingQuote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-empty">Loading quote...</div></main></div>;
+  if (quoteLoadError) return <div className="quote-shell"><AppHeader /><main className="quote-page"><p role="alert">{quoteLoadError}</p><button onClick={() => router.push(`/quotes/${editId}`)}>Back to quote</button></main></div>;
 
   return (
     <div className="quote-shell"><AppHeader /><main className="quote-page">
       <div className="quote-page-header"><div><div className="quote-eyebrow">{editId ? "Edit quote" : "Quotes"}</div><h1>{editId ? "Edit Tire Quote" : "Build Tire Quote"}</h1><p>{editId ? "Update customer details, tire choices, and pricing." : "Create a visual tire comparison."}</p></div><div className="quote-actions">{editId ? <button onClick={() => router.push(`/quotes/${editId}`)} disabled={saving}>Cancel</button> : null}<button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : editId ? "Save Changes" : "Save Quote"}</button></div></div>
 
-      {!editId ? <div className="quote-actions" style={{ marginBottom: 16 }}><button type="button" onClick={backToShop} disabled={saving || Boolean(uploadingTier)}>← Back to Tire Shop</button><span>Your draft stays in this browser tab while you shop.</span></div> : null}
+      <div className="quote-actions" style={{ marginBottom: 16 }}><button type="button" onClick={backToShop} disabled={saving || Boolean(uploadingTier)}>{editId ? "Add tires / edit in Tire Shop" : "← Back to Tire Shop"}</button><span>{editId ? "Keep customer details and fees. Review tire changes here before saving this same quote. Saving returns it to Draft for fresh approval." : "Your draft stays in this browser tab while you shop."}</span></div>
       <section className="quote-form-card"><h2>Customer and vehicle</h2><div className="quote-form-grid">
         <QuoteCustomerInput value={form.customer}
           onChange={(value) => setForm((current) => changeQuoteCustomerName(current, value, selectedCustomer.current))}

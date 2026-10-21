@@ -250,3 +250,31 @@ test('F1 edits and supplier selection carry into the quote, survive sorting, and
  captured.onPrice('285.00');render();assert.equal(values[10][0].quotePrice,285);assert.equal(Object.keys(values[48]).length,1);
  captured.onQuantity(2);render();captured.onSupplier(usaf);render();captured.onOrder();render();assert.equal(dialog.initialPart,'224060');assert.equal(dialog.initialQuantity,2);
 });
+
+test('existing quote shopping keeps selections through search and returns edited prices and quantity to that quote only',async()=>{
+ const helpers=loader()('lib/quote-shop-edit.ts');
+ const {emptyQuoteOptions}=loader()('lib/quotes.ts');
+ const option={...emptyQuoteOptions[0],id:'saved',brand:'Falken',model:'Wildpeak',price_per_tire:'400',supplier:'ATD',supplier_product_id:'28840025',manufacturer_product_id:'28840025',load_speed_rating:'126/123 S'};
+ const form={customer:'Example',tire_size:'275/65R20',rear_tire_size:'',quantity:'4',rear_quantity:'',disposal_fee:'14'};
+ const products=helpers.quoteShopProducts([option],form,false);
+ const draft={quoteId:'original',version:'saved-version',form,options:[option],products,splitFitment:false};
+ const tire={...products[0],id:'live',quoteSnapshot:false,quoteOptionKey:undefined,quotePrice:457,cost:347.96,loadRange:'E',installedPrice:550,estimatedTotals:{4:2200},availability:{local:4,localPlus:10,nationwide:20},runFlat:false,hasRebate:false,rebates:[]};
+ const values={0:'2756520',1:[tire],3:true,10:products,49:draft}; let index=0,captured; const paths=[],writes=new Map();
+ const Page=loader({'next/navigation':{useRouter:()=>({push:p=>paths.push(p)})},'@/lib/supabase':{supabase:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}}},'@/components/StaffTireCard':{__esModule:true,default:props=>{captured=props;return React.createElement('article');}},react:{...React,useState:initial=>{const n=index++;if(!Object.hasOwn(values,n))values[n]=typeof initial==='function'?initial():initial;return [values[n],next=>{values[n]=typeof next==='function'?next(values[n]):next}];},useEffect:()=>{},useMemo:fn=>fn()}})('components/TireShoppingBeta.tsx').default;
+ const render=()=>{index=0;renderToStaticMarkup(React.createElement(Page,{internal:true}));};
+ function find(node,predicate){if(!node||typeof node!=='object')return null;if(predicate(node))return node;for(const child of React.Children.toArray(node.props?.children)){const result=find(child,predicate);if(result)return result;}}
+ const tree=()=>{index=0;return Page({internal:true});};
+ const previous={fetch:global.fetch,sessionStorage:global.sessionStorage};
+ global.fetch=async()=>Response.json({products:[tire]});global.sessionStorage={setItem:(k,v)=>writes.set(k,v)};
+ try {
+   render();assert.equal(captured.selected,true);assert.equal(captured.price,'400.00','Saved quoted price should be shown, not overwritten by current catalog price');
+   const search=find(tree(),node=>node.type==='button'&&node.props.children==='Search tires');assert.ok(search);await search.props.onClick();
+   render();assert.equal(values[10].length,1,'Searching must not clear existing quote tires');
+   captured.onPrice('425');render();assert.equal(values[10][0].quotePrice,425);
+   captured.onQuantity(2);render();
+   find(tree(),node=>node.type==='button'&&node.props.children==='Review quote changes').props.onClick();
+   assert.deepEqual(paths,['/quotes/new?edit=original&from=tire-shop']);assert.equal(writes.size,1);
+   const saved=JSON.parse(writes.get(helpers.quoteShopKey('original'))).value;
+   assert.equal(saved.form.quantity,'2');assert.equal(saved.form.disposal_fee,'14');assert.equal(saved.result[0].quotePrice,425);assert.equal(saved.result[0].quoteOptionKey,'saved');
+ } finally {global.fetch=previous.fetch;global.sessionStorage=previous.sessionStorage;}
+});

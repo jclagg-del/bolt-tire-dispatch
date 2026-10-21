@@ -15,8 +15,11 @@ import CustomerTirePricing from "@/components/CustomerTirePricing";
 import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
+import { quoteShopKey, applyQuoteShopSelection, matchesQuoteSnapshot, type QuoteShopDraft } from "@/lib/quote-shop-edit";
 
 type Product = {
+  quoteOptionKey?: string;
+  quoteSnapshot?: boolean;
   id: string;
   supplier?: "ATD" | "USAF" | "NTW";
   brand: string;
@@ -197,8 +200,21 @@ export default function TireShoppingBeta({
   const [detailLoading, setDetailLoading] = useState("");
   const [showOutOfStock, setShowOutOfStock] = useState(false);
   const [staffDrafts, setStaffDrafts] = useState<Record<string, { offerId: string; price: string }>>({});
+  const [editingQuote, setEditingQuote] = useState<QuoteShopDraft<{ customer: string; tire_size: string; rear_tire_size: string; quantity: string; rear_quantity: string }> | null>(null);
+  const [quoteEditError, setQuoteEditError] = useState("");
+  const [quoteEditAxle, setQuoteEditAxle] = useState<"front" | "rear">("front");
   useEffect(() => {
     if (!internal) return;
+    const quoteId = new URLSearchParams(window.location.search).get("quote");
+    if (quoteId) {
+      const draft = readShoppingSession<NonNullable<typeof editingQuote>>(sessionStorage, quoteShopKey(quoteId));
+      if (!draft || draft.quoteId !== quoteId || !Array.isArray(draft.products)) {
+        setQuoteEditError("This quote shopping session expired. Reopen the quote and choose Add tires again."); return;
+      }
+      setEditingQuote(draft); setQuery(draft.form.tire_size); setQuantity(Number(draft.form.quantity) || 4);
+      setSelected((draft.result || draft.products) as Product[]); setSearched(true); setResumingQuote(true);
+      return;
+    }
     const saved = readShoppingSession<{
       query: string; products: Product[]; selected: Product[]; quantity: number;
       category: string; selectedBrands: string[]; minPrice: string; maxPrice: string;
@@ -288,7 +304,7 @@ export default function TireShoppingBeta({
       const payload = await atdApi({ action: "size", query });
       setProducts(payload.products || []);
       setFailedImages(new Set());
-      setSelected([]);
+      if (!editingQuote) setSelected([]);
     } catch (reason) {
       setProducts([]);
       setError(reason instanceof Error ? reason.message : "Supplier search failed");
@@ -301,7 +317,7 @@ export default function TireShoppingBeta({
     setLoading(true); setError(""); setSearched(true);
     try {
       const payload = await atdApi({ action: "part-number", query: partNumber });
-      setProducts(payload.products || []); setFailedImages(new Set()); setSelected([]);
+      setProducts(payload.products || []); setFailedImages(new Set()); if (!editingQuote) setSelected([]);
     } catch (reason) {
       setProducts([]); setError(reason instanceof Error ? reason.message : "Part-number search failed");
     } finally { setLoading(false); }
@@ -329,7 +345,7 @@ export default function TireShoppingBeta({
       });
       setProducts(payload.products || []);
       setFailedImages(new Set());
-      setSelected([]);
+      if (!editingQuote) setSelected([]);
       const position = option.position?.[0];
       setQuery(
         (
@@ -438,10 +454,29 @@ export default function TireShoppingBeta({
     ],
   );
 
+  function matchesSelection(item: Product, tire: Product) {
+    if (editingQuote?.splitFitment && item.fitmentPosition !== quoteEditAxle) return false;
+    const candidate = editingQuote?.splitFitment ? { ...tire, fitmentPosition: item.fitmentPosition } : tire;
+    return sameTireVariant(item, candidate) || (!!editingQuote && matchesQuoteSnapshot(item, candidate));
+  }
+
+  function changeQuoteQuantity(value: number) {
+    setQuantity(value);
+    setEditingQuote(current => current ? { ...current, form: { ...current.form,
+      [current.splitFitment && quoteEditAxle === "rear" ? "rear_quantity" : "quantity"]: String(value),
+    } } : current);
+  }
+
   function toggleSelected(tire: Product) {
+    if (editingQuote?.splitFitment) {
+      setSelected(items => items.some(item => matchesSelection(item, tire))
+        ? items.filter(item => !matchesSelection(item, tire))
+        : [...items.filter(item => item.fitmentPosition !== quoteEditAxle), { ...tire, id: `${tire.id}:quote-${quoteEditAxle}`, fitmentPosition: quoteEditAxle }]);
+      return;
+    }
     setSelected((items) => {
-      if (items.some((item) => sameTireVariant(item, tire)))
-        return items.filter((item) => !sameTireVariant(item, tire));
+      if (items.some((item) => matchesSelection(item, tire)))
+        return items.filter((item) => !matchesSelection(item, tire));
       if (items.length >= 3) return items;
       return [...items, tire];
     });
@@ -453,16 +488,25 @@ export default function TireShoppingBeta({
       return !previous || !sameTireVariant(previous, card);
     })), [card.id]: { offerId: offer.id, price } }));
     if (price.trim() !== "" && Number.isFinite(Number(price)) && Number(price) >= 0) {
-      setSelected(items => items.map(item => sameTireVariant(item, card) ? withQuotePrice(offer, Number(price)) : item));
+      setSelected(items => items.map(item => matchesSelection(item, card) ? { ...withQuotePrice(offer, Number(price)), id: editingQuote?.splitFitment ? `${offer.id}:quote-${item.fitmentPosition}` : offer.id, quoteOptionKey: item.quoteOptionKey, fitmentPosition: item.fitmentPosition } : item));
     }
   }
 
   function buildQuote() {
+    if (quoteEditError) return;
     if (!selected.length) return;
     if (Object.entries(staffDrafts).some(([id, draft]) =>
       (draft.price.trim() === "" || !Number.isFinite(Number(draft.price)) || Number(draft.price) < 0) &&
-      selected.some(item => { const card = products.find(product => product.id === id); return card && sameTireVariant(item, card); })
+      selected.some(item => { const card = products.find(product => product.id === id); return card && matchesSelection(item, card); })
     )) { alert("Enter a valid price for each selected tire before generating the quote."); return; }
+    if (editingQuote) {
+      try {
+        applyQuoteShopSelection(editingQuote, selected);
+        saveShoppingSession(sessionStorage, quoteShopKey(editingQuote.quoteId), { ...editingQuote, result: selected });
+        router.push(`/quotes/new?edit=${encodeURIComponent(editingQuote.quoteId)}&from=tire-shop`);
+      } catch (error) { alert(error instanceof Error ? error.message : "Could not preserve your tire changes."); }
+      return;
+    }
     try {
       saveShoppingSession(sessionStorage, shopSessionKey, {
         query, products, selected, quantity, category, selectedBrands, minPrice, maxPrice,
@@ -1118,6 +1162,13 @@ export default function TireShoppingBeta({
           </label>
         </aside>
         <section className="tire-beta-results">
+          {quoteEditError && <p role="alert">{quoteEditError} <button type="button" onClick={() => router.push("/quotes")}>Back to quotes</button></p>}
+          {editingQuote && <section className="tire-beta-quote-selection">
+            <strong>Editing tires for {editingQuote.form.customer}&apos;s existing quote</strong>
+            <p>Current quote choices are listed below. Search to add or replace tires. Saved choices retain their quoted price; search results show current supplier pricing. Changes are not saved until you review and save the quote.</p>
+            {editingQuote.splitFitment && <div role="group" aria-label="Choose axle to replace">{(["front", "rear"] as const).map(axle => <button key={axle} type="button" aria-pressed={quoteEditAxle === axle} onClick={() => { setQuoteEditAxle(axle); setQuery(axle === "front" ? editingQuote.form.tire_size : editingQuote.form.rear_tire_size); setQuantity(Number(axle === "front" ? editingQuote.form.quantity : editingQuote.form.rear_quantity) || 2); }}>{axle === "front" ? "Replace front tires" : "Replace rear tires"}</button>)}</div>}
+            <button type="button" onClick={() => router.push(`/quotes/${editingQuote.quoteId}`)}>Cancel — keep saved quote</button>
+          </section>}
           <div className="tire-beta-result-head">
             <div>
               <strong>{results.length} tires</strong>
@@ -1125,22 +1176,22 @@ export default function TireShoppingBeta({
                 {searched ? internal && showOutOfStock ? " from supplier catalog (including out of stock)" : " from live inventory" : " — enter a size above"}
               </span>
             </div>
-            <TireResultControls internal={internal} quantity={quantity} sort={sort} onQuantityChange={setQuantity} onSortChange={setSort} />
+            <TireResultControls internal={internal} quantity={quantity} sort={sort} onQuantityChange={changeQuoteQuantity} onSortChange={setSort} />
           </div>
           {internal && searched && (
             <section className="tire-beta-quote-selection">
             <div className="tire-beta-quote-tray">
               <div>
-                <strong>{selected.length} of 3 selected</strong>
-                <span>Choose up to three tires to compare on the quote.</span>
-                {resumingQuote ? <span>Restored your previous search. Search again to refresh prices and availability.</span> : null}
+                <strong>{selected.length} of {editingQuote?.splitFitment ? 2 : 3} selected</strong>
+                <span>{editingQuote?.splitFitment ? "Choose one tire for each axle. Use Replace front / rear above to choose which axle you are editing." : "Choose up to three tires to compare on the quote."}</span>
+                {resumingQuote && !editingQuote ? <span>Restored your previous search. Search again to refresh prices and availability.</span> : null}
               </div>
               <button
                 type="button"
-                disabled={!selected.length}
+                disabled={!selected.length || !!quoteEditError}
                 onClick={buildQuote}
               >
-                {resumingQuote ? "Return to Quote" : "Generate Quote"}
+                {editingQuote ? "Review quote changes" : resumingQuote ? "Return to Quote" : "Generate Quote"}
               </button>
             </div>
             <SelectedQuoteTires tires={selected} onRemove={(id) => setSelected((items) => items.filter((item) => item.id !== id))} />
@@ -1172,7 +1223,7 @@ export default function TireShoppingBeta({
             </div>
           ) : (
             results.map((tire) => {
-              const isSelected = selected.some((item) => sameTireVariant(item, tire));
+              const isSelected = selected.some((item) => matchesSelection(item, tire));
               const supplierAvailability = supplierMatches(tire);
               if (internal) {
                 const draft = staffDrafts[tire.id] || Object.entries(staffDrafts).find(([id]) => {
@@ -1180,14 +1231,15 @@ export default function TireShoppingBeta({
                   return previous && sameTireVariant(previous, tire);
                 })?.[1];
                 const priced = supplierAvailability.filter(hasSupplierCost);
-                const offer = priced.find(item => item.id === draft?.offerId) || priced.find(item => item.id === tire.id) || priced[0] || tire;
-                const price = draft?.price ?? tire.quotePrice.toFixed(2);
+                const quoted = editingQuote ? selected.find(item => matchesSelection(item, tire)) : undefined;
+                const offer = priced.find(item => item.id === draft?.offerId) || priced.find(item => quoted && item.supplier === quoted.supplier && item.atdProductNumber === quoted.atdProductNumber) || priced.find(item => item.id === tire.id) || priced[0] || tire;
+                const price = draft?.price ?? (quoted?.quotePrice ?? tire.quotePrice).toFixed(2);
                 const display = withQuotePrice({ ...offer, imageUrl: offer.imageUrl || tire.imageUrl }, price.trim() === "" ? NaN : Number(price));
                 return <StaffTireCard key={tire.id} tire={display} offers={priced} price={price}
                   quantity={quantity} staggered={staggered} selected={isSelected} quoteFull={selected.length >= 3}
                   imageFailed={failedImages.has(display.id)} onImageFailed={() => setFailedImages(current => new Set([...current, display.id]))}
                   onImage={() => setImagePreview(display)} onSupplier={next => updateStaffDraft(tire, next, price)}
-                  onPrice={value => updateStaffDraft(tire, offer, value)} onQuantity={setQuantity}
+                  onPrice={value => updateStaffDraft(tire, offer, value)} onQuantity={changeQuoteQuantity}
                   onQuote={() => toggleSelected(display)}
                   onOrder={() => { const count = staggered ? 2 : quantity; if (display.supplier === "USAF") { setOrderQuantity(count); setUsafOrderProduct(display); } else beginOrder(display, count); }}
                   onDetails={() => loadTireDetails(offer)}
