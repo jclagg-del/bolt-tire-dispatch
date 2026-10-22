@@ -15,7 +15,7 @@ import CustomerTirePricing from "@/components/CustomerTirePricing";
 import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
-import { quoteShopKey, applyQuoteShopSelection, matchesQuoteSnapshot, type QuoteShopDraft } from "@/lib/quote-shop-edit";
+import { quoteShopKey, applyQuoteShopSelection, matchesQuoteSnapshot, singleSizeQuoteDraft, type QuoteShopDraft } from "@/lib/quote-shop-edit";
 
 type Product = {
   quoteOptionKey?: string;
@@ -465,6 +465,16 @@ export default function TireShoppingBeta({
     setEditingQuote(current => current ? { ...current, form: { ...current.form,
       [current.splitFitment && quoteEditAxle === "rear" ? "rear_quantity" : "quantity"]: String(value),
     } } : current);
+  }
+
+  function useOneTireSize() {
+    if (!editingQuote?.splitFitment || selected.length !== 1) return;
+    try {
+      const next = singleSizeQuoteDraft(editingQuote, selected[0]);
+      if (!confirm(`Use ${selected[0].brand} ${selected[0].model} (${selected[0].size}) for all ${next.form.quantity} tires? This removes the separate front/rear setup. Existing fees stay unchanged; review quantity and fees before saving.`)) return;
+      saveShoppingSession(sessionStorage, quoteShopKey(next.quoteId), next);
+      setEditingQuote(next); setSelected(next.products as Product[]); setQuantity(Number(next.form.quantity)); setQuery(next.form.tire_size); setStaffDrafts({});
+    } catch (error) { alert(error instanceof Error ? error.message : "Could not change the quote setup."); }
   }
 
   function toggleSelected(tire: Product) {
@@ -1188,12 +1198,18 @@ export default function TireShoppingBeta({
               </div>
               <button
                 type="button"
-                disabled={!selected.length || !!quoteEditError}
+                disabled={!selected.length || !!quoteEditError || !!(editingQuote?.splitFitment && (!selected.some(p => p.fitmentPosition === "front") || !selected.some(p => p.fitmentPosition === "rear")))}
                 onClick={buildQuote}
               >
                 {editingQuote ? "Review quote changes" : resumingQuote ? "Return to Quote" : "Generate Quote"}
               </button>
             </div>
+            {editingQuote?.splitFitment && selected.length < 2 && <div role="status" style={{ padding: "12px 0" }}>
+              <p>This quote is set up for separate front and rear tires. {selected.some(p => p.fitmentPosition === "front") ? "Choose a rear tire to finish the pair." : "Choose a front tire to finish the pair."}</p>
+              <button type="button" onClick={() => { const axle = selected.some(p => p.fitmentPosition === "front") ? "rear" : "front"; setQuoteEditAxle(axle); setQuery(axle === "front" ? editingQuote.form.tire_size : editingQuote.form.rear_tire_size); setQuantity(Number(axle === "front" ? editingQuote.form.quantity : editingQuote.form.rear_quantity) || 2); }}>Choose {selected.some(p => p.fitmentPosition === "front") ? "rear" : "front"} tires</button>
+              {selected.length === 1 && <button type="button" onClick={useOneTireSize}>Use one tire size</button>}
+              <p>Use one tire size if you want the selected tire for the whole quote. You can then add comparison options.</p>
+            </div>}
             <SelectedQuoteTires tires={selected} onRemove={(id) => setSelected((items) => items.filter((item) => item.id !== id))} />
             </section>
           )}

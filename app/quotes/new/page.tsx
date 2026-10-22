@@ -12,7 +12,7 @@ import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
 import { AdditionalItem, additionalItemsError } from "@/lib/additional-items";
 import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
-import { quoteShopKey, quoteShopProducts, applyQuoteShopSelection, canEditQuoteTires, type QuoteShopDraft } from "@/lib/quote-shop-edit";
+import { quoteShopKey, quoteShopProducts, applyQuoteShopSelection, canEditQuoteTires, quoteHasSplitFitment, type QuoteShopDraft } from "@/lib/quote-shop-edit";
 
 type QuoteForm = {
   additional_items?: AdditionalItem[];
@@ -94,7 +94,7 @@ export default function NewQuotePage() {
         service_call_fee: String(data.service_call_fee ?? 0), disposal_fee: String(data.disposal_fee ?? 0), ny_state_tire_fee: String(data.ny_state_tire_fee ?? 0),
         sales_tax_rate: String(data.sales_tax_rate ?? 0), tax_exempt: Boolean(data.tax_exempt), expires_at: data.expires_at || "",
       });
-      setSplitFitment(Boolean(data.rear_tire_size || data.rear_quantity));
+      setSplitFitment(quoteHasSplitFitment(data, data.quote_options || []));
       const saved = [...(data.quote_options || [])].sort((a, b) => a.sort_order - b.sort_order).map((option) => ({
         ...option, image_url: option.image_url || "", price_per_tire: String(option.price_per_tire ?? ""),
         warranty_miles: option.warranty_miles == null ? "" : String(option.warranty_miles), tire_type: option.tire_type || "",

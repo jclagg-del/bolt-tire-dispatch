@@ -278,3 +278,22 @@ test('existing quote shopping keeps selections through search and returns edited
    assert.equal(saved.form.quantity,'2');assert.equal(saved.form.disposal_fee,'14');assert.equal(saved.result[0].quotePrice,425);assert.equal(saved.result[0].quoteOptionKey,'saved');
  } finally {global.fetch=previous.fetch;global.sessionStorage=previous.sessionStorage;}
 });
+
+test('incomplete split quote offers an explicit single-size escape; cancel keeps both-axle setup and confirmation enables review',()=>{
+ const helpers=loader()('lib/quote-shop-edit.ts'),{emptyQuoteOptions}=loader()('lib/quotes.ts');
+ const option={...emptyQuoteOptions[0],id:'saved',brand:'TOYO',model:'Open Country H/T II',price_per_tire:'300',rear_brand:'TOYO',rear_model:'Rear choice',rear_price_per_tire:'320'};
+ const form={customer:'Example',tire_size:'LT235/80R17',rear_tire_size:'LT235/80R17',quantity:'2',rear_quantity:'4',disposal_fee:'14'};
+ const products=helpers.quoteShopProducts([option],form,true),draft={quoteId:'original',version:'saved-version',form,options:[option],products,splitFitment:true};
+ const values={3:true,10:[products[0]],49:draft};let index=0,accepted=false;const prompts=[],writes=new Map(),paths=[];
+ const Page=loader({'next/navigation':{useRouter:()=>({push:p=>paths.push(p)})},'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;if(!Object.hasOwn(values,n))values[n]=typeof initial==='function'?initial():initial;return [values[n],next=>{values[n]=typeof next==='function'?next(values[n]):next}];},useEffect:()=>{},useMemo:fn=>fn()}})('components/TireShoppingBeta.tsx').default;
+ function find(node,text){if(!node||typeof node!=='object')return null;if(node.type==='button'&&node.props.children===text)return node;for(const child of React.Children.toArray(node.props?.children)){const r=find(child,text);if(r)return r;}}
+ const tree=()=>{index=0;return Page({internal:true});};const previous={confirm:global.confirm,sessionStorage:global.sessionStorage};
+ global.confirm=msg=>{prompts.push(msg);return accepted;};global.sessionStorage={setItem:(k,v)=>writes.set(k,v)};
+ try{
+  assert.equal(find(tree(),'Review quote changes').props.disabled,true);
+  find(tree(),'Use one tire size').props.onClick();assert.equal(values[49].splitFitment,true);assert.equal(writes.size,0);
+  accepted=true;find(tree(),'Use one tire size').props.onClick();assert.match(prompts[1],/all 6 tires/);
+  assert.equal(values[49].splitFitment,false);assert.equal(values[49].form.quantity,'6');assert.equal(values[49].form.rear_quantity,'');assert.equal(values[49].form.disposal_fee,'14');assert.equal(values[10][0].fitmentPosition,'both');
+  assert.equal(find(tree(),'Review quote changes').props.disabled,false);find(tree(),'Review quote changes').props.onClick();assert.deepEqual(paths,['/quotes/new?edit=original&from=tire-shop']);
+ }finally{global.confirm=previous.confirm;global.sessionStorage=previous.sessionStorage;}
+});

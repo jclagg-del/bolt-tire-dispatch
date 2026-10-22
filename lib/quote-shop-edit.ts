@@ -2,6 +2,9 @@ import { emptyQuoteOptions, quoteOptionsForEditor, type QuoteOption } from "@/li
 import { tireSizeIdentity } from "@/lib/tire-supplier-offers";
 
 export const quoteShopKey = (id: string) => `bolt-edit-quote-shop-v1:${id}`;
+export function quoteHasSplitFitment(quote: { rear_tire_size?: string | null }, options: Array<Partial<QuoteOption>>) {
+  return Boolean(quote.rear_tire_size?.trim() || options.some(o => o.rear_brand?.trim() || o.rear_model?.trim()));
+}
 export function canEditQuoteTires(quote: { payment_status?: string | null; converted_job_id?: string | null; status?: string | null }) {
   return !quote.converted_job_id && quote.status !== "converted" && !["pending", "paid", "refunded"].includes(quote.payment_status || "");
 }
@@ -57,6 +60,27 @@ function applyProduct(base: QuoteOption, product: QuoteShopProduct): QuoteOption
     availability: stock ? `In stock (${stock})` : "Special order", supplier: product.supplier,
     supplier_product_id: product.atdProductNumber, manufacturer_product_id: product.manufacturerProductNumber,
     wholesale_cost: product.cost, supplier_availability: product.availability };
+}
+
+// Explicit user choice only: turn the remaining tire into a single-size quote.
+// Keep total quantity and custom fees; clear every rear field so it cannot be
+// billed a second time by downstream quote/payment calculations.
+export function singleSizeQuoteDraft<F extends { tire_size: string; rear_tire_size: string; quantity: string; rear_quantity: string }>(draft: QuoteShopDraft<F>, product: QuoteShopProduct): QuoteShopDraft<F> {
+  if (!product.size || !product.brand || !product.model || !Number.isFinite(product.quotePrice) || product.quotePrice < 0) throw new Error("Choose a complete tire before switching to one size.");
+  const quantities = [Number(draft.form.quantity), Number(draft.form.rear_quantity || 0)];
+  const totalQuantity = quantities[0] + quantities[1];
+  if (quantities.some(q => !Number.isInteger(q) || q < 0) || totalQuantity < 1) throw new Error("Enter valid tire quantities in the quote editor before switching to one size.");
+  const original = draft.options.find(o => (o.id || o.tier) === product.quoteOptionKey) || draft.options.find(o => o.brand && o.model) || emptyQuoteOptions[0];
+  const base = product.quoteSnapshot && product.fitmentPosition === "rear"
+    ? { ...emptyQuoteOptions[0], id: original.id, tier: original.tier, quote_id: original.quote_id }
+    : original;
+  const option = { ...applyProduct(base, { ...product, quoteSnapshot: product.quoteSnapshot && product.fitmentPosition !== "rear" }),
+    rear_brand: "", rear_model: "", rear_image_url: "", rear_price_per_tire: "", rear_supplier: "",
+    rear_supplier_product_id: "", rear_manufacturer_product_id: "", rear_wholesale_cost: null, recommended: true, sort_order: 1 };
+  const form = { ...draft.form, tire_size: product.size, quantity: String(totalQuantity), rear_tire_size: "", rear_quantity: "" };
+  const options = quoteOptionsForEditor([option]).map(o => ({ ...o, recommended: Boolean(o.brand && o.model && o.recommended) }));
+  const products = quoteShopProducts(options, form, false);
+  return { ...draft, form, options, splitFitment: false, products, result: products };
 }
 
 export function applyQuoteShopSelection<F extends { tire_size: string; rear_tire_size: string }>(draft: QuoteShopDraft<F>, selected: QuoteShopProduct[]) {

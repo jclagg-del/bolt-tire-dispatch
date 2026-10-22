@@ -14,7 +14,7 @@ function loader() {
   };
 }
 const load = loader();
-const { quoteShopProducts, applyQuoteShopSelection, canEditQuoteTires, quoteShopKey, matchesQuoteSnapshot } = load('lib/quote-shop-edit.ts');
+const { quoteShopProducts, applyQuoteShopSelection, canEditQuoteTires, quoteShopKey, matchesQuoteSnapshot, quoteHasSplitFitment, singleSizeQuoteDraft } = load('lib/quote-shop-edit.ts');
 const { emptyQuoteOptions, quoteOptionsForEditor } = load('lib/quotes.ts');
 const { saveShoppingSession, readShoppingSession, quoteDraftKey } = load('lib/tire-shopping-session.ts');
 const form = { customer: 'Example', phone: '5551234567', email: 'example@test.invalid', address: 'Saved address', notes: 'Keep these notes', tire_size: '275/65R20', rear_tire_size: '', quantity: '4', rear_quantity: '', installation_cost: '299', disposal_fee: '14', service_call_fee: '30', ny_state_tire_fee: '10', sales_tax_rate: '8.125', tax_exempt: true, additional_items: [{ description: 'TPMS', quantity: 4, unit_price: 25, taxable: true }] };
@@ -102,4 +102,28 @@ test('Goodyear, Michelin and Falken 225/70R19.5 options from screenshot can be s
   assert.deepEqual(filled(result).map(o=>o.price_per_tire),['385','491','281']);
   assert.equal(filled(result)[2].supplier_product_id,'267051700');
   assert.throws(()=>applyQuoteShopSelection(value,[...selected.slice(0,2),{...selected[2],size:'225/70R22.5/14'}]),/same tire size/);
+});
+
+test('a leftover rear quantity alone cannot enable split fitment; actual rear details still do',()=>{
+ assert.equal(quoteHasSplitFitment({rear_tire_size:''},[option(0)]),false);
+ assert.equal(quoteHasSplitFitment({rear_tire_size:'  ',rear_quantity:2},[option(0)]),false);
+ assert.equal(quoteHasSplitFitment({rear_tire_size:'235/80R17'},[option(0)]),true);
+ assert.equal(quoteHasSplitFitment({rear_tire_size:''},[{...option(0),rear_model:'Rear tire'}]),true);
+});
+test('explicit single-size conversion preserves total quantity, selected tire, fees and quote identity while clearing rear charges',()=>{
+ const value=draft([{...option(0),rear_brand:'Toyo',rear_model:'Rear choice',rear_price_per_tire:'300',rear_image_url:'rear.jpg',rear_supplier:'USAF',rear_supplier_product_id:'rear-part',rear_wholesale_cost:200}],true,{quantity:'2',rear_quantity:'4',rear_tire_size:'275/65R20'});
+ for(const chosen of [value.products[0],value.products[1],catalog({fitmentPosition:'front'})]){
+  const before=structuredClone(value),next=singleSizeQuoteDraft(value,chosen),result=applyQuoteShopSelection(next,next.products),o=filled(result)[0];
+  assert.deepEqual(value,before);assert.equal(next.quoteId,value.quoteId);assert.equal(next.version,value.version);assert.equal(next.splitFitment,false);
+  assert.equal(result.form.quantity,'6');assert.equal(result.form.rear_quantity,'');assert.equal(result.form.rear_tire_size,'');
+  for(const key of ['customer','additional_items','installation_cost','disposal_fee','sales_tax_rate','tax_exempt'])assert.deepEqual(result.form[key],value.form[key]);
+  assert.equal(o.brand,chosen.brand);assert.equal(o.model,chosen.model);assert.equal(o.price_per_tire,String(chosen.quotePrice));assert.equal(o.image_url,chosen.imageUrl);
+  assert.equal(o.supplier_product_id,chosen.atdProductNumber);
+  for(const key of ['rear_brand','rear_model','rear_price_per_tire','rear_supplier_product_id'])assert.equal(o[key],'');
+  assert.equal(o.rear_wholesale_cost,null);assert.equal(next.products[0].fitmentPosition,'both');
+  assert.equal(filled(applyQuoteShopSelection(next,[...next.products,catalog({id:'another'})])).length,2);
+ }
+ assert.throws(()=>singleSizeQuoteDraft(value,{...value.products[0],brand:''}),/complete tire/);
+ // A genuine split must still be completed unless staff explicitly switches modes.
+ assert.throws(()=>applyQuoteShopSelection(value,[value.products[0]]),/front tire and one rear/);
 });
