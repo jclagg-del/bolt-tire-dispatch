@@ -57,7 +57,7 @@ test('Billing searches all sections without altering summary totals and loads be
   try{render();effects[0]();await new Promise(r=>setImmediate(r));tree=render();assert.deepEqual(ranges,[[0,499],[500,999]]);
     nodes(tree).find(n=>n.props?.id==='billing-search').props.onChange({target:{value:'brett'}});tree=render();
     const trs=nodes(tree).filter(n=>n.type==='tr'&&n.props.onClick);assert.equal(trs.length,1);assert.ok(JSON.stringify(trs[0]).includes('Brett Colleran'));
-    assert.ok(JSON.stringify(tree).includes('500'));assert.ok(nodes(tree).some(n=>n.type==='tax-report'));
+    assert.ok(JSON.stringify(tree).includes('500'));assert.ok(!nodes(tree).some(n=>n.type==='tax-report'));
     nodes(tree).find(n=>n.type==='button'&&n.props.children==='Clear').props.onClick();tree=render();assert.equal(nodes(tree).filter(n=>n.type==='tr'&&n.props.onClick).length,501);
   }finally{global.fetch=originalFetch}
 });

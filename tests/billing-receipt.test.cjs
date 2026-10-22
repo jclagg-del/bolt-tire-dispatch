@@ -63,8 +63,8 @@ test('provider acceptance, failure and repeated-send idempotency are handled',as
     global.fetch=async()=>({ok:false,json:async()=>({})});await assert.rejects(f.helpers.sendBillingReceipt(r),/could not confirm/);
   } finally {global.fetch=oldFetch;if(oldKey===undefined)delete process.env.RESEND_API_KEY;else process.env.RESEND_API_KEY=oldKey;}
 });
-test('Billing places tax below every job section, offers receipts only for paid jobs and stops row navigation',()=>{
-  const source=fs.readFileSync(path.resolve(__dirname,'../app/billing/page.tsx'),'utf8');assert.equal(source.match(/<QuarterlyTaxReport/g).length,1);assert.ok(source.indexOf('<QuarterlyTaxReport')>source.indexOf('<CompletionTextButton'));
+test('Billing keeps receipts for paid jobs and leaves tax reporting to its dedicated page',()=>{
+  const source=fs.readFileSync(path.resolve(__dirname,'../app/billing/page.tsx'),'utf8');assert.ok(!source.includes('QuarterlyTaxReport'));
   assert.match(source,/isPaid && <button[\s\S]*?stopPropagation\(\)[\s\S]*?>Send receipt<\/button>/);
   const modal=fs.readFileSync(path.resolve(__dirname,'../components/BillingReceiptDialog.tsx'),'utf8');assert.ok(modal.includes('sendingLock.current'));assert.ok(modal.includes('request("GET")'));assert.ok(modal.includes('fingerprint: preview.fingerprint'));
 });

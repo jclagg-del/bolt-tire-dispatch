@@ -54,6 +54,7 @@ export default function AppHeader() {
     { label: "Orders", path: "/orders" },
     { label: "Customers", path: "/customers" },
     { label: "Billing", path: "/billing" },
+    { label: "Sales Tax", path: "/sales-tax" },
     { label: "Completed", path: "/completed" },
     { label: "Settings", path: "/settings" },
   ];

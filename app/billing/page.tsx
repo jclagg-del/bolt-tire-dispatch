@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
-import QuarterlyTaxReport from "@/components/QuarterlyTaxReport";
 import BillingReceiptDialog from "@/components/BillingReceiptDialog";
 import CompletionTextButton from "@/components/CompletionTextButton";
 import { matchesBillingSearch } from "@/lib/billing-search";
@@ -314,7 +313,7 @@ export default function BillingPage() {
               style={{ flex: 1, minWidth: 0, minHeight: 44, border: "1px solid #cbd5e1", borderRadius: 9, padding: "10px 12px", fontSize: 16 }} />
             {search && <button type="button" onClick={() => setSearch("")} style={linkButton}>Clear</button>}
           </div>
-          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 0 }}>Searches Ready to bill, Billed / unpaid and Paid. Summary totals and the sales-tax report stay unchanged.</p>
+          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 0 }}>Searches Ready to bill, Billed / unpaid and Paid. Summary totals stay unchanged.</p>
           {loadingJobs && <p role="status">Loading billing jobs…</p>}
           {jobsError && <p role="alert">Could not refresh billing: {jobsError} <button type="button" onClick={fetchJobs} disabled={loadingJobs}>Retry</button></p>}
         </div>
@@ -441,7 +440,6 @@ export default function BillingPage() {
             )}
           </div>
         ))}
-        <QuarterlyTaxReport />
       </div>
       {receiptJobId !== null && <BillingReceiptDialog key={String(receiptJobId)} jobId={receiptJobId} onClose={() => setReceiptJobId(null)}
         onSent={email => { setReceiptJobId(null); setReceiptMessage(`Receipt sent to ${email}.`); }} />}
