@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { paidWebsiteOrder, websitePaymentFields } from "@/lib/paid-website-order";
+import { websiteOrderFacility } from "@/lib/website-order-facility";
 import { sendPaymentNotification } from "@/lib/payment-notifications";
 import { sendCustomerPaymentConfirmation } from "@/lib/customer-payment-confirmation";
 import { stripePaymentRequest } from "@/lib/stripe-payments";
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
   // Organization purchases wait in Orders. Payment never places a supplier order
   // or checks "Tires ordered". Unique source_quote_id makes webhook retries safe.
   if (quote.discount_organization) {
-    const orderValues = paidWebsiteOrder(quote, option);
+    const orderValues = { ...paidWebsiteOrder(quote, option), ...await websiteOrderFacility(admin, quote) };
     const { data: created, error: orderError } = await admin.from("customer_orders").insert(orderValues).select("id,payment_notification_sent_at").single();
     let order = created;
     if (orderError?.code === "23505") {

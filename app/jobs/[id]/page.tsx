@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { flushSync } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppHeader from "@/components/AppHeader";
@@ -14,7 +13,7 @@ import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
-import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
+import { type TireLabelJob } from "@/components/TireLabelPrint";
 import BluetoothLabelButton from "@/components/BluetoothLabelButton";
 
 type JobForm = {
@@ -103,7 +102,6 @@ export default function EditJobPage() {
   const [stateFeeOverridden, setStateFeeOverridden] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [archiving, setArchiving] = useState(false);
-  const [labelJob, setLabelJob] = useState<TireLabelJob | null>(null);
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [mileageConfirmed, setMileageConfirmed] = useState(false);
@@ -504,13 +502,14 @@ export default function EditJobPage() {
     router.refresh();
   };
 
-  const printTireLabels = () => {
-    if (!id || !form) return;
-
-    flushSync(() => setLabelJob({
+  const labelJob: TireLabelJob | null = id && form ? {
       id: String(id),
       customer: form.customer,
       facilityName,
+      contactName: form.contact_name,
+      phone: form.phone,
+      email: form.email,
+      address: form.address,
       jobNumber: form.po_number,
       moNumber: form.mo_number,
       serviceType: form.service_type,
@@ -520,9 +519,7 @@ export default function EditJobPage() {
       quantity: Number(form.qty) || 1,
       vehicle: form.vehicle,
       scheduled: form.scheduled,
-    }));
-    window.print();
-  };
+  } : null;
 
   const openCompleteModal = async () => {
     if (!form || completing) return;
@@ -695,14 +692,10 @@ export default function EditJobPage() {
                   : "📦 Archive Job"}
               </button>
 
-              <button
-                type="button"
-                onClick={printTireLabels}
-                style={labelButton}
-              >
-                🏷️ Print Tire Labels
-              </button>
-              <BluetoothLabelButton style={labelButton} job={{id:String(id),customer:form.customer,facilityName,jobNumber:form.po_number,moNumber:form.mo_number,serviceType:form.service_type,tires:form.tires,size:form.size,productNumber:form.tire_product_number,quantity:Number(form.qty)||1,vehicle:form.vehicle,scheduled:form.scheduled}} />
+              {labelJob && <>
+                <BluetoothLabelButton connection="wifi" style={labelButton} job={labelJob} />
+                <BluetoothLabelButton style={labelButton} job={labelJob} />
+              </>}
             </div>
           </div>
         </div>
@@ -1013,7 +1006,6 @@ export default function EditJobPage() {
         onCancel={closeCompleteModal}
         onConfirm={handleComplete}
       />
-      <TireLabelPrint job={labelJob} />
     </div>
   );
 }

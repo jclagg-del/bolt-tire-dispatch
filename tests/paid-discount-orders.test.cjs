@@ -5,6 +5,29 @@ const {createHmac}=require('node:crypto');
 function loader(stubs={}){stubs={'@/lib/customer-payment-confirmation':{sendCustomerPaymentConfirmation:async()=>{}},...stubs};const cache=new Map();return function load(file){file=path.resolve(__dirname,'..',file);if(!path.extname(file))file+='.ts';if(cache.has(file))return cache.get(file).exports;const m=new Module(file,module);cache.set(file,m);m.paths=module.paths;m.require=id=>id==='server-only'?{}:Object.hasOwn(stubs,id)?stubs[id]:id.startsWith('@/')?load(id.slice(2)):id.startsWith('.')?load(path.resolve(path.dirname(file),id)):require(id);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);return m.exports;};}
 const option={id:'option',brand:'Goodyear',model:'Example',price_per_tire:90,supplier:'USAF',supplier_product_id:'1234'};
 const quote={id:'quote',quote_number:123,customer:'Example Person',contact_name:'Example Person',phone:'2015550123',email:'example@example.com',vehicle:'2020 Ford Transit',address:'123 Example St',quantity:4,tire_size:'275/65R18',installation_cost:100,service_call_fee:20,disposal_fee:20,ny_state_tire_fee:10,tax_exempt:true,amount_paid:510,stripe_sales_tax_amount:0,paid_at:'2026-09-28T12:00:00Z',discount_code_label:'EXAMPLE',discount_organization:'HPR',discount_amount:40,checkout_service:'tires_only',purchase_source:'website',selected_option_id:option.id,quote_options:[option]};
+const hprFacilities=[{id:3,name:'HPR VM Tuxedo',address:'1422 Long Meadow Rd',active:true},{id:10,name:'HPR VM Newburgh Center A',address:'1232 NY-300, Newburgh, NY, 12550',active:true}];
+test('organization code matches a unique destination address, never just the organization or a partial street number',()=>{
+ const {matchWebsiteOrderFacility:match}=loader()('lib/website-order-facility');
+ const q={...quote,discount_code_label:'HPR',address:'1422 Long Meadow Road, Tuxedo Park, NY 10987'};
+ assert.deepEqual(match(q,hprFacilities),{facility_id:3,facility_name:'HPR VM Tuxedo'});
+ assert.deepEqual(match({...q,address:'1232 NY-300, Newburgh, NY 12550'},hprFacilities),{facility_id:10,facility_name:'HPR VM Newburgh Center A'});
+ for(const patch of [{address:'14220 Long Meadow Rd'},{address:'1 Other Rd'},{discount_code_label:null},{discount_organization:null},{discount_organization:'KSS'}]) assert.equal(match({...q,...patch},hprFacilities),null);
+ assert.equal(match(q,[...hprFacilities,{...hprFacilities[0],id:30}]),null);
+ assert.equal(match(q,[{...hprFacilities[0],active:false}]),null);
+});
+test('paid HPR checkout carries facility to the order while preserving individual and address',async()=>{
+ const prior=process.env.STRIPE_WEBHOOK_SECRET;process.env.STRIPE_WEBHOOK_SECRET='unit-test-secret';
+ try {
+  const db=database({quotes:[{...quote,discount_code_label:'HPR',address:'1422 Long Meadow Rd, Tuxedo Park, NY 10987'}],kingdom_facilities:hprFacilities});
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db},'@/lib/payment-notifications':{sendPaymentNotification:async()=>{}}})('app/api/stripe/webhook/route');
+  assert.equal((await route.POST(signedEvent())).status,200);
+  const order=db.tables.customer_orders[0];
+  assert.equal(order.facility_id,3);assert.equal(order.facility_name,'HPR VM Tuxedo');
+  assert.equal(order.contact_name,quote.contact_name);assert.equal(order.contact_number,quote.phone);
+  assert.equal(order.address,'1422 Long Meadow Rd, Tuxedo Park, NY 10987');
+  assert.equal((await route.POST(signedEvent())).status,200);assert.equal(db.tables.customer_orders.length,1);
+ } finally {if(prior===undefined)delete process.env.STRIPE_WEBHOOK_SECRET;else process.env.STRIPE_WEBHOOK_SECRET=prior;}
+});
 // Small in-memory database exercises route behavior, including unique constraints.
 function database(seed={}){
  const tables={quotes:[structuredClone(quote)],customer_orders:[],jobs:[],supplier_orders:[],business_settings:[],...structuredClone(seed)};const writes=[];
@@ -141,6 +164,21 @@ test('approval creates one paid job with original financials; identical unrelate
  const job=db.tables.jobs.find(j=>j.source_quote_id==='quote');assert.ok(job);assert.equal(job.payment_status,'paid');assert.equal(job.job_total,510);assert.equal(job.tax_exempt,true);assert.equal(job.price_tires,90);assert.equal(job.tires_ordered,false);assert.equal(job.tire_supplier,null);assert.equal(job.service_type,'Delivery');
  assert.equal(job.scheduled,'2026-10-03T14:45:00');assert.equal(db.tables.customer_orders[0].requested_date,null);
  assert.equal((await route.POST(req())).status,200);assert.equal(db.tables.jobs.length,2);assert.equal(db.tables.quotes[0].converted_job_id,job.id);assert.equal(db.tables.jobs[0].source_quote_id,undefined);
+});
+test('approval matches older HPR orders with no facility and preserves explicit staff destinations',async()=>{
+ const {paidWebsiteOrder}=loader()('lib/paid-website-order');
+ const q={...quote,payment_status:'paid',discount_code_label:'HPR',address:'1422 Long Meadow Rd, Tuxedo Park, NY 10987'};
+ for (const explicit of [false,true]) {
+  const order={id:9,...paidWebsiteOrder(q,option),...(explicit?{facility_id:10,facility_name:'HPR VM Newburgh Center A'}:{facility_id:null,facility_name:null})};
+  const db=database({quotes:[q],customer_orders:[order],kingdom_facilities:hprFacilities});
+  const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db,requireApiUser:async()=>({id:'staff'})}})('app/api/orders/approve/route');
+  const res=await route.POST(new Request('https://example.test',{method:'POST',body:JSON.stringify({orderId:9,serviceMethod:'delivery'})}));
+  assert.equal(res.status,200,JSON.stringify(await res.clone().json()));
+  for(const row of [db.tables.jobs[0],db.tables.customer_orders[0]]) {
+   assert.equal(row.facility_id,explicit?10:3);
+   assert.equal(row.facility_name,explicit?'HPR VM Newburgh Center A':'HPR VM Tuxedo');
+  }
+ }
 });
 test('server quote creation discounts tires only, ignores supplied prices/exemption, and snapshots benefits',async()=>{
  const product={id:'tire',size:'275/65R18',brand:'Goodyear',model:'Example',quotePrice:100,serviceCategory:'passenger',supplier:'USAF',atdProductNumber:'1234',warranty:'60000',availability:{local:10,localPlus:10}};

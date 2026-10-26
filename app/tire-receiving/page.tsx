@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { flushSync } from "react-dom";
 import AppHeader from "@/components/AppHeader";
-import TireLabelPrint, { type TireLabelJob } from "@/components/TireLabelPrint";
+import { type TireLabelJob } from "@/components/TireLabelPrint";
 import BluetoothLabelButton from "@/components/BluetoothLabelButton";
 import { supabase } from "@/lib/supabase";
 
@@ -12,6 +11,10 @@ type ReceivingJob = {
   id: string;
   customer: string | null;
   facility_name: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
   po_number: string | null;
   mo_number: string | null;
   service_type: string | null;
@@ -43,7 +46,6 @@ export default function TireReceivingPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [labelJob, setLabelJob] = useState<TireLabelJob | null>(null);
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -51,7 +53,7 @@ export default function TireReceivingPage() {
 
     const { data, error: loadError } = await supabase
       .from("jobs")
-      .select("id,customer,facility_name,po_number,mo_number,service_type,tires,size,tire_product_number,qty,scheduled,vehicle")
+      .select("id,customer,facility_name,contact_name,phone,email,address,po_number,mo_number,service_type,tires,size,tire_product_number,qty,scheduled,vehicle")
       .eq("tires_received", false)
       .eq("archived", false)
       .eq("complete", false)
@@ -98,11 +100,14 @@ export default function TireReceivingPage() {
     setUpdatingId(null);
   };
 
-  const printLabels = (job: ReceivingJob) => {
-    flushSync(() => setLabelJob({
+  const labelFor = (job: ReceivingJob): TireLabelJob => ({
       id: job.id,
       customer: job.customer,
       facilityName: job.facility_name,
+      contactName: job.contact_name,
+      phone: job.phone,
+      email: job.email,
+      address: job.address,
       jobNumber: job.po_number,
       moNumber: job.mo_number,
       serviceType: job.service_type,
@@ -112,9 +117,7 @@ export default function TireReceivingPage() {
       quantity: job.qty,
       vehicle: job.vehicle,
       scheduled: job.scheduled,
-    }));
-    window.print();
-  };
+  });
 
   return (
     <div style={shell}>
@@ -159,10 +162,8 @@ export default function TireReceivingPage() {
                     </div>
                   </button>
                   <div style={cardActions}>
-                    <button type="button" style={printButton} disabled={updating} onClick={() => printLabels(job)}>
-                      Print {Math.max(1, Number(job.qty) || 1)} Labels
-                    </button>
-                    <BluetoothLabelButton disabled={updating} style={printButton} job={{id:job.id,customer:job.customer,facilityName:job.facility_name,jobNumber:job.po_number,moNumber:job.mo_number,serviceType:job.service_type,tires:job.tires,size:job.size,productNumber:job.tire_product_number,quantity:job.qty,vehicle:job.vehicle,scheduled:job.scheduled}} />
+                    <BluetoothLabelButton connection="wifi" disabled={updating} style={printButton} job={labelFor(job)} />
+                    <BluetoothLabelButton disabled={updating} style={printButton} job={labelFor(job)} />
                     <button
                       type="button"
                       style={{ ...receivedButton, ...(updating ? disabledButton : {}) }}
@@ -178,7 +179,6 @@ export default function TireReceivingPage() {
           </div>
         )}
       </main>
-      <TireLabelPrint job={labelJob} />
     </div>
   );
 }

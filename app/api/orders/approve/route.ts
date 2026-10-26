@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { purchasingRequestId, supplierOrderDetails } from "@/lib/customer-order-purchasing";
 import { websitePaymentFields } from "@/lib/paid-website-order";
+import { websiteOrderFacility } from "@/lib/website-order-facility";
 import { orderAppointment } from "@/lib/order-appointment";
 
 type CustomerOrder = {
@@ -130,6 +131,10 @@ export async function POST(request: NextRequest) {
       const option = quote?.quote_options?.find((item: { id: string }) => item.id === quote.selected_option_id);
       if (paidError || !quote || quote.payment_status !== "paid" || !option) throw new Error("The paid checkout record must be verified before creating this job.");
       paidFields = websitePaymentFields(quote, option);
+      if (!order.facility_name && !order.facility_id) {
+        const facility = await websiteOrderFacility(admin, quote);
+        if (facility) Object.assign(order, facility);
+      }
       if (!order.service_method) {
         if (!["delivery", "pickup"].includes(serviceMethod)) return NextResponse.json({ error: "Choose delivery or pickup for this tires-only order." }, { status: 400 });
         order.service_method = serviceMethod;
@@ -161,6 +166,8 @@ export async function POST(request: NextRequest) {
       reviewed_at: lockTimestamp,
       approved_at: lockTimestamp,
       service_method: order.service_method,
+      facility_id: order.facility_id,
+      facility_name: order.facility_name,
     }).eq("id", order.id).is("approved_job_id", null).eq("order_status", order.order_status);
     claim = order.reviewed_at ? claim.eq("reviewed_at", order.reviewed_at) : claim.is("reviewed_at", null);
     const { data: claimed, error: claimError } = await claim.select("id").maybeSingle();

@@ -49,12 +49,17 @@ test('labels show only the destination facility, never the billing customer fall
   for (const facilityName of [null, '', '   ']) {
     const missing = render(1, { customer: 'Kingdom Support Services', facilityName });
     assert.match(missing, /Facility not set/);
-    assert.doesNotMatch(missing, /Kingdom Support Services/);
+    assert.match(missing, /CONTACT/);
   }
   const edit = fs.readFileSync(require.resolve('../app/jobs/[id]/page.tsx'), 'utf8');
   assert.match(edit, /setFacilityName\(data\.facility_name \|\| null\)/);
   assert.match(edit, /customer: form\.customer,\s+facilityName,/);
-  assert.match(edit, /<BluetoothLabelButton[^\n]*facilityName/);
+  assert.match(edit, /<BluetoothLabelButton[^\n]*job=\{labelJob\}/);
+});
+test('label separates facility from the individual, address and contact details', () => {
+  const html = render(1, {customer:'HPR', facilityName:'HPR VM Tuxedo', contactName:'Sample Person', address:'1422 Long Meadow Rd, Tuxedo Park, NY 10987', phone:'555-0100',email:'sample@example.com'});
+  for (const value of ['HPR VM Tuxedo','Sample Person','1422 Long Meadow Rd','555-0100','sample@example.com']) assert.ok(html.includes(value));
+  assert.doesNotMatch(html, /Facility not set|Contact not set|Address not set|Phone not set/);
 });
 test('no active label job and server rendering do not change normal document printing', () => {
   assert.equal(renderToStaticMarkup(React.createElement(Print, { job: null })), '');
@@ -72,8 +77,8 @@ test('print CSS removes surrounding layout and only breaks before subsequent lab
   assert.doesNotMatch(css, /break-after:page|page-break-after:always/);
   for (const file of ['../app/tire-receiving/page.tsx', '../app/jobs/[id]/page.tsx']) {
     const source = fs.readFileSync(require.resolve(file), 'utf8');
-    assert.match(source, /<TireLabelPrint job=\{labelJob\}/);
-    assert.match(source, /flushSync\(\(\) => setLabelJob/);
+    assert.match(source, /<BluetoothLabelButton connection="wifi"/);
+    assert.doesNotMatch(source, /window\.print\(\)/);
   }
 });
 test('label geometry reserves one safe page and fits all content without clipping', () => {

@@ -19,6 +19,10 @@ export type TireLabelJob = {
   id: string;
   customer?: string | null;
   facilityName?: string | null;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
   jobNumber?: string | null;
   moNumber?: string | null;
   serviceType?: string | null;
@@ -85,6 +89,9 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
             <div><small>FACILITY</small><strong>{job.facilityName?.trim() || "Facility not set"}</strong></div>
             <div><small>SERVICE DATE</small><strong>{scheduledDate(job.scheduled) || "—"}</strong></div>
           </div>
+          <p><small>CONTACT</small><br/><strong>{job.contactName?.trim() || (!job.facilityName?.trim() ? job.customer?.trim() : "") || "Contact not set"}</strong></p>
+          <p><small>SERVICE ADDRESS</small><br/>{job.address?.trim() || "Address not set"}</p>
+          <p>{job.phone?.trim() || "Phone not set"}{job.email?.trim() ? <><br/>{job.email.trim()}</> : null}</p>
           {job.vehicle ? <p>{job.vehicle}</p> : null}
           </div>
         </section>
