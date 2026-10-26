@@ -1,4 +1,5 @@
 import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
+import { quoteManufacturerParts } from "@/lib/job-part-numbers";
 /** Snapshots come from the server's saved quote, never the checkout request. */
 export type WebsiteQuote = {
   additional_items?: AdditionalItem[];
@@ -35,6 +36,7 @@ export function websitePaymentFields(q: WebsiteQuote, o: WebsiteOption) {
   return {
     additional_items: q.additional_items || [],
     source_quote_id: q.id, email: q.email || null, vehicle: q.vehicle || null,
+    tire_manufacturer_part_number: quoteManufacturerParts(o, Number(q.rear_quantity || 0)),
     qty: quantity, tires: items.map(i => `${i.brand} ${i.model}`).join(" / "),
     size: items.map(i => i.size).join(" / "), tire_product_number: items.map(i => i.part).join(" / "),
     price_tires: tireTotal / quantity, installation_cost: Number(q.installation_cost) + Number(q.service_call_fee),

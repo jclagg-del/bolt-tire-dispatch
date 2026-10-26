@@ -19,6 +19,7 @@ type Job = {
   complete?: boolean | null;
   notes?: string | null;
   tires?: string | null;
+  tire_manufacturer_part_number?: string | null;
   size?: string | null;
   qty?: number | string | null;
   contact_name?: string | null;
@@ -159,6 +160,7 @@ export default function CompletedPage() {
               )}
 
               {job.tires && <div style={sub}>🛞 {job.tires}</div>}
+              {job.tires && <div style={sub}>Manufacturer part #: {job.tire_manufacturer_part_number || "Not recorded"}</div>}
               {job.size && <div style={sub}>📏 {job.size}</div>}
 
               {job.qty && <div style={sub}>#️⃣ Qty: {job.qty}</div>}

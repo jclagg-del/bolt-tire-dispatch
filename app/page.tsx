@@ -21,6 +21,7 @@ type Job = {
   service_type?: string | null;
   po_number?: string | null;
   size?: string | null;
+  tire_manufacturer_part_number?: string | null;
   qty?: number | string | null;
   job_total?: number | string | null;
   payment_status?: string | null;
@@ -211,6 +212,7 @@ export default function DashboardPage() {
           service_type,
           po_number,
           size,
+          tire_manufacturer_part_number,
           qty,
           job_total,
           payment_status,
@@ -511,6 +513,7 @@ function JobCard({ job, vehicle }: { job: Job; vehicle?: Vehicle }) {
           }`}
         />
         <Info label="Total" value={total || "-"} strong />
+        {job.size && <Info label="Manufacturer part #" value={job.tire_manufacturer_part_number || "Not recorded"} />}
         <Info label="Billing" value={payment} />
         <Info label="Invoice" value={job.invoice_number || "-"} />
         <Info label="Status" value={status} />

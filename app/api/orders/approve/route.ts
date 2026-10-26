@@ -126,6 +126,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid appointment." }, { status: 400 });
     }
     let paidFields = {};
+    let manufacturerPart: string | null = null;
+    if (!order.source_quote_id && order.tire_product_number) {
+      const { data: catalogPart } = await admin.from("usaf_inventory").select("part_number").eq("part_number", order.tire_product_number.trim()).maybeSingle();
+      manufacturerPart = catalogPart?.part_number || null;
+    }
     if (order.source_quote_id) {
       const { data: quote, error: paidError } = await admin.from("quotes").select("*,quote_options!quote_options_quote_id_fkey(*)").eq("id", order.source_quote_id).single();
       const option = quote?.quote_options?.find((item: { id: string }) => item.id === quote.selected_option_id);
@@ -188,6 +193,7 @@ export async function POST(request: NextRequest) {
       qty: order.qty,
       size: order.tire_size,
       tire_product_number: order.tire_product_number,
+      tire_manufacturer_part_number: manufacturerPart,
       notes: jobNotes(order),
       tires_ordered: order.tires_ordered,
       tire_supplier: tireOrder.supplier,

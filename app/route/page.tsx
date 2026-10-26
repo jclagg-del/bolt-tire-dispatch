@@ -27,6 +27,7 @@ type Job = {
   notes?: string | null;
   tires?: string | null;
   tire_product_number?: string | null;
+  tire_manufacturer_part_number?: string | null;
   size?: string | null;
   qty?: number | string | null;
   service_type?: string | null;
@@ -190,6 +191,7 @@ export default function RoutePage() {
         notes,
         tires,
         tire_product_number,
+        tire_manufacturer_part_number,
         size,
         qty,
         service_type,
@@ -632,7 +634,8 @@ function RouteCard({
         <Info label="Job Number" value={job.po_number || "-"} />
         <Info label="MO Number" value={job.mo_number || "-"} />
         <Info label="Tires" value={tireText} />
-        <Info label="Part number" value={job.tire_product_number?.trim() || "Not provided"} strong />
+        <Info label="Manufacturer part #" value={job.tire_manufacturer_part_number?.trim() || "Not recorded"} strong />
+        <Info label="Ordering part #" value={job.tire_product_number?.trim() || "Not provided"} />
         <Info label="Status" value={job.complete ? "Completed" : job.job_status || "scheduled"} />
       </div>
 

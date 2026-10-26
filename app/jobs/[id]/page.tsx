@@ -32,6 +32,7 @@ type JobForm = {
   qty: string;
   price_tires: string;
   tire_product_number: string;
+  tire_manufacturer_part_number: string;
   tires_ordered: boolean;
   tire_supplier: string;
   ordered_by: string;
@@ -134,6 +135,7 @@ export default function EditJobPage() {
         price_tires,
         additional_items,
         tire_product_number,
+        tire_manufacturer_part_number,
         tires_ordered,
         tire_supplier,
         ordered_by,
@@ -217,6 +219,7 @@ export default function EditJobPage() {
           ? String(data.price_tires)
           : "",
       tire_product_number: data.tire_product_number || "",
+      tire_manufacturer_part_number: data.tire_manufacturer_part_number || "",
       tires_ordered: Boolean(data.tires_ordered),
       tire_supplier: data.tire_supplier || "",
       ordered_by: data.ordered_by || "",
@@ -373,6 +376,7 @@ export default function EditJobPage() {
           : null,
         tire_product_number:
           form.tire_product_number.trim() || null,
+        tire_manufacturer_part_number: form.tire_manufacturer_part_number.trim() || null,
         // Preparing an order must not clear a purchase another staff member
         // recorded since this form was opened. The purchase route checks it.
         ...(!stayForPurchase ? {
@@ -846,7 +850,9 @@ export default function EditJobPage() {
 
             <Field fullWidth>
               <label style={fieldLabel}>Tire Product Number</label>
-              <input name="tire_product_number" value={form.tire_product_number} onChange={handleChange} style={input} placeholder="Tire Product Number" />
+              <input name="tire_product_number" value={form.tire_product_number} onChange={handleChange} style={input} placeholder="Supplier ordering part number" />
+              <label style={fieldLabel}>Manufacturer Part Number</label>
+              <input name="tire_manufacturer_part_number" value={form.tire_manufacturer_part_number} onChange={handleChange} style={input} placeholder="Manufacturer number, not UPC" />
             </Field>
           </div>
 

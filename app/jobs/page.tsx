@@ -20,6 +20,8 @@ type Job = {
   address?: string | null;
   notes?: string | null;
   tires?: string | null;
+  tire_manufacturer_part_number?: string | null;
+  tire_product_number?: string | null;
   size?: string | null;
   qty?: string | number | null;
   scheduled?: string | null;
@@ -230,6 +232,8 @@ function JobsPageContent() {
         address,
         notes,
         tires,
+        tire_manufacturer_part_number,
+        tire_product_number,
         size,
         qty,
         scheduled,
@@ -350,6 +354,8 @@ function JobsPageContent() {
           job.address,
           job.notes,
           job.tires,
+          job.tire_manufacturer_part_number,
+          job.tire_product_number,
           job.size,
           job.service_type,
           job.po_number,
@@ -624,6 +630,8 @@ function JobsPageContent() {
                   {job.mo_number ? <div style={sub}>MO: {job.mo_number}</div> : null}
                   {job.billing_name ? <div style={sub}>💵 Bill To: {job.billing_name}</div> : null}
                   {tireText ? <div style={sub}>🛞 {tireText}</div> : null}
+                  {tireText ? <div style={sub}><strong>Manufacturer part #: {job.tire_manufacturer_part_number || "Not recorded"}</strong></div> : null}
+                  {job.tire_product_number ? <div style={sub}>Ordering part #: {job.tire_product_number}</div> : null}
                   {job.notes ? <div style={notes}>📝 {job.notes}</div> : null}
                   {job.scheduled ? (
                     <div style={time}>🕒 {formatDateTimeNY(job.scheduled)}</div>

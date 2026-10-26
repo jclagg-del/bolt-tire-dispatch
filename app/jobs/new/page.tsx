@@ -34,6 +34,7 @@ type FormState = {
   qty: string;
   price_tires: string;
   tire_product_number: string;
+  tire_manufacturer_part_number: string;
   tires_ordered: boolean;
   tire_supplier: string;
   estimated_delivery_date: string;
@@ -123,6 +124,7 @@ export default function NewJobPage() {
     qty: "",
     price_tires: "",
     tire_product_number: "",
+    tire_manufacturer_part_number: "",
     tires_ordered: false,
     tire_supplier: "",
     estimated_delivery_date: "",
@@ -327,6 +329,7 @@ export default function NewJobPage() {
       qty: form.qty.trim() ? Number(form.qty) : null,
       price_tires: form.price_tires.trim() ? Number(form.price_tires) : null,
       tire_product_number: form.tire_product_number.trim() || null,
+      tire_manufacturer_part_number: form.tire_manufacturer_part_number.trim() || null,
       tires_ordered: form.tires_ordered,
       tire_supplier: form.tire_supplier.trim() || null,
       estimated_delivery_date: form.estimated_delivery_date || null,
@@ -636,7 +639,9 @@ export default function NewJobPage() {
             </Field>
             <Field fullWidth>
               <label style={fieldLabel}>Tire Product Number</label>
-              <input name="tire_product_number" placeholder="Tire Product Number" value={form.tire_product_number} onChange={handleChange} style={input} />
+              <input name="tire_product_number" placeholder="Supplier ordering part number" value={form.tire_product_number} onChange={handleChange} style={input} />
+              <label style={fieldLabel}>Manufacturer Part Number</label>
+              <input name="tire_manufacturer_part_number" placeholder="Manufacturer number, not UPC" value={form.tire_manufacturer_part_number} onChange={handleChange} style={input} />
             </Field>
           </div>
 

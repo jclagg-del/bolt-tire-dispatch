@@ -109,9 +109,12 @@ test('USAF size and part searches keep suggestions staff-only and preserve MAP-b
   };
   catalog.require = name => Object.hasOwn(stubs,name) ? stubs[name] : require(name);
   catalog._compile(ts.transpileModule(fs.readFileSync(require.resolve('../lib/usaf-catalog.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,__filename);
+  row.upc = '697662162124'; // Barcode must not replace the manufacturer part.
   for (const search of [catalog.exports.searchUsafBySize,catalog.exports.searchUsafByPartNumber]) {
     const [staff] = await search('224060',true);
     const [customer] = await search('224060',false);
+    assert.equal(staff.manufacturerProductNumber,row.part_number);
+    assert.equal(customer.manufacturerProductNumber,row.part_number);
     assert.equal(staff.suggestedPrice,281);
     assert.equal(staff.map,302);
     assert.equal(staff.quotePrice,302);

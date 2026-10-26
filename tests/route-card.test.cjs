@@ -45,7 +45,7 @@ test('other-day cards can be viewed without route completion or JHA edit control
 test('route query loads the stored tire part number and card preserves leading zeros', () => {
   assert.match(source, /\.select\(`[\s\S]*?tire_product_number,[\s\S]*?`\)/);
   const html = render('  00110822702  ');
-  for (const value of ['Part number', '00110822702', '3094589', 'MO123', 'Goodyear Assurance', '225/60R17']) assert.ok(html.includes(value));
+  for (const value of ['Manufacturer part #', 'Ordering part #', '00110822702', '3094589', 'MO123', 'Goodyear Assurance', '225/60R17']) assert.ok(html.includes(value));
 });
 test('missing part number is explicit without hiding other route details', () => {
   for (const value of [null, undefined, '', '   ']) {

@@ -21,7 +21,7 @@ const order = (id, extra = {}) => ({ id, customer: 'Kingdom Support Services', j
 
 // Database boundaries only; every route and filter under test is production code.
 function fixture({ orders = [order(1)], jobs = [], authenticated = true, insertError, lostInsertResponse = false, linkError = false } = {}) {
-  const tables = structuredClone({ customer_orders: orders, jobs, supplier_orders: [] });
+  const tables = structuredClone({ customer_orders: orders, jobs, supplier_orders: [], usaf_inventory: [{part_number:'413134582'}] });
   let insertAttempts = 0, failure = insertError;
   const admin = { from(table) {
     let operation = 'select', values, filters = [], limit = Infinity;
@@ -141,6 +141,8 @@ test('repeated and simultaneous approval of the same order creates only one job'
   assert.ok(results.every(r => [200, 409].includes(r.status)));
   for (let i = 0; i < 3; i++) assert.equal((await f.approve(1)).status, 200);
   assert.equal(f.tables.jobs.length, 1); assert.equal(f.insertAttempts, 1);
+  assert.equal(f.tables.jobs[0].tire_manufacturer_part_number,'413134582');
+  assert.equal(f.tables.jobs[0].tire_product_number,'413134582');
 });
 test('an uncertain old approval never expires into another job insert', async () => {
   for (const reviewed_at of ['2026-01-01T00:00:00Z', null]) {

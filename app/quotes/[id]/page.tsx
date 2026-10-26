@@ -1,4 +1,5 @@
 "use client";
+import { quoteManufacturerParts } from "@/lib/job-part-numbers";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -154,6 +155,7 @@ export default function QuoteDetailPage() {
       vehicle: quote.vehicle, tires: [ `${selected.brand} ${selected.model}`, selected.rear_model ? `Rear: ${selected.rear_brand || selected.brand} ${selected.rear_model}` : null ].filter(Boolean).join(" / "), size: [quote.tire_size, quote.rear_tire_size ? `Rear: ${quote.rear_tire_size}` : null].filter(Boolean).join(" / "),
       qty: quote.quantity + Number(quote.rear_quantity || 0), price_tires: tireSubtotal / (quote.quantity + Number(quote.rear_quantity || 0)), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
       tire_supplier: selected.supplier || null, tire_product_number: selected.supplier_product_id || selected.manufacturer_product_id || null,
+      tire_manufacturer_part_number: quoteManufacturerParts(selected, Number(quote.rear_quantity || 0)),
       tire_disposal_fee: Number(quote.disposal_fee), ny_state_tire_fee: Number(quote.ny_state_tire_fee),
       address: quote.address, notes: combinedNotes || null, subtotal: taxableSubtotal + extra.nonTaxable + Number(quote.ny_state_tire_fee),
       sales_tax_rate: quote.tax_exempt ? 0 : (taxableSubtotal > 0 ? (salesTax / taxableSubtotal) * 100 : 0), sales_tax_amount: salesTax,
