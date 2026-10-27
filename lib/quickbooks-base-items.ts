@@ -1,4 +1,8 @@
 type CatalogItem = { Id: string; Name: string; FullyQualifiedName?: string; Type?: string };
+export function quickBooksInstallationChoices(items: CatalogItem[]) {
+  return items.filter(item => ["Service", "NonInventory", "Inventory"].includes(item.Type || "")
+    && /mount.*balance|dismount/i.test(item.FullyQualifiedName || item.Name));
+}
 /** Match existing catalog names; never invent an account or substitute an
  * unrelated service. Quoted service category disambiguates installation. */
 export function quickBooksBaseItems(items: CatalogItem[], category: string | null, quantity: number) {

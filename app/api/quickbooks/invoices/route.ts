@@ -3,12 +3,33 @@ import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 import { escapeQueryValue, quickBooksRequest } from "@/lib/quickbooks";
 import { additionalInvoiceLines } from "@/lib/additional-items";
 import { quickBooksItems } from "@/lib/quickbooks-items";
-import { quickBooksBaseItems } from "@/lib/quickbooks-base-items";
+import { quickBooksBaseItems, quickBooksInstallationChoices } from "@/lib/quickbooks-base-items";
+import { quickBooksInvoiceTaxRate } from "@/lib/quickbooks-invoice-tax";
+
+// Read the saved invoice directly from QuickBooks; never sync or mutate it here.
+export async function GET(request: Request) {
+  try {
+    const user = await requireApiUser(request);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const admin = createAdminClient();
+    const { data: staff, error: staffError } = await admin.from("staff_security").select("role,password_change_required").eq("user_id", user.id).maybeSingle();
+    if (staffError || !staff || !["admin", "office"].includes(staff.role) || staff.password_change_required) return NextResponse.json({ error: "Office or admin access with completed password setup is required." }, { status: 403 });
+    const jobId = new URL(request.url).searchParams.get("jobId");
+    if (!jobId || !/^\d+$/.test(jobId)) return NextResponse.json({ error: "A valid job is required." }, { status: 400 });
+    const { data: job, error } = await admin.from("jobs").select("quickbooks_invoice_id").eq("id", jobId).single();
+    if (error || !job?.quickbooks_invoice_id) return NextResponse.json({ error: "This job has no linked QuickBooks invoice." }, { status: 404 });
+    const { Invoice: invoice } = await quickBooksRequest(`/invoice/${encodeURIComponent(job.quickbooks_invoice_id)}`);
+    if (!invoice?.Id) throw new Error("QuickBooks did not return the invoice.");
+    return NextResponse.json({ invoice }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not read invoice." }, { status: 502 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
     if (!(await requireApiUser(request))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { jobId } = await request.json();
+    const { jobId, installationItemId } = await request.json();
     const admin = createAdminClient();
     const { data: job, error } = await admin.from("jobs").select("*").eq("id", jobId).single();
     if (error || !job) throw new Error("Job not found.");
@@ -16,32 +37,6 @@ export async function POST(request: Request) {
     if (job.quickbooks_invoice_id) throw new Error("This job already has a QuickBooks invoice.");
     // Validate all mappings before creating any QuickBooks customer or invoice.
     const extraLines = additionalInvoiceLines(job.additional_items || [], job.additional_items?.length ? await quickBooksItems() : [], Boolean(job.tax_exempt), job.scheduled ? String(job.scheduled).slice(0, 10) : null);
-
-    const customerName = String(job.billing_name || job.customer || "").trim();
-    if (!customerName) throw new Error("The job needs a customer or billing name.");
-    let customer = null;
-    if (job.quickbooks_customer_id) {
-      try {
-        customer = (await quickBooksRequest(`/customer/${job.quickbooks_customer_id}`)).Customer;
-      } catch {
-        // A customer ID saved during sandbox testing will not exist in the
-        // production company. Fall back to matching the customer by name.
-        customer = null;
-      }
-    }
-    const customerQuery = encodeURIComponent(`select * from Customer where DisplayName = '${escapeQueryValue(customerName)}' maxresults 1`);
-    if (!customer) {
-      const customerResult = await quickBooksRequest(`/query?query=${customerQuery}`);
-      customer = customerResult.QueryResponse?.Customer?.[0];
-    }
-    if (!customer) {
-      const payload: Record<string, unknown> = { DisplayName: customerName };
-      if (job.email) payload.PrimaryEmailAddr = { Address: job.email };
-      if (job.phone) payload.PrimaryPhone = { FreeFormNumber: job.phone };
-      if (job.address) payload.BillAddr = { Line1: job.address };
-      const created = await quickBooksRequest("/customer", { method: "POST", body: JSON.stringify(payload) });
-      customer = created.Customer;
-    }
 
     const itemQuery = encodeURIComponent("select * from Item where Active = true maxresults 1000");
     const itemResult = await quickBooksRequest(`/query?query=${itemQuery}`);
@@ -54,7 +49,18 @@ export async function POST(request: Request) {
       if (quote.error) throw new Error("Could not verify this job’s quoted installation category.");
       category = quote.data?.service_category || null;
     }
-    const { tireItem, installationItem, installationName, stateTireFeeItem, disposalItem } = quickBooksBaseItems(items, category, Number(job.qty));
+    const { tireItem, installationItem: defaultInstallationItem, installationName, stateTireFeeItem, disposalItem } = quickBooksBaseItems(items, category, Number(job.qty));
+    const installationChoices = quickBooksInstallationChoices(items);
+    const selectedInstallationItem = installationItemId == null ? undefined : installationChoices.find(item => item.Id === installationItemId);
+    if (installationItemId != null && !selectedInstallationItem) throw new Error("Choose an active QuickBooks installation service from the list.");
+    const installationItem = selectedInstallationItem || defaultInstallationItem;
+    if (Number(job.installation_cost) > 0 && !installationItem && installationChoices.length) {
+      return NextResponse.json({
+        error: "Choose the QuickBooks service for this job’s installation charge. The job’s price will not change.",
+        code: "INSTALLATION_ITEM_REQUIRED",
+        installationItems: installationChoices.map(item => ({ id: item.Id, name: item.FullyQualifiedName || item.Name })),
+      }, { status: 422 });
+    }
     const missingItems = [
       Number(job.qty) * Number(job.price_tires) > 0 && !tireItem && "Tires",
       Number(job.installation_cost) > 0 && !installationItem && installationName,
@@ -104,6 +110,26 @@ export async function POST(request: Request) {
     lines.push(...extraLines);
     if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
 
+    // Finish validating charges and item mappings before any QuickBooks writes.
+    const customerName = String(job.billing_name || job.customer || "").trim();
+    if (!customerName) throw new Error("The job needs a customer or billing name.");
+    let customer = null;
+    if (job.quickbooks_customer_id) {
+      try { customer = (await quickBooksRequest(`/customer/${job.quickbooks_customer_id}`)).Customer; }
+      catch { customer = null; }
+    }
+    if (!customer) {
+      const query = encodeURIComponent(`select * from Customer where DisplayName = '${escapeQueryValue(customerName)}' maxresults 1`);
+      customer = (await quickBooksRequest(`/query?query=${query}`)).QueryResponse?.Customer?.[0];
+    }
+    if (!customer) {
+      const payload: Record<string, unknown> = { DisplayName: customerName };
+      if (job.email) payload.PrimaryEmailAddr = { Address: job.email };
+      if (job.phone) payload.PrimaryPhone = { FreeFormNumber: job.phone };
+      if (job.address) payload.BillAddr = { Line1: job.address };
+      customer = (await quickBooksRequest("/customer", { method: "POST", body: JSON.stringify(payload) })).Customer;
+    }
+
     const invoicePayload: Record<string, unknown> = {
       CustomerRef: { value: customer.Id, name: customer.DisplayName },
       Line: lines,
@@ -123,11 +149,11 @@ export async function POST(request: Request) {
       quickbooks_invoice_id: invoice.Id,
       quickbooks_customer_id: customer.Id,
       invoice_number: invoice.DocNumber || invoice.Id,
-      quickbooks_balance: Number(invoice.Balance) || total,
+      quickbooks_balance: invoice.Balance == null ? total : Number(invoice.Balance),
       quickbooks_synced_at: new Date().toISOString(),
       subtotal,
       sales_tax_amount: tax,
-      sales_tax_rate: subtotal ? (tax / subtotal) * 100 : 0,
+      sales_tax_rate: quickBooksInvoiceTaxRate(invoice, lines),
       job_total: total,
       payment_status: Number(invoice.Balance) === 0 ? "paid" : "unpaid",
       job_status: Number(invoice.Balance) === 0 ? "paid" : "billed",
@@ -224,7 +250,7 @@ export async function PUT(request: Request) {
       quickbooks_synced_at: new Date().toISOString(),
       subtotal,
       sales_tax_amount: tax,
-      sales_tax_rate: subtotal ? (tax / subtotal) * 100 : 0,
+      sales_tax_rate: quickBooksInvoiceTaxRate(invoice),
       job_total: total,
       payment_status: balance === 0 ? "paid" : balance < total ? "partial" : "unpaid",
       job_status: balance === 0 ? "paid" : "billed",

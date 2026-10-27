@@ -7,6 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import BillingReceiptDialog from "@/components/BillingReceiptDialog";
 import CompletionTextButton from "@/components/CompletionTextButton";
 import { matchesBillingSearch } from "@/lib/billing-search";
+import QuickBooksInvoicePreview, { QuickBooksInvoice } from "@/components/QuickBooksInvoicePreview";
 
 type BillingJob = {
   id: string | number;
@@ -88,6 +89,10 @@ export default function BillingPage() {
   const [quickBooksError, setQuickBooksError] = useState("");
   const [quickBooksCompany, setQuickBooksCompany] = useState("");
   const [quickBooksChecks, setQuickBooksChecks] = useState<{ name: string; ok: boolean; error?: string }[]>([]);
+  const [installationChoice, setInstallationChoice] = useState<{ jobId: string | number; items: { id: string; name: string }[] } | null>(null);
+  const [installationItemId, setInstallationItemId] = useState("");
+  const [invoicePreview, setInvoicePreview] = useState<QuickBooksInvoice | null>(null);
+  const [readingInvoiceId, setReadingInvoiceId] = useState<string | number | null>(null);
 
   const fetchJobs = async () => {
     setLoadingJobs(true); setJobsError("");
@@ -149,18 +154,35 @@ export default function BillingPage() {
     window.location.href = data.url;
   };
 
-  const createInvoice = async (id: string | number) => {
+  const viewInvoice = async (id: string | number) => {
+    setReadingInvoiceId(id);
+    try {
+      const response = await authenticatedFetch(`/api/quickbooks/invoices?jobId=${encodeURIComponent(id)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not read QuickBooks invoice.");
+      setInvoicePreview(data.invoice);
+    } catch (error) { alert(error instanceof Error ? error.message : "Could not read invoice."); }
+    finally { setReadingInvoiceId(null); }
+  };
+
+  const createInvoice = async (id: string | number, selectedInstallationItemId?: string) => {
     setInvoicingId(id);
+    try {
     const response = await authenticatedFetch("/api/quickbooks/invoices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jobId: id }),
+      body: JSON.stringify({ jobId: id, ...(selectedInstallationItemId ? { installationItemId: selectedInstallationItemId } : {}) }),
     });
     const data = await response.json();
-    setInvoicingId(null);
+    if (data.code === "INSTALLATION_ITEM_REQUIRED") {
+      setInstallationItemId(""); setInstallationChoice({ jobId: id, items: data.installationItems }); return;
+    }
     if (!response.ok) return alert(data.error || "Invoice creation failed.");
     await fetchJobs();
-    alert(`QuickBooks invoice ${data.invoice.DocNumber || data.invoice.Id} created.`);
+    setInstallationChoice(null);
+    await viewInvoice(id);
+    } catch { alert("Could not confirm invoice creation. Refresh Billing and check QuickBooks before retrying to avoid a duplicate."); }
+    finally { setInvoicingId(null); }
   };
 
   const syncQuickBooks = async () => {
@@ -405,6 +427,7 @@ export default function BillingPage() {
 
                         <td style={td}>
                           <div style={actionButtons}>
+                          {job.quickbooks_invoice_id && <button type="button" style={linkButton} disabled={readingInvoiceId === job.id} onClick={event => { event.stopPropagation(); viewInvoice(job.id); }}>{readingInvoiceId === job.id ? "Loading invoice…" : "View QuickBooks invoice"}</button>}
                           {isPaid && <button type="button" style={{ ...invoiceButton, minHeight: 44 }} onClick={event => { event.stopPropagation(); setReceiptMessage(""); setReceiptJobId(job.id); }}>Send receipt</button>}
                           {!job.invoice_number && quickBooksConnected ? (
                             <button
@@ -466,6 +489,14 @@ export default function BillingPage() {
       </div>
       {receiptJobId !== null && <BillingReceiptDialog key={String(receiptJobId)} jobId={receiptJobId} onClose={() => setReceiptJobId(null)}
         onSent={email => { setReceiptJobId(null); setReceiptMessage(`Receipt sent to ${email}.`); }} />}
+      {invoicePreview && <QuickBooksInvoicePreview invoice={invoicePreview} onClose={() => setInvoicePreview(null)} />}
+      {installationChoice && <div role="dialog" aria-modal="true" aria-label="Choose installation service" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#0f172a88", padding: 20, display: "grid", placeItems: "center" }}><section style={{ background: "white", borderRadius: 16, padding: 24, width: "100%", maxWidth: 640 }}>
+        <h2>Choose installation service</h2><p>This job has no matching default installation item. Choose the existing QuickBooks service. The job’s installation price stays unchanged.</p>
+        <label htmlFor="qb-installation">QuickBooks installation service</label>
+        <select id="qb-installation" value={installationItemId} disabled={invoicingId !== null} onChange={event => setInstallationItemId(event.target.value)} style={{ display: "block", width: "100%", padding: 12, margin: "12px 0" }}><option value="">Choose a service…</option>{installationChoice.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+        <button type="button" disabled={invoicingId !== null} onClick={() => setInstallationChoice(null)} style={disconnectButton}>Cancel</button>{" "}
+        <button type="button" disabled={!installationItemId || invoicingId !== null} onClick={() => createInvoice(installationChoice.jobId, installationItemId)} style={invoiceButton}>{invoicingId !== null ? "Creating…" : "Create invoice with this service"}</button>
+      </section></div>}
     </div>
   );
 }

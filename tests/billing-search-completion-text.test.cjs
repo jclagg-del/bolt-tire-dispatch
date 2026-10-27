@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module'), ts = require('typescript'), React = require('react');
 function load(file, stubs={}) {
   const filename=path.resolve(__dirname,'..',file), mod=new Module(filename,module); mod.paths=module.paths;
-  mod.require=id=>Object.hasOwn(stubs,id)?stubs[id]:id.startsWith('@/')?load(id.slice(2)+'.ts',stubs):require(id);
+  mod.require=id=>Object.hasOwn(stubs,id)?stubs[id]:id.startsWith('@/')?load(id.slice(2)+(fs.existsSync(path.resolve(__dirname,'..',id.slice(2)+'.ts'))?'.ts':'.tsx'),stubs):require(id);
   mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,filename);return mod.exports;
 }
 function nodes(tree) { if(!tree||typeof tree!=='object')return [];if(Array.isArray(tree))return tree.flatMap(nodes);return [tree,...nodes(tree.props?.children)]; }
