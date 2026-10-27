@@ -55,7 +55,7 @@ test('split quote editor and customer quote include both axle quantities and use
  for(const taxExempt of [false,true]){
   const form={...base,tax_exempt:taxExempt};
   let index=0;
-  const Editor=loader({'next/navigation':navigation,'@/components/AppHeader':()=>null,'@/components/QuoteCustomerInput':()=>null,'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;const state={0:form,1:[option],7:true};return [Object.hasOwn(state,n)?state[n]:initial,()=>{}];}}})('app/quotes/new/page.tsx').default;
+  const Editor=loader({'next/navigation':navigation,'@/components/AppHeader':()=>null,'@/components/QuoteCustomerInput':()=>null,'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;const state={0:form,1:[option],6:true};return [Object.hasOwn(state,n)?state[n]:initial,()=>{}];}}})('app/quotes/new/page.tsx').default;
   const editor=renderToStaticMarkup(React.createElement(Editor));
   assert.match(editor,/quote-option-grid split-fitment/);
   assert.ok(editor.includes('$940.00'));assert.ok(editor.includes('$990.00'));
@@ -76,7 +76,7 @@ test('split quote editor and customer quote include both axle quantities and use
 
 test('rear quantity, split toggle and pricing category changes recalculate fees using all tires',()=>{
  const settings=loader()('lib/business-settings.ts').fallbackBusinessSettings;
- const state={0:{customer:'Test',quantity:'2',rear_quantity:'2',rear_tire_size:'325/40R22',service_category:'passenger',sales_tax_rate:'8'},7:true};
+ const state={0:{customer:'Test',quantity:'2',rear_quantity:'2',rear_tire_size:'325/40R22',service_category:'passenger',sales_tax_rate:'8'},6:true};
  let index=0;
  const Page=loader({'next/navigation':{useRouter:()=>({}),useSearchParams:()=>new URLSearchParams()},'@/components/AppHeader':{default:()=>null},'@/components/QuoteCustomerInput':{default:()=>null},'@/lib/supabase':{supabase:{}},react:{...React,useState:initial=>{const n=index++;if(!Object.hasOwn(state,n))state[n]=initial;return [state[n],value=>{state[n]=typeof value==='function'?value(state[n]):value;}];},useRef:()=>({current:null}),useEffect:()=>{},useMemo:fn=>fn()}})('app/quotes/new/page.tsx').default;
  function tree(){index=0;return Page();}

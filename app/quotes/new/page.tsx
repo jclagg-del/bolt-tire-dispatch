@@ -9,6 +9,7 @@ import { BusinessSettings, fallbackBusinessSettings, installationDefault } from 
 import { emptyQuoteOptions, QuoteOption, quoteOptionTotal, quoteOptionsForEditor } from "@/lib/quotes";
 import QuoteCustomerInput from "@/components/QuoteCustomerInput";
 import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
+import QuoteTirePhoto from "@/components/QuoteTirePhoto";
 import { AdditionalItem, additionalItemsError } from "@/lib/additional-items";
 import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
@@ -43,8 +44,8 @@ export default function NewQuotePage() {
   const [options, setOptions] = useState<QuoteOption[]>(emptyQuoteOptions.map((option) => ({ ...option })));
   const [settings, setSettings] = useState<BusinessSettings>(fallbackBusinessSettings);
   const [saving, setSaving] = useState(false);
-  const [uploadingTier, setUploadingTier] = useState<string | null>(null);
-  const [draggingTier, setDraggingTier] = useState<string | null>(null);
+  const photoUploads = useRef(new Set<string>());
+  const [uploadingPhotos, setUploadingPhotos] = useState(0);
   const [loadingQuote, setLoadingQuote] = useState(Boolean(editId));
   const [splitFitment, setSplitFitment] = useState(false);
   const [quoteLoadError, setQuoteLoadError] = useState("");
@@ -179,19 +180,21 @@ export default function NewQuotePage() {
     setOptions((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
   };
 
-  const uploadPhoto = async (index: number, file?: File) => {
-    if (!file) return;
-    if (!file.type.match(/^image\/(jpeg|png|webp)$/)) return alert("Use a JPEG, PNG, or WebP image.");
-    if (file.size > 8 * 1024 * 1024) return alert("The image must be smaller than 8 MB.");
-    const option = options[index];
-    setUploadingTier(option.tier);
-    const extension = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() : ({ "image/png": "png", "image/webp": "webp", "image/jpeg": "jpg" }[file.type] || "jpg");
-    const path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${extension}`;
-    const { error } = await supabase.storage.from("quote-images").upload(path, file, { contentType: file.type, upsert: false });
-    if (error) { setUploadingTier(null); return alert(`Could not upload photo: ${error.message}`); }
-    const { data } = supabase.storage.from("quote-images").getPublicUrl(path);
-    updateOption(index, "image_url", data.publicUrl);
-    setUploadingTier(null);
+  const uploadPhoto = async (index: number, field: "image_url" | "rear_image_url", file: File) => {
+    const key = `${options[index].tier}:${field}`;
+    photoUploads.current.add(key);
+    setUploadingPhotos(photoUploads.current.size);
+    try {
+      const extension = ({ "image/png": "png", "image/webp": "webp", "image/jpeg": "jpg" }[file.type] || "jpg");
+      const path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${extension}`;
+      const { error } = await supabase.storage.from("quote-images").upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw new Error(error.message);
+      const { data } = supabase.storage.from("quote-images").getPublicUrl(path);
+      updateOption(index, field, data.publicUrl);
+    } finally {
+      photoUploads.current.delete(key);
+      setUploadingPhotos(photoUploads.current.size);
+    }
   };
 
   const visibleOptions = splitFitment ? options.slice(0, 1) : options;
@@ -203,6 +206,7 @@ export default function NewQuotePage() {
 
   const saveQuote = async () => {
     if (saveInFlight.current) return;
+    if (photoUploads.current.size) return alert("Please wait for the tire photos to finish uploading.");
     const itemsError = additionalItemsError(form.additional_items || []);
     if (itemsError) return alert(itemsError);
     if (!form.customer.trim()) return alert("Enter a customer name.");
@@ -282,6 +286,7 @@ export default function NewQuotePage() {
   };
 
   const backToShop = () => {
+    if (photoUploads.current.size) return;
     try {
       if (editId) {
         const products = quoteShopProducts(options, form, splitFitment);
@@ -305,9 +310,9 @@ export default function NewQuotePage() {
 
   return (
     <div className="quote-shell"><AppHeader /><main className="quote-page">
-      <div className="quote-page-header"><div><div className="quote-eyebrow">{editId ? "Edit quote" : "Quotes"}</div><h1>{editId ? "Edit Tire Quote" : "Build Tire Quote"}</h1><p>{editId ? "Update customer details, tire choices, and pricing." : "Create a visual tire comparison."}</p></div><div className="quote-actions">{editId ? <button onClick={() => router.push(`/quotes/${editId}`)} disabled={saving}>Cancel</button> : null}<button className="quote-primary" onClick={saveQuote} disabled={saving}>{saving ? "Saving..." : editId ? "Save Changes" : "Save Quote"}</button></div></div>
+      <div className="quote-page-header"><div><div className="quote-eyebrow">{editId ? "Edit quote" : "Quotes"}</div><h1>{editId ? "Edit Tire Quote" : "Build Tire Quote"}</h1><p>{editId ? "Update customer details, tire choices, and pricing." : "Create a visual tire comparison."}</p></div><div className="quote-actions">{editId ? <button onClick={() => router.push(`/quotes/${editId}`)} disabled={saving || uploadingPhotos > 0}>Cancel</button> : null}<button className="quote-primary" onClick={saveQuote} disabled={saving || uploadingPhotos > 0}>{uploadingPhotos > 0 ? "Uploading photos..." : saving ? "Saving..." : editId ? "Save Changes" : "Save Quote"}</button></div></div>
 
-      <div className="quote-actions" style={{ marginBottom: 16 }}><button type="button" onClick={backToShop} disabled={saving || Boolean(uploadingTier)}>{editId ? "Add tires / edit in Tire Shop" : "← Back to Tire Shop"}</button><span>{editId ? "Keep customer details and fees. Review tire changes here before saving this same quote. Saving returns it to Draft for fresh approval." : "Your draft stays in this browser tab while you shop."}</span></div>
+      <div className="quote-actions" style={{ marginBottom: 16 }}><button type="button" onClick={backToShop} disabled={saving || uploadingPhotos > 0}>{editId ? "Add tires / edit in Tire Shop" : "← Back to Tire Shop"}</button><span>{editId ? "Keep customer details and fees. Review tire changes here before saving this same quote. Saving returns it to Draft for fresh approval." : "Your draft stays in this browser tab while you shop."}</span></div>
       <section className="quote-form-card"><h2>Customer and vehicle</h2><div className="quote-form-grid">
         <QuoteCustomerInput value={form.customer}
           onChange={(value) => setForm((current) => changeQuoteCustomerName(current, value, selectedCustomer.current))}
@@ -331,17 +336,20 @@ export default function NewQuotePage() {
           <div className={splitFitment ? "quote-split-cards" : "quote-single-card"}>
           <div className={splitFitment ? "quote-axle-card front" : "quote-axle-card"}>
           {splitFitment ? <div className="quote-axle-label">Front / Steer tires · Qty {form.quantity}</div> : null}
-          <label className={`quote-photo-drop ${draggingTier === option.tier ? "dragging" : ""}`} tabIndex={0} onPaste={(event) => { const image = Array.from(event.clipboardData.items).find((item) => item.type.startsWith("image/"))?.getAsFile(); if (image) { event.preventDefault(); uploadPhoto(index, image); } }} onDragOver={(event) => { event.preventDefault(); setDraggingTier(option.tier); }} onDragLeave={() => setDraggingTier(null)} onDrop={(event) => { event.preventDefault(); setDraggingTier(null); uploadPhoto(index, event.dataTransfer.files[0]); }}>
-            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadPhoto(index, event.target.files?.[0]); event.target.value = ""; }} />
-            {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">{uploadingTier === option.tier ? "Uploading photo..." : "Paste, drag, or tap to add a tire photo"}</div>}
-            {option.image_url ? <span className="quote-photo-change">Paste, drop, or tap to replace photo</span> : <span className="quote-photo-paste-hint">Click this box, then press ⌘V</span>}
-          </label>
+          <QuoteTirePhoto label={splitFitment ? "Front tire photo" : "Tire photo"} src={option.image_url} alt={`${option.brand} ${option.model}`} disabled={saving} onUpload={(file) => uploadPhoto(index, "image_url", file)} />
           <QuoteField label="Brand" value={option.brand} onChange={(value) => updateOption(index, "brand", value)} />
           <QuoteField label="Model" value={option.model} onChange={(value) => updateOption(index, "model", value)} />
-          <details className="quote-image-url"><summary>Or use an image URL</summary><QuoteField label="Image URL" value={option.image_url} onChange={(value) => updateOption(index, "image_url", value)} placeholder="Manufacturer or distributor image" /></details>
+          <QuoteField label={splitFitment ? "Front tire size" : "Tire size"} value={form.tire_size} onChange={(value) => setForm((current) => ({ ...current, tire_size: value }))} placeholder="275/65R18" />
           <QuoteField label="Price per tire" value={option.price_per_tire} type="number" onChange={(value) => updateOption(index, "price_per_tire", value)} />
           </div>
-          {splitFitment ? <div className="quote-rear-fields"><div className="quote-axle-label">Rear / Drive tires · Qty {form.rear_quantity}</div>{option.rear_image_url ? <img className="quote-tire-image" src={option.rear_image_url} alt={`${option.rear_brand} ${option.rear_model}`} /> : <div className="quote-image-placeholder">Rear tire image</div>}<QuoteField label="Rear brand" value={option.rear_brand || ""} onChange={(value) => updateOption(index, "rear_brand", value)} /><QuoteField label="Rear model" value={option.rear_model || ""} onChange={(value) => updateOption(index, "rear_model", value)} /><QuoteField label="Rear price per tire" value={option.rear_price_per_tire || ""} type="number" onChange={(value) => updateOption(index, "rear_price_per_tire", value)} /><QuoteField label="Rear image URL" value={option.rear_image_url || ""} onChange={(value) => updateOption(index, "rear_image_url", value)} /></div> : null}
+          {splitFitment ? <div className="quote-rear-fields">
+            <div className="quote-axle-label">Rear / Drive tires · Qty {form.rear_quantity}</div>
+            <QuoteTirePhoto label="Rear tire photo" src={option.rear_image_url || ""} alt={`${option.rear_brand || ""} ${option.rear_model || ""}`} disabled={saving} onUpload={(file) => uploadPhoto(index, "rear_image_url", file)} />
+            <QuoteField label="Rear brand" value={option.rear_brand || ""} onChange={(value) => updateOption(index, "rear_brand", value)} />
+            <QuoteField label="Rear model" value={option.rear_model || ""} onChange={(value) => updateOption(index, "rear_model", value)} />
+            <QuoteField label="Rear tire size" value={form.rear_tire_size} onChange={(value) => setForm((current) => ({ ...current, rear_tire_size: value }))} placeholder="325/40R22" />
+            <QuoteField label="Rear price per tire" value={option.rear_price_per_tire || ""} type="number" onChange={(value) => updateOption(index, "rear_price_per_tire", value)} />
+          </div> : null}
           </div>
           <details className="quote-advanced">
             <summary>Optional tire details</summary>
