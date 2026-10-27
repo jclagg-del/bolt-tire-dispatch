@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
-import { escapeQueryValue, quickBooksRequest } from "@/lib/quickbooks";
+import { escapeQueryValue, getConnection, quickBooksRequest } from "@/lib/quickbooks";
 import { additionalInvoiceLines } from "@/lib/additional-items";
 import { quickBooksItems } from "@/lib/quickbooks-items";
 import { quickBooksBaseItems, quickBooksInstallationChoices } from "@/lib/quickbooks-base-items";
 import { quickBooksInvoiceTaxRate } from "@/lib/quickbooks-invoice-tax";
+import { quickBooksServiceAddress } from "@/lib/quickbooks-address";
 
 // Read the saved invoice directly from QuickBooks; never sync or mutate it here.
 export async function GET(request: Request) {
@@ -81,8 +82,8 @@ export async function POST(request: Request) {
         Amount: Number(amount.toFixed(2)),
         Description: description,
         DetailType: "SalesItemLineDetail",
-        ...(serviceDate ? { ServiceDate: serviceDate } : {}),
         SalesItemLineDetail: {
+          ...(serviceDate ? { ServiceDate: serviceDate } : {}),
           ItemRef: { value: item.Id, name: item.Name },
           TaxCodeRef: { value: taxable ? taxCode : "NON" },
           ...(quantity && unitPrice ? { Qty: quantity, UnitPrice: unitPrice } : {}),
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
       job.vehicle,
       job.vehicle_mileage ? `${job.vehicle_mileage} miles` : null,
     ].filter(Boolean).join(" • ");
-    addLine(installationItem, installationDescription, Number(job.installation_cost) || 0);
+    addLine(installationItem, installationDescription, Number(job.installation_cost) || 0, true, 1, Number(job.installation_cost) || 0);
     const stateTireFee = job.ny_state_tire_fee !== null && job.ny_state_tire_fee !== undefined
       ? Number(job.ny_state_tire_fee) || 0
       : qty * 2.5;
@@ -109,6 +110,13 @@ export async function POST(request: Request) {
     addLine(disposalItem, "Waste tire fee", disposalFee, true, qty, disposalUnitPrice);
     lines.push(...extraLines);
     if (!lines.length) throw new Error("Add tire, installation, or disposal charges before creating an invoice.");
+
+    const shipTo = job.tax_exempt ? (job.address ? { Line1: job.address } : undefined) : quickBooksServiceAddress(String(job.address || ""));
+    const connection = await getConnection();
+    const company = (await quickBooksRequest(`/companyinfo/${encodeURIComponent(connection.realm_id)}`)).CompanyInfo;
+    const origin = company?.CompanyAddr;
+    if (!job.tax_exempt && (!origin?.Line1 || !origin?.City || !origin?.CountrySubDivisionCode || !origin?.PostalCode)) throw new Error("Complete the business address in QuickBooks before calculating invoice sales tax.");
+    const shipFrom = origin ? { Line1: origin.Line1, ...(origin.Line2 ? { Line2: origin.Line2 } : {}), City: origin.City, CountrySubDivisionCode: origin.CountrySubDivisionCode, PostalCode: origin.PostalCode, Country: origin.Country || "USA" } : undefined;
 
     // Finish validating charges and item mappings before any QuickBooks writes.
     const customerName = String(job.billing_name || job.customer || "").trim();
@@ -131,13 +139,15 @@ export async function POST(request: Request) {
     }
 
     const invoicePayload: Record<string, unknown> = {
+      DocNumber: "AUTO_GENERATE",
       CustomerRef: { value: customer.Id, name: customer.DisplayName },
       Line: lines,
       ...(serviceDate ? { TxnDate: serviceDate } : {}),
       PrivateNote: `Bolt Tire job ${job.id}${job.po_number ? ` • PO ${job.po_number}` : ""}`,
       CustomerMemo: { value: [job.vehicle, job.notes].filter(Boolean).join(" • ").slice(0, 1000) },
       ...(job.email ? { BillEmail: { Address: job.email } } : {}),
-      ...(job.address ? { ShipAddr: { Line1: job.address } } : {}),
+      ...(shipTo ? { ShipAddr: shipTo } : {}),
+      ...(shipFrom ? { ShipFromAddr: shipFrom } : {}),
     };
 
     const created = await quickBooksRequest("/invoice", { method: "POST", body: JSON.stringify(invoicePayload) });

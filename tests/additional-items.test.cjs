@@ -101,13 +101,14 @@ test('paid quote and website receipts show collected tax and actual payment inst
 });
 test('invoice route fails before any external writes for an unmapped extra and sends mapped lines once', async () => {
   for (const [mapped, modernCatalog] of [[false,false],[true,false],[true,true]]) {
-    const job={id:1,complete:true,customer:'Example',qty:4,price_tires:100,installation_cost:100,tire_disposal_fee:0,ny_state_tire_fee:10,additional_items:items};
+    const job={id:1,complete:true,customer:'Example',address:'123 Test St, Pine Bush, NY 12566',qty:4,price_tires:100,installation_cost:100,tire_disposal_fee:0,ny_state_tire_fee:10,additional_items:items};
     const calls=[],updates=[];
     const admin={from:()=>({select(){return this},eq(){return this},single:async()=>({data:job}),maybeSingle:async()=>({data:{service_category:'passenger'}}),update(v){updates.push(v);return this},then(resolve){resolve({})}})};
     const catalog=items.map(i=>({id:i.quickbooks_item_id,company_id:'company',name:i.quickbooks_item_name}));
-    const route=loader({'@/lib/supabase/admin':{requireApiUser:async()=>({id:'staff'}),createAdminClient:()=>admin},'@/lib/quickbooks-items':{quickBooksItems:async()=>mapped?catalog:[]},'@/lib/quickbooks':{escapeQueryValue:x=>x,quickBooksRequest:async(url,init)=>{
+    const route=loader({'@/lib/supabase/admin':{requireApiUser:async()=>({id:'staff'}),createAdminClient:()=>admin},'@/lib/quickbooks-items':{quickBooksItems:async()=>mapped?catalog:[]},'@/lib/quickbooks':{escapeQueryValue:x=>x,getConnection:async()=>({realm_id:'company'}),quickBooksRequest:async(url,init)=>{
       calls.push({url,init});
       if(init?.method==='POST'){assert.equal(url,'/invoice');return {Invoice:{Id:'inv',TotalAmt:639,Balance:639}};}
+      if(url==='/companyinfo/company')return {CompanyInfo:{CompanyAddr:{Line1:'123 Business St',City:'Pine Bush',CountrySubDivisionCode:'NY',PostalCode:'12566'}}};
       if(decodeURIComponent(url).includes('from Customer'))return {QueryResponse:{Customer:[{Id:'customer',DisplayName:'Example'}]}};
       return {QueryResponse:{Item:(modernCatalog?['Tires','On-Site Mount & Balance - Passenger Vehicle (3 - 4 Tires)','NYS Tire Disposal Fee','Waste Tire Fee']:['Tires','On-site Mount and Balance','NY State Tire Tax','Waste Tire Fee']).map((Name,i)=>({Id:String(i),Name,Type:'Service'}))}};
     }}})('app/api/quickbooks/invoices/route');

@@ -12,7 +12,7 @@ export default function QuickBooksInvoicePreview({ invoice, onClose }: { invoice
   const lines = invoice.Line?.filter(line => line.DetailType === "SalesItemLineDetail") || [];
   return <div role="dialog" aria-modal="true" aria-label="QuickBooks invoice preview" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#0f172a88", padding: 20, display: "grid", placeItems: "center" }}>
     <section style={{ background: "white", padding: 24, borderRadius: 16, maxWidth: 780, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
-      <h2>QuickBooks invoice #{invoice.DocNumber || invoice.Id}</h2>
+      <h2>{invoice.DocNumber ? `QuickBooks invoice #${invoice.DocNumber}` : `QuickBooks invoice — number not assigned (record ${invoice.Id})`}</h2>
       <p>Read directly from QuickBooks. Viewing does not send the invoice or change payments.</p>
       <p>{invoice.CustomerRef?.name}<br />Invoice date: {invoice.TxnDate}<br />Email status: {invoice.EmailStatus || "Not provided"}</p>
       {invoice.ShipAddr && <p>Service address: {[invoice.ShipAddr.Line1, invoice.ShipAddr.City, invoice.ShipAddr.CountrySubDivisionCode, invoice.ShipAddr.PostalCode].filter(Boolean).join(" · ")}</p>}
