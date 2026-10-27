@@ -118,6 +118,16 @@ export async function POST(request: Request) {
     if (!job.tax_exempt && (!origin?.Line1 || !origin?.City || !origin?.CountrySubDivisionCode || !origin?.PostalCode)) throw new Error("Complete the business address in QuickBooks before calculating invoice sales tax.");
     const shipFrom = origin ? { Line1: origin.Line1, ...(origin.Line2 ? { Line2: origin.Line2 } : {}), City: origin.City, CountrySubDivisionCode: origin.CountrySubDivisionCode, PostalCode: origin.PostalCode, Country: origin.Country || "USA" } : undefined;
 
+    // Let QuickBooks own its existing sequence. Never send a magic DocNumber or
+    // guess the next number from a query: both can create duplicate numbering.
+    const preferences = (await quickBooksRequest("/preferences")).Preferences;
+    if (preferences?.SalesFormsPrefs?.CustomTxnNumbers !== false) {
+      return NextResponse.json({
+        error: "QuickBooks automatic invoice numbering is not enabled or could not be verified. In QuickBooks, open Settings → Account and settings → Sales → Sales form content and turn off Custom transaction numbers, then retry. No invoice was created.",
+        code: "AUTOMATIC_NUMBERING_REQUIRED",
+      }, { status: 422 });
+    }
+
     // Finish validating charges and item mappings before any QuickBooks writes.
     const customerName = String(job.billing_name || job.customer || "").trim();
     if (!customerName) throw new Error("The job needs a customer or billing name.");
@@ -139,7 +149,6 @@ export async function POST(request: Request) {
     }
 
     const invoicePayload: Record<string, unknown> = {
-      DocNumber: "AUTO_GENERATE",
       CustomerRef: { value: customer.Id, name: customer.DisplayName },
       Line: lines,
       ...(serviceDate ? { TxnDate: serviceDate } : {}),
@@ -158,7 +167,7 @@ export async function POST(request: Request) {
     const { error: updateError } = await admin.from("jobs").update({
       quickbooks_invoice_id: invoice.Id,
       quickbooks_customer_id: customer.Id,
-      invoice_number: invoice.DocNumber || invoice.Id,
+      invoice_number: invoice.DocNumber || null,
       quickbooks_balance: invoice.Balance == null ? total : Number(invoice.Balance),
       quickbooks_synced_at: new Date().toISOString(),
       subtotal,

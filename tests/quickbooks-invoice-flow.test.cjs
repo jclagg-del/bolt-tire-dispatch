@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module'), ts = require('typescript');
 const React = require('react'), { renderToStaticMarkup } = require('react-dom/server');
 
-function fixture({ authenticated = true, linked = false, complete = true, balance = 1213.43, missingTires = false, role = 'office', passwordChange = false } = {}) {
+function fixture({ authenticated = true, linked = false, complete = true, balance = 1213.43, missingTires = false, role = 'office', passwordChange = false, customNumbers = false } = {}) {
   const calls = [], updates = [];
   const job = { id: 418, complete, customer: 'TEST ONLY', address:'123 Test Street, Pine Bush, NY 12566', scheduled:'2026-10-27T10:00:00', qty: 4, price_tires: 200, installation_cost: 299,
     tire_disposal_fee: 14, ny_state_tire_fee: 10, additional_items: [], quickbooks_invoice_id: linked ? 'invoice-test' : null };
@@ -26,6 +26,7 @@ function fixture({ authenticated = true, linked = false, complete = true, balanc
         calls.push({url,init});
         if(url==='/invoice' && init?.method==='POST') { invoice.Line=JSON.parse(init.body).Line;return {Invoice:invoice}; }
         if(url==='/invoice/invoice-test') return {Invoice:invoice};
+        if(url==='/preferences') return {Preferences:{SalesFormsPrefs:{CustomTxnNumbers:customNumbers}}};
         if(url==='/companyinfo/company') return {CompanyInfo:{CompanyAddr:{Line1:'123 Business St',City:'Pine Bush',CountrySubDivisionCode:'NY',PostalCode:'12566'}}};
         if(decodeURIComponent(url).includes('from Item')) return {QueryResponse:{Item:catalog}};
         if(decodeURIComponent(url).includes('from Customer')) return {QueryResponse:{Customer:[{Id:'test-customer',DisplayName:'TEST ONLY'}]}};
@@ -46,7 +47,7 @@ test('manual job asks for an installation service before any customer or invoice
 test('chosen existing installation service creates the four correct charges at job prices',async()=>{
   const f=fixture();const res=await f.post({installationItemId:'passenger4'});assert.equal(res.status,200);
   const payload=JSON.parse(f.calls.find(c=>c.url==='/invoice').init.body);
-  assert.equal(payload.DocNumber,'AUTO_GENERATE');
+  assert.ok(!Object.hasOwn(payload,'DocNumber'));
   assert.equal(payload.ShipAddr.City,'Pine Bush');assert.equal(payload.ShipAddr.CountrySubDivisionCode,'NY');assert.equal(payload.ShipAddr.PostalCode,'12566');
   assert.equal(payload.ShipFromAddr.Line1,'123 Business St');
   assert.equal(payload.Line[0].SalesItemLineDetail.ServiceDate,'2026-10-27');assert.ok(!Object.hasOwn(payload.Line[0],'ServiceDate'));
@@ -97,4 +98,16 @@ test('taxable invoicing requires a complete structured service address, not a gu
   const {quickBooksServiceAddress:address}=fixture().load('lib/quickbooks-address');
   assert.deepEqual(address('123 Test Rd, Unit 2, Pine Bush, NY 12566'),{Line1:'123 Test Rd',Line2:'Unit 2',City:'Pine Bush',CountrySubDivisionCode:'NY',PostalCode:'12566',Country:'USA'});
   assert.throws(()=>address('Pine Bush, NY 12566'),/full service address/);
+});
+test('custom or unknown numbering settings stop creation before any QuickBooks writes',async()=>{
+  for(const customNumbers of [true,null]) {
+    const f=fixture({customNumbers});const response=await f.post({installationItemId:'passenger4'});
+    assert.equal(response.status,422);assert.equal((await response.json()).code,'AUTOMATIC_NUMBERING_REQUIRED');
+    assert.ok(f.calls.every(c=>!c.init));assert.equal(f.updates.length,0);
+  }
+});
+test('missing invoice number is not replaced with QuickBooks internal record ID',async()=>{
+  const f=fixture();delete f.invoice.DocNumber;
+  assert.equal((await f.post({installationItemId:'passenger4'})).status,200);
+  assert.equal(f.updates[0].invoice_number,null);
 });

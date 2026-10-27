@@ -109,6 +109,7 @@ test('invoice route fails before any external writes for an unmapped extra and s
       calls.push({url,init});
       if(init?.method==='POST'){assert.equal(url,'/invoice');return {Invoice:{Id:'inv',TotalAmt:639,Balance:639}};}
       if(url==='/companyinfo/company')return {CompanyInfo:{CompanyAddr:{Line1:'123 Business St',City:'Pine Bush',CountrySubDivisionCode:'NY',PostalCode:'12566'}}};
+      if(url==='/preferences')return {Preferences:{SalesFormsPrefs:{CustomTxnNumbers:false}}};
       if(decodeURIComponent(url).includes('from Customer'))return {QueryResponse:{Customer:[{Id:'customer',DisplayName:'Example'}]}};
       return {QueryResponse:{Item:(modernCatalog?['Tires','On-Site Mount & Balance - Passenger Vehicle (3 - 4 Tires)','NYS Tire Disposal Fee','Waste Tire Fee']:['Tires','On-site Mount and Balance','NY State Tire Tax','Waste Tire Fee']).map((Name,i)=>({Id:String(i),Name,Type:'Service'}))}};
     }}})('app/api/quickbooks/invoices/route');
