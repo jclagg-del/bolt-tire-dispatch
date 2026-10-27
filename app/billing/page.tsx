@@ -84,6 +84,10 @@ export default function BillingPage() {
   const [jobsError, setJobsError] = useState("");
   const [receiptJobId, setReceiptJobId] = useState<string | number | null>(null);
   const [receiptMessage, setReceiptMessage] = useState("");
+  const [checkingQuickBooks, setCheckingQuickBooks] = useState(false);
+  const [quickBooksError, setQuickBooksError] = useState("");
+  const [quickBooksCompany, setQuickBooksCompany] = useState("");
+  const [quickBooksChecks, setQuickBooksChecks] = useState<{ name: string; ok: boolean; error?: string }[]>([]);
 
   const fetchJobs = async () => {
     setLoadingJobs(true); setJobsError("");
@@ -117,11 +121,20 @@ export default function BillingPage() {
     });
   };
 
-  const checkQuickBooks = async () => {
-    const response = await authenticatedFetch("/api/quickbooks/status");
-    const data = await response.json();
-    setQuickBooksConnected(Boolean(data.connected));
-    setQuickBooksEnvironment(data.environment || "");
+  const checkQuickBooks = async (fullTest = false) => {
+    setCheckingQuickBooks(true); setQuickBooksError(""); setQuickBooksChecks([]);
+    try {
+      const response = await authenticatedFetch(`/api/quickbooks/status${fullTest ? "?test=1" : ""}`);
+      const data = await response.json();
+      setQuickBooksConnected(Boolean(response.ok && data.connected));
+      setQuickBooksEnvironment(data.environment || "");
+      setQuickBooksCompany(data.companyName || "");
+      if (!response.ok || !data.connected) throw new Error(data.error || "QuickBooks connection could not be verified.");
+      if (fullTest) setQuickBooksChecks(data.checks || []);
+    } catch (error) {
+      setQuickBooksConnected(false);
+      setQuickBooksError(error instanceof Error ? error.message : "QuickBooks connection could not be verified.");
+    } finally { setCheckingQuickBooks(false); }
   };
 
   const connectQuickBooks = async () => {
@@ -263,29 +276,39 @@ export default function BillingPage() {
         {receiptMessage && <p role="status" style={{ padding: 14, background: "#ecfdf5", border: "1px solid #86efac", borderRadius: 10 }}>{receiptMessage}</p>}
         <div style={quickBooksConnected ? connectedCard : connectCard}>
           <div>
-            <strong>{quickBooksConnected ? "QuickBooks connected" : "Connect QuickBooks Online"}</strong>
+            <strong>{checkingQuickBooks ? "Checking QuickBooks…" : quickBooksConnected ? "QuickBooks connected" : "QuickBooks connection not verified"}</strong>
             <div style={connectionHelp}>
               {quickBooksConnected
-                ? `Connected to ${quickBooksEnvironment === "production" ? "REAL QuickBooks (Production)" : "QuickBooks Sandbox"}.`
+                ? `Connected to ${quickBooksEnvironment === "production" ? "REAL QuickBooks (Production)" : "QuickBooks Sandbox"}${quickBooksCompany ? ` — ${quickBooksCompany}` : ""}.`
                 : "Connect your QuickBooks Online company to create invoices and sync payments."}
             </div>
           </div>
+          <button type="button" onClick={() => checkQuickBooks(true)} disabled={checkingQuickBooks || syncing || connecting || disconnecting} style={quickBooksButton}>
+            {checkingQuickBooks ? "Testing…" : "Test connection"}
+          </button>
           {!quickBooksConnected && (
-            <button type="button" onClick={connectQuickBooks} disabled={connecting} style={quickBooksButton}>
+            <button type="button" onClick={connectQuickBooks} disabled={connecting || checkingQuickBooks} style={quickBooksButton}>
               {connecting ? "Connecting..." : "Connect to QuickBooks"}
             </button>
           )}
           {quickBooksConnected && (
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={syncQuickBooks} disabled={syncing} style={quickBooksButton}>
+              <button type="button" onClick={syncQuickBooks} disabled={syncing || checkingQuickBooks || disconnecting} style={quickBooksButton}>
                 {syncing ? "Syncing..." : "Sync payments"}
               </button>
-              <button type="button" onClick={disconnectQuickBooks} disabled={disconnecting} style={disconnectButton}>
+              <button type="button" onClick={disconnectQuickBooks} disabled={disconnecting || checkingQuickBooks || syncing} style={disconnectButton}>
                 {disconnecting ? "Disconnecting..." : "Disconnect"}
               </button>
             </div>
           )}
         </div>
+
+        {quickBooksError && <p role="alert" style={{ padding: 14, background: "#fef2f2", color: "#991b1b", borderRadius: 10 }}>{quickBooksError} No invoices or payments were changed by this check.</p>}
+        {quickBooksChecks.length > 0 && <div role="status" style={{ padding: 16, marginBottom: 16, background: "white", border: "1px solid #cbd5e1", borderRadius: 12 }}>
+          <strong>{quickBooksChecks.every(check => check.ok) ? "QuickBooks connection tests passed" : "QuickBooks needs attention"}</strong>
+          <ul>{quickBooksChecks.map(check => <li key={check.name}>{check.ok ? "✓" : "✕"} {check.name}{check.error ? `: ${check.error}` : ""}</li>)}</ul>
+          <p style={{ marginBottom: 0 }}>Read-only test. No invoices were created and no payment balances were changed. Creating invoices and syncing payments are separate actions.</p>
+        </div>}
 
         <div style={summaryRow}>
           <div style={summaryCard}>
