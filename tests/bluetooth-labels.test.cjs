@@ -52,10 +52,10 @@ test('Smooth Print receives the PDF locally, exact media dimensions and one copy
  assert.throws(()=>smoothPrintUrl(bytes,'https://example.com/customer.pdf'));
  assert.equal(new URL(smoothPrintUrl(bytes,'bolt-labels-test.pdf',2)).searchParams.get('gapLength'),'2');
 });
-test('both staff screens offer Wi-Fi and Bluetooth using the same prepared PDF',()=>{
+test('both staff screens offer direct Wi-Fi printing and the Bluetooth PDF handoff',()=>{
  for(const file of ['app/jobs/[id]/page.tsx','app/tire-receiving/page.tsx']){
   const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
-  assert.ok(source.includes('<BluetoothLabelButton connection="wifi"'));assert.ok(!source.includes('window.print()'));
+  assert.ok(source.includes('<WifiLabelButton'));assert.ok(source.includes('<BluetoothLabelButton'));
   for (const field of ['contactName:', 'phone:', 'email:', 'address:']) assert.ok(source.includes(field));
  }
  const source=fs.readFileSync(path.join(__dirname,'../components/BluetoothLabelButton.tsx'),'utf8');

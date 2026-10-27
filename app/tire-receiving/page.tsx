@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { type TireLabelJob } from "@/components/TireLabelPrint";
 import BluetoothLabelButton from "@/components/BluetoothLabelButton";
+import WifiLabelButton from "@/components/WifiLabelButton";
 import { supabase } from "@/lib/supabase";
 
 type ReceivingJob = {
@@ -162,7 +163,7 @@ export default function TireReceivingPage() {
                     </div>
                   </button>
                   <div style={cardActions}>
-                    <BluetoothLabelButton connection="wifi" disabled={updating} style={printButton} job={labelFor(job)} />
+                    <WifiLabelButton disabled={updating} style={printButton} job={labelFor(job)} />
                     <BluetoothLabelButton disabled={updating} style={printButton} job={labelFor(job)} />
                     <button
                       type="button"

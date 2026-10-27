@@ -77,7 +77,8 @@ test('print CSS removes surrounding layout and only breaks before subsequent lab
   assert.doesNotMatch(css, /break-after:page|page-break-after:always/);
   for (const file of ['../app/tire-receiving/page.tsx', '../app/jobs/[id]/page.tsx']) {
     const source = fs.readFileSync(require.resolve(file), 'utf8');
-    assert.match(source, /<BluetoothLabelButton connection="wifi"/);
+    assert.match(source, /<WifiLabelButton/);
+    assert.doesNotMatch(source, /<BluetoothLabelButton connection="wifi"/);
     assert.doesNotMatch(source, /window\.print\(\)/);
   }
 });
