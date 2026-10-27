@@ -12,6 +12,7 @@ import { settledQuote } from "@/lib/quote-payment-pricing";
 import SalePaymentStatus from "@/components/SalePaymentStatus";
 import { isTireShopSale, tireShopSalePath, saleServiceLabel } from "@/lib/tire-shop-sales";
 import { canEditQuoteTires } from "@/lib/quote-shop-edit";
+import QuoteTirePanels, { hasSplitFitment } from "@/components/QuoteTirePanels";
 
 type SavedQuote = {
   additional_items?: AdditionalItem[];
@@ -200,19 +201,16 @@ export default function QuoteDetailPage() {
 
     <section className="quote-customer-summary"><div><strong>{quote.contact_name || "Customer contact"}</strong><span>{quote.phone || "No phone"}</span><span>{quote.email || "No email"}</span></div><div><strong>Service</strong><span>{salesView ? saleServiceLabel(quote.checkout_service) : quote.service_category}</span><span>{quote.address || "No service address"}</span></div><div><strong>{salesView ? "Sale reference" : "Quote expires"}</strong><span>{salesView ? `BT-${quote.quote_number}` : quote.expires_at ? new Date(`${quote.expires_at}T12:00:00`).toLocaleDateString() : "No expiration"}</span></div></section>
 
-    <section className="quote-comparison-grid">
+    <section className={`quote-comparison-grid ${quote.quote_options.some(option => hasSplitFitment(quote, option)) ? "split-fitment" : ""}`}>
       {quote.quote_options.map((option, index) => {
         const selected = quote.selected_option_id === option.id;
         return <article className={`quote-compare-card ${option.recommended ? "recommended" : ""} ${selected ? "selected" : ""}`} key={option.id}>
           {option.recommended ? <div className="quote-tier-row"><span className="quote-recommended">Bolt recommends</span></div> : null}
-          {option.image_url ? <img className="quote-tire-image" src={option.image_url} alt={`${option.brand} ${option.model}`} /> : <div className="quote-image-placeholder">No tire image</div>}
-          <h2>{option.brand}</h2><h3>{option.model}</h3>
-          <div className="quote-price-each">${Number(option.price_per_tire).toFixed(2)} <span>per tire</span></div>
-          {option.rear_model ? <div className="quote-split-tire"><strong>Rear: {option.rear_brand || option.brand} {option.rear_model}</strong><span>{quote.rear_tire_size} · ${Number(option.rear_price_per_tire || 0).toFixed(2)} each · qty {quote.rear_quantity}</span></div> : null}
+          <QuoteTirePanels q={quote} option={option} />
           <dl className="quote-specs"><div><dt>Warranty</dt><dd>{option.warranty_miles ? `${Number(option.warranty_miles).toLocaleString()} miles` : "—"}</dd></div><div><dt>Type</dt><dd>{option.tire_type || "—"}</dd></div><div><dt>Load / speed</dt><dd>{option.load_speed_rating || "—"}</dd></div><div><dt>Snow rating</dt><dd>{option.snow_rating || "—"}</dd></div><div><dt>Availability</dt><dd>{option.availability || "Confirm availability"}</dd></div></dl>
           {option.highlights ? <p className="quote-highlights">{option.highlights}</p> : null}
           <div className="quote-installed-total"><span>{salesView ? quote.payment_status === "paid" ? "Amount paid" : "Estimated order total · before payment verification" : "Installed total"}</span><strong>${(salesView && quote.payment_status === "paid" && quote.amount_paid != null ? Number(quote.amount_paid) : totals[index]).toFixed(2)}</strong></div>
-          {salesView ? <p>{selected ? "Selected tire" : "Tire option"}</p> : <button className={selected ? "quote-selected-button" : "quote-select-button"} onClick={() => selectOption(option.id)} disabled={saving || quote.status === "converted"}>{selected ? "✓ Approved choice" : "Choose this tire"}</button>}
+          {salesView ? <p>{selected ? "Selected tire" : "Tire option"}</p> : <button className={selected ? "quote-selected-button" : "quote-select-button"} onClick={() => selectOption(option.id)} disabled={saving || quote.status === "converted"}>{selected ? "✓ Approved choice" : hasSplitFitment(quote, option) ? "Choose this tire set" : "Choose this tire"}</button>}
         </article>;
       })}
     </section>

@@ -10,6 +10,7 @@ import { AdditionalItem, additionalItemAmount, additionalItemsTotals } from "@/l
 import { quoteCheckoutDetails, quoteCheckoutDetailsError } from "@/lib/quote-checkout-details";
 import PurchaseTracking from "@/components/PurchaseTracking";
 import { rememberTrackingCheckout } from "@/lib/purchase-tracking";
+import TirePanels, { hasSplitFitment } from "@/components/QuoteTirePanels";
 type Option = {
   id: string;
   tier: string;
@@ -64,59 +65,10 @@ type Quote = {
   requested_time: string | null;
   quote_options: Option[];
 };
-const hasSplitFitment = (q: Quote, o: Option) =>
-  Boolean(q.rear_tire_size || q.rear_quantity || o.rear_model);
-
 function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
-  const split = hasSplitFitment(q, option);
   const creditPricing = q.payment_pricing_version === 1 && q.payment_status !== "paid";
   const displayOption = creditPricing ? quotePaymentPrice(q, option, "regular").option : option;
-  return (
-    <div className={`quote-public-tires ${split ? "split" : ""}`}>
-      <div className="quote-public-tire">
-        {split ? <div className="quote-public-position">Front / Steer</div> : null}
-        {option.image_url ? (
-          <img
-            className="quote-tire-image"
-            src={option.image_url}
-            alt={`${option.brand} ${option.model}`}
-          />
-        ) : (
-          <div className="quote-image-placeholder">Tire image</div>
-        )}
-        <h2>{option.brand}</h2>
-        <h3>{option.model}</h3>
-        <p className="quote-public-fitment">
-          {q.tire_size || "Size TBD"} · Qty {q.quantity}
-        </p>
-        <div className="quote-price-each">
-          ${Number(displayOption.price_per_tire).toFixed(2)} <span>{creditPricing ? "per tire · Credit" : "per tire"}</span>
-        </div>
-      </div>
-      {split ? (
-        <div className="quote-public-tire rear">
-          <div className="quote-public-position">Rear / Drive</div>
-          {option.rear_image_url ? (
-            <img
-              className="quote-tire-image"
-              src={option.rear_image_url}
-              alt={`${option.rear_brand || option.brand} ${option.rear_model || "Rear tire"}`}
-            />
-          ) : (
-            <div className="quote-image-placeholder">Rear tire image</div>
-          )}
-          <h2>{option.rear_brand || option.brand || "Rear tire"}</h2>
-          <h3>{option.rear_model || "Model not specified"}</h3>
-          <p className="quote-public-fitment">
-            {q.rear_tire_size || "Size TBD"} · Qty {q.rear_quantity || 0}
-          </p>
-          <div className="quote-price-each">
-            ${Number(displayOption.rear_price_per_tire || 0).toFixed(2)} <span>{creditPricing ? "per tire · Credit" : "per tire"}</span>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+  return <TirePanels q={q} option={{ ...option, price_per_tire: displayOption.price_per_tire, rear_price_per_tire: displayOption.rear_price_per_tire }} creditPricing={creditPricing} />;
 }
 const tireSummary = (q: Quote) =>
   [
