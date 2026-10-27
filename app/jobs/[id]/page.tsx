@@ -14,8 +14,7 @@ import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
 import { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import { type TireLabelJob } from "@/components/TireLabelPrint";
-import BluetoothLabelButton from "@/components/BluetoothLabelButton";
-import WifiLabelButton from "@/components/WifiLabelButton";
+import PrintLabelsButton from "@/components/PrintLabelsButton";
 
 type JobForm = {
   additional_items?: AdditionalItem[];
@@ -697,10 +696,7 @@ export default function EditJobPage() {
                   : "📦 Archive Job"}
               </button>
 
-              {labelJob && <>
-                <WifiLabelButton style={labelButton} job={labelJob} />
-                <BluetoothLabelButton style={labelButton} job={labelJob} />
-              </>}
+              {labelJob && <PrintLabelsButton style={labelButton} job={labelJob} />}
             </div>
           </div>
         </div>

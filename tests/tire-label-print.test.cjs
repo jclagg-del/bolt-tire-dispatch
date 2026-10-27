@@ -54,7 +54,7 @@ test('labels show only the destination facility, never the billing customer fall
   const edit = fs.readFileSync(require.resolve('../app/jobs/[id]/page.tsx'), 'utf8');
   assert.match(edit, /setFacilityName\(data\.facility_name \|\| null\)/);
   assert.match(edit, /customer: form\.customer,\s+facilityName,/);
-  assert.match(edit, /<BluetoothLabelButton[^\n]*job=\{labelJob\}/);
+  assert.match(edit, /<PrintLabelsButton[^\n]*job=\{labelJob\}/);
 });
 test('label separates facility from the individual, address and contact details', () => {
   const html = render(1, {customer:'HPR', facilityName:'HPR VM Tuxedo', contactName:'Sample Person', address:'1422 Long Meadow Rd, Tuxedo Park, NY 10987', phone:'555-0100',email:'sample@example.com'});
@@ -77,8 +77,8 @@ test('print CSS removes surrounding layout and only breaks before subsequent lab
   assert.doesNotMatch(css, /break-after:page|page-break-after:always/);
   for (const file of ['../app/tire-receiving/page.tsx', '../app/jobs/[id]/page.tsx']) {
     const source = fs.readFileSync(require.resolve(file), 'utf8');
-    assert.match(source, /<WifiLabelButton/);
-    assert.doesNotMatch(source, /<BluetoothLabelButton connection="wifi"/);
+    assert.match(source, /<PrintLabelsButton/);
+    assert.doesNotMatch(source, /<WifiLabelButton|<BluetoothLabelButton/);
     assert.doesNotMatch(source, /window\.print\(\)/);
   }
 });

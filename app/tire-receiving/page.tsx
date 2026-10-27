@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import { type TireLabelJob } from "@/components/TireLabelPrint";
-import BluetoothLabelButton from "@/components/BluetoothLabelButton";
-import WifiLabelButton from "@/components/WifiLabelButton";
+import PrintLabelsButton from "@/components/PrintLabelsButton";
 import { supabase } from "@/lib/supabase";
 
 type ReceivingJob = {
@@ -163,8 +162,7 @@ export default function TireReceivingPage() {
                     </div>
                   </button>
                   <div style={cardActions}>
-                    <WifiLabelButton disabled={updating} style={printButton} job={labelFor(job)} />
-                    <BluetoothLabelButton disabled={updating} style={printButton} job={labelFor(job)} />
+                    <PrintLabelsButton disabled={updating} style={printButton} job={labelFor(job)} />
                     <button
                       type="button"
                       style={{ ...receivedButton, ...(updating ? disabledButton : {}) }}
