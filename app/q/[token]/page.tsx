@@ -11,7 +11,9 @@ import { quoteCheckoutDetails, quoteCheckoutDetailsError } from "@/lib/quote-che
 import PurchaseTracking from "@/components/PurchaseTracking";
 import { rememberTrackingCheckout } from "@/lib/purchase-tracking";
 import TirePanels, { hasSplitFitment } from "@/components/QuoteTirePanels";
+import { quoteSizeSummary } from "@/lib/quote-tire-size";
 type Option = {
+  tire_size?: string | null;
   id: string;
   tier: string;
   brand: string;
@@ -72,7 +74,7 @@ function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
 }
 const tireSummary = (q: Quote) =>
   [
-    `${q.quantity} front/primary · ${q.tire_size || "size TBD"}`,
+    `${q.quantity} front/primary · ${quoteSizeSummary(q) || "size TBD"}`,
     q.rear_tire_size ? `${q.rear_quantity} rear · ${q.rear_tire_size}` : null,
   ]
     .filter(Boolean)

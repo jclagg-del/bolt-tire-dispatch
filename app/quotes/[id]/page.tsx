@@ -13,6 +13,7 @@ import SalePaymentStatus from "@/components/SalePaymentStatus";
 import { isTireShopSale, tireShopSalePath, saleServiceLabel } from "@/lib/tire-shop-sales";
 import { canEditQuoteTires } from "@/lib/quote-shop-edit";
 import QuoteTirePanels, { hasSplitFitment } from "@/components/QuoteTirePanels";
+import { quoteOptionSize, quoteSizeSummary } from "@/lib/quote-tire-size";
 
 type SavedQuote = {
   additional_items?: AdditionalItem[];
@@ -105,7 +106,7 @@ export default function QuoteDetailPage() {
       `Supplier product #: ${selected.supplier_product_id}`,
       selected.manufacturer_product_id ? `Manufacturer part #: ${selected.manufacturer_product_id}` : null,
       `Tire: ${selected.brand} ${selected.model}`,
-      `Size: ${quote.tire_size || "Confirm size"}`,
+      `Size: ${quoteOptionSize(quote, selected) || "Confirm size"}`,
       `Quantity: ${quote.quantity}`,
     ].filter(Boolean).join("\n");
     try { await navigator.clipboard.writeText(details); setMessage("Supplier ordering details copied."); }
@@ -153,7 +154,7 @@ export default function QuoteDetailPage() {
     const { data: job, error } = await supabase.from("jobs").insert({
       additional_items: quote.additional_items || [],
       customer: quote.customer, contact_name: quote.contact_name, phone: quote.phone, email: quote.email,
-      vehicle: quote.vehicle, tires: [ `${selected.brand} ${selected.model}`, selected.rear_model ? `Rear: ${selected.rear_brand || selected.brand} ${selected.rear_model}` : null ].filter(Boolean).join(" / "), size: [quote.tire_size, quote.rear_tire_size ? `Rear: ${quote.rear_tire_size}` : null].filter(Boolean).join(" / "),
+      vehicle: quote.vehicle, tires: [ `${selected.brand} ${selected.model}`, selected.rear_model ? `Rear: ${selected.rear_brand || selected.brand} ${selected.rear_model}` : null ].filter(Boolean).join(" / "), size: [quoteOptionSize(quote, selected), quote.rear_tire_size ? `Rear: ${quote.rear_tire_size}` : null].filter(Boolean).join(" / "),
       qty: quote.quantity + Number(quote.rear_quantity || 0), price_tires: tireSubtotal / (quote.quantity + Number(quote.rear_quantity || 0)), installation_cost: Number(quote.installation_cost) + Number(quote.service_call_fee),
       tire_supplier: selected.supplier || null, tire_product_number: selected.supplier_product_id || selected.manufacturer_product_id || null,
       tire_manufacturer_part_number: quoteManufacturerParts(selected, Number(quote.rear_quantity || 0)),
@@ -177,7 +178,7 @@ export default function QuoteDetailPage() {
   if (!quote) return <div className="quote-shell"><AppHeader /><main className="quote-page"><div className="quote-error">{message || (salesView ? "Sale not found." : "Quote not found.")}</div></main></div>;
 
   return <div className="quote-shell"><AppHeader /><main className="quote-page">
-    <div className="quote-page-header"><div><div className="quote-eyebrow">{salesView ? `Tire Shop Sale · BT-${quote.quote_number}` : `Quote #${quote.quote_number}`}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, `${quote.quantity} front/primary · ${quote.tire_size || "size TBD"}`, quote.rear_tire_size ? `${quote.rear_quantity} rear · ${quote.rear_tire_size}` : null].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
+    <div className="quote-page-header"><div><div className="quote-eyebrow">{salesView ? `Tire Shop Sale · BT-${quote.quote_number}` : `Quote #${quote.quote_number}`}</div><h1>{quote.customer}</h1><p>{[quote.vehicle, `${quote.quantity} front/primary · ${quoteSizeSummary(quote) || "size TBD"}`, quote.rear_tire_size ? `${quote.rear_quantity} rear · ${quote.rear_tire_size}` : null].filter(Boolean).join(" • ")}</p></div><div className="quote-actions">
       {salesView ? <>
         <button onClick={() => router.push("/tire-shop-sales")}>All Tire Shop Sales</button>
         <button onClick={loadQuote}>Refresh payment</button>

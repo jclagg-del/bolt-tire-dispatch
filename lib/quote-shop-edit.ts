@@ -1,5 +1,6 @@
 import { emptyQuoteOptions, quoteOptionsForEditor, type QuoteOption } from "@/lib/quotes";
 import { tireSizeIdentity } from "@/lib/tire-supplier-offers";
+import { quoteOptionSize } from "@/lib/quote-tire-size";
 
 export const quoteShopKey = (id: string) => `bolt-edit-quote-shop-v1:${id}`;
 export function quoteHasSplitFitment(quote: { rear_tire_size?: string | null }, options: Array<Partial<QuoteOption>>) {
@@ -35,7 +36,7 @@ export function quoteShopProducts(options: QuoteOption[], form: { tire_size: str
     const make = (rear: boolean): QuoteShopProduct => ({
       id: `quote-${o.id || o.tier}-${rear ? "rear" : "front"}`, quoteOptionKey: o.id || o.tier, quoteSnapshot: true,
       brand: rear ? o.rear_brand || "" : o.brand, model: rear ? o.rear_model || "" : o.model,
-      size: rear ? form.rear_tire_size : form.tire_size,
+      size: rear ? form.rear_tire_size : quoteOptionSize(form, o),
       imageUrl: (rear ? o.rear_image_url : o.image_url) || null,
       quotePrice: Number(rear ? o.rear_price_per_tire : o.price_per_tire) || 0,
       warranty: rear ? "" : String(o.warranty_miles || ""), category: rear ? "" : o.tire_type,
@@ -52,9 +53,9 @@ export function quoteShopProducts(options: QuoteOption[], form: { tire_size: str
 }
 
 function applyProduct(base: QuoteOption, product: QuoteShopProduct): QuoteOption {
-  if (product.quoteSnapshot) return { ...base, price_per_tire: String(product.quotePrice) };
+  if (product.quoteSnapshot) return { ...base, tire_size: product.size || base.tire_size, price_per_tire: String(product.quotePrice) };
   const stock = product.availability.local || product.availability.localPlus;
-  return { ...base, brand: product.brand, model: product.model, image_url: product.imageUrl || "", price_per_tire: String(product.quotePrice),
+  return { ...base, tire_size: product.size, brand: product.brand, model: product.model, image_url: product.imageUrl || "", price_per_tire: String(product.quotePrice),
     warranty_miles: String(product.warranty || "").replace(/[^\d]/g, ""), tire_type: product.category || "",
     load_speed_rating: product.loadSpeed || "", snow_rating: product.snowRated ? "3PMSF" : "",
     availability: stock ? `In stock (${stock})` : "Special order", supplier: product.supplier,
@@ -95,7 +96,6 @@ export function applyQuoteShopSelection<F extends { tire_size: string; rear_tire
       rear_supplier_product_id: rear.atdProductNumber, rear_manufacturer_product_id: rear.manufacturerProductNumber, rear_wholesale_cost: rear.cost };
     return { form: { ...draft.form, tire_size: front.size || draft.form.tire_size, rear_tire_size: rear.size || draft.form.rear_tire_size }, options: quoteOptionsForEditor([option]) };
   }
-  if (new Set(selected.map(p => tireSizeIdentity(p.size).dimensions)).size > 1) throw new Error("Choose the same tire size for each comparison option. Use split fitment in the quote editor for front/rear sizes.");
   // Retained options keep their database slot and custom notes. New choices use free slots.
   const originals = new Map(draft.options.map(o => [o.id || o.tier, o]));
   const retained = new Set(selected.map(p => originals.get(p.quoteOptionKey || "")?.tier).filter(Boolean));

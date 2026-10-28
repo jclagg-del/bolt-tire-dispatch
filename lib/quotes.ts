@@ -8,6 +8,7 @@ export type QuoteOption = {
   tier: QuoteTier;
   brand: string;
   model: string;
+  tire_size?: string | null;
   image_url: string;
   price_per_tire: string;
   rear_brand?: string;

@@ -1,4 +1,6 @@
+import { quoteOptionSize } from "@/lib/quote-tire-size";
 type TireOption = {
+  tire_size?: string | null;
   brand?: string | null; model?: string | null; image_url?: string | null;
   price_per_tire: number | string;
   rear_brand?: string | null; rear_model?: string | null; rear_image_url?: string | null;
@@ -29,7 +31,7 @@ export default function QuoteTirePanels({ q, option, creditPricing = false }: {
         <h2>{option.brand}</h2>
         <h3>{option.model}</h3>
         <p className="quote-public-fitment">
-          {q.tire_size || "Size TBD"} · Qty {q.quantity}
+          {quoteOptionSize(q, option) || "Size TBD"} · Qty {q.quantity}
         </p>
         <div className="quote-price-each">
           ${Number(option.price_per_tire).toFixed(2)} <span>{creditPricing ? "per tire · Credit" : "per tire"}</span>

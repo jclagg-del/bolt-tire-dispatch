@@ -64,9 +64,10 @@ test('split fitment replaces only intended axle and preserves independently ente
   assert.equal(o.rear_price_per_tire, '350'); assert.equal(o.rear_model, 'New model'); assert.equal(o.rear_supplier_product_id, '001234');
   assert.throws(() => applyQuoteShopSelection(value, [value.products[0]]), /front tire and one rear/);
 });
-test('invalid prices, too many choices, empty selections and mixed comparison sizes are rejected', () => {
+test('invalid prices, too many choices and empty selections are rejected; mixed sizes are allowed', () => {
   const value = draft();
-  for (const selection of [[], [catalog({quotePrice:NaN})], [catalog({quotePrice:-1})], Array(4).fill(catalog()), [catalog(), catalog({size:'235/60R18'})]]) assert.throws(() => applyQuoteShopSelection(value, selection));
+  for (const selection of [[], [catalog({quotePrice:NaN})], [catalog({quotePrice:-1})], Array(4).fill(catalog())]) assert.throws(() => applyQuoteShopSelection(value, selection));
+  assert.doesNotThrow(() => applyQuoteShopSelection(value, [catalog(), catalog({size:'235/60R18'})]));
   assert.doesNotThrow(() => applyQuoteShopSelection(value, [catalog(), catalog({size:'LT275/65R20'})]));
 });
 test('missing catalog specs do not hide selection, but differing part IDs or sizes are never conflated', () => {
@@ -101,7 +102,20 @@ test('Goodyear, Michelin and Falken 225/70R19.5 options from screenshot can be s
   assert.equal(filled(result).length,3); assert.equal(result.form.quantity,'2');
   assert.deepEqual(filled(result).map(o=>o.price_per_tire),['385','491','281']);
   assert.equal(filled(result)[2].supplier_product_id,'267051700');
-  assert.throws(()=>applyQuoteShopSelection(value,[...selected.slice(0,2),{...selected[2],size:'225/70R22.5/14'}]),/same tire size/);
+  assert.equal(filled(applyQuoteShopSelection(value,[...selected.slice(0,2),{...selected[2],size:'225/70R22.5/14'}]))[2].tire_size,'225/70R22.5/14');
+});
+
+test('different BFGoodrich sizes retain independent size, part and price through repeated shopping edits', () => {
+ const value=draft([],false,{tire_size:'30100015'});
+ const selected=[catalog({brand:'BFGoodrich',model:'Mud Terrain TA KM3 UTV',size:'30100015',atdProductNumber:'50627',quotePrice:264}),catalog({id:'ko3',brand:'BFGoodrich',model:'All-Terrain TA KO3',size:'31105015',atdProductNumber:'49534',quotePrice:255})];
+ const result=applyQuoteShopSelection(value,selected);
+ assert.deepEqual(filled(result).map(o=>[o.tire_size,o.supplier_product_id,o.price_per_tire]),[['30100015','50627','264'],['31105015','49534','255']]);
+ const reopened={...value,...result,products:quoteShopProducts(result.options,result.form,false)};
+ assert.deepEqual(reopened.products.map(p=>p.size),['30100015','31105015']);
+ const again=applyQuoteShopSelection(reopened,[reopened.products[1],reopened.products[0]]);
+ assert.deepEqual(filled(again).map(o=>o.tire_size),['31105015','30100015']);
+ assert.equal(again.form.installation_cost,value.form.installation_cost);
+ assert.equal(again.form.quantity,'4');
 });
 
 test('a leftover rear quantity alone cannot enable split fitment; actual rear details still do',()=>{

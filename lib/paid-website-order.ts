@@ -1,5 +1,6 @@
 import { AdditionalItem, additionalItemsTotals } from "@/lib/additional-items";
 import { quoteManufacturerParts } from "@/lib/job-part-numbers";
+import { quoteOptionSize } from "@/lib/quote-tire-size";
 /** Snapshots come from the server's saved quote, never the checkout request. */
 export type WebsiteQuote = {
   additional_items?: AdditionalItem[];
@@ -13,13 +14,14 @@ export type WebsiteQuote = {
   checkout_service?: string | null;
 };
 export type WebsiteOption = {
+  tire_size?: string | null;
   id: string; brand: string; model: string; price_per_tire: number; supplier?: string | null;
   supplier_product_id?: string | null; manufacturer_product_id?: string | null;
   rear_brand?: string | null; rear_model?: string | null; rear_price_per_tire?: number | null;
   rear_supplier?: string | null; rear_supplier_product_id?: string | null; rear_manufacturer_product_id?: string | null;
 };
 export function websiteTireItems(q: WebsiteQuote, o: WebsiteOption) {
-  const items = [{ quantity: Number(q.quantity), size: q.tire_size || "", brand: o.brand, model: o.model,
+  const items = [{ quantity: Number(q.quantity), size: quoteOptionSize(q, o), brand: o.brand, model: o.model,
     part: o.supplier_product_id || o.manufacturer_product_id || "", supplier: o.supplier || "", price: Number(o.price_per_tire) }];
   if (Number(q.rear_quantity) > 0) items.push({ quantity: Number(q.rear_quantity), size: q.rear_tire_size || "",
     brand: o.rear_brand || o.brand, model: o.rear_model || o.model,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { quoteSizeSummary } from "@/lib/quote-tire-size";
 import { createAdminClient, requireApiUser } from "@/lib/supabase/admin";
 
 function escapeHtml(value: string) {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: quote, error } = await admin
     .from("quotes")
-    .select("id,quote_number,customer,contact_name,email,vehicle,tire_size,quantity,public_token,status")
+    .select("id,quote_number,customer,contact_name,email,vehicle,tire_size,quantity,public_token,status,selected_option_id,quote_options!quote_options_quote_id_fkey(id,tire_size)")
     .eq("id", quoteId)
     .single();
   if (error || !quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
   const quoteUrl = `${appUrl.replace(/\/$/, "")}/q/${quote.public_token}`;
   const recipientName = quote.contact_name || quote.customer || "there";
-  const details = [quote.vehicle, quote.tire_size, `${quote.quantity} tire${quote.quantity === 1 ? "" : "s"}`].filter(Boolean).join(" • ");
+  const details = [quote.vehicle, quoteSizeSummary(quote), `${quote.quantity} tire${quote.quantity === 1 ? "" : "s"}`].filter(Boolean).join(" • ");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },

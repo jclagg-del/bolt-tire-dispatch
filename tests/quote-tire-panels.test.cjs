@@ -57,3 +57,25 @@ test('public panels preserve regular credit and paid pricing for each axle', () 
   assert.ok(paid.includes('$291.00')); assert.ok(paid.includes('$885.00'));
   assert.ok(!paid.includes('per tire · Credit'));
 });
+test('staff and customer cards display each comparison size, not the first choice size', () => {
+  const options=[{...option,tire_size:'30100015',rear_model:null,rear_image_url:null},{...option,id:'other',tire_size:'31105015',rear_model:null,rear_image_url:null}];
+  const q={...quote,tire_size:'30100015',rear_tire_size:null,rear_quantity:0,quote_options:options};
+  for(const publicView of [false,true]) {
+    const html=page(q,publicView);
+    assert.ok(html.includes('30100015 · Qty 2'));
+    assert.ok(html.includes('31105015 · Qty 2'));
+    assert.ok(!html.includes('Rear / Drive'));
+  }
+});
+test('selected size reaches paid order, job and confirmation details; legacy sizes still fall back', () => {
+  const {websiteTireItems,websitePaymentFields,paidWebsiteOrder}=loader()('lib/paid-website-order');
+  const {quoteSizeSummary}=loader()('lib/quote-tire-size');
+  const chosen={...option,id:'chosen',tire_size:'31105015'};
+  const q={...quote,rear_quantity:0,rear_tire_size:null,tire_size:'30100015',selected_option_id:'chosen',quote_options:[{...option,tire_size:'30100015'},chosen],amount_paid:1200};
+  assert.equal(quoteSizeSummary(q),'31105015');
+  assert.equal(quoteSizeSummary({...q,selected_option_id:null}),'30100015 / 31105015');
+  assert.equal(websiteTireItems(q,chosen)[0].size,'31105015');
+  assert.equal(websitePaymentFields(q,chosen).size,'31105015');
+  assert.equal(paidWebsiteOrder(q,chosen).tire_size,'31105015');
+  assert.equal(websiteTireItems(q,option)[0].size,'30100015');
+});

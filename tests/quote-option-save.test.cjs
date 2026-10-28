@@ -131,6 +131,18 @@ test('Tire Shop return saves to same quote, removes old choice, and preserves cu
   assert.equal(result.rows.get('better').supplier_product_id,'001234'); assert.equal(result.rows.get('better').price_per_tire,250);
   const q=result.quotes.get('q'); assert.equal(q.address,'Saved address'); assert.equal(q.disposal_fee,14); assert.equal(q.installation_cost,329); assert.equal(q.tax_exempt,true); assert.equal(q.additional_items[0].description,'Sensor');
 });
+test('mixed-size shopping choices save each size to its own database row', async () => {
+  const draft=shoppingDraft();
+  draft.result[0]={...draft.result[0],size:'30100015'};
+  draft.result[1]={...draft.result[1],size:'31105015'};
+  const result=await editor({shopDraft:draft});
+  assert.deepEqual(result.alerts,[]);
+  assert.equal(result.rows.get('good').tire_size,'30100015');
+  assert.equal(result.rows.get('better').tire_size,'31105015');
+  assert.equal(result.rows.get('better').supplier_product_id,'001234');
+  assert.equal(result.rows.get('better').price_per_tire,250);
+  assert.equal(result.quotes.get('q').quantity,4);
+});
 test('changed, paid, payment-pending or converted quotes cannot be overwritten after opening the editor', async () => {
   for(const patch of [{updated_at:'changed'}, {payment_status:'paid'}, {payment_status:'pending'}, {converted_job_id:'job'}]) {
     const result=await editor({beforeSave:quotes=>Object.assign(quotes.get('q'),patch)});
