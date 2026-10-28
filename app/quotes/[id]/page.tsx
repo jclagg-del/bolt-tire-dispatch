@@ -14,6 +14,7 @@ import { isTireShopSale, tireShopSalePath, saleServiceLabel } from "@/lib/tire-s
 import { canEditQuoteTires } from "@/lib/quote-shop-edit";
 import QuoteTirePanels, { hasSplitFitment } from "@/components/QuoteTirePanels";
 import { quoteOptionSize, quoteSizeSummary } from "@/lib/quote-tire-size";
+import TextQuoteButton from "@/components/TextQuoteButton";
 
 type SavedQuote = {
   additional_items?: AdditionalItem[];
@@ -189,6 +190,7 @@ export default function QuoteDetailPage() {
       <button onClick={() => router.push(`/quotes/new?edit=${quote.id}`)} disabled={saving || !canEditQuoteTires(quote)}>Edit Quote</button>
       <button onClick={() => router.push(`/quotes/new?edit=${quote.id}&shop=1`)} disabled={saving || !canEditQuoteTires(quote)}>Add tires</button>
       <button className="quote-primary" onClick={emailCustomerQuote} disabled={saving || !quote.email}>{saving ? "Sending..." : "Email Quote"}</button>
+      <TextQuoteButton quote={quote} disabled={saving} onMessage={setMessage} />
       <button onClick={copyCustomerLink} disabled={saving}>Copy Customer Link</button>
       <button className="quote-primary" onClick={convertToJob} disabled={saving || Boolean(quote.converted_job_id)}>{quote.converted_job_id ? "Converted to Job" : quote.purchase_source === "website" && quote.discount_organization ? "Manage in Orders" : "Convert to Job"}</button>
       </>}
