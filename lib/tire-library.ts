@@ -1,4 +1,5 @@
 import "server-only";
+import { catalogCategory, catalogFlag, normalizeTireBadges } from "./tire-badges";
 import { firstHealthyTireImage, rankTireImages, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
 
 const baseUrls = Array.from(new Set([
@@ -336,7 +337,7 @@ async function recoverTireImages<T extends EnrichableTire>(products: T[], candid
 
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
   if (!products.length) return products;
-  if (!apiKey()) return recoverTireImages(products, new Map(), false);
+  if (!apiKey()) return recoverTireImages(products.map(normalizeTireBadges), new Map(), false);
   try {
     const supplierImageByPattern = new Map<string, string>();
     for (const product of products) {
@@ -425,14 +426,14 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         model: detail?.model || match.model_name || product.model,
         description: detail?.description || product.description,
         imageUrl: safeUrl(product.imageUrl) || supplierPatternImage || libraryImages[0] || null,
-        category: detail?.terrain || detail?.season || detail?.category || match.terrain || match.season || match.category || product.category,
+        category: catalogCategory(skuDetail) || catalogCategory(skuMatch) || product.category,
         loadSpeed: skuDetail?.loadSpeed || [skuMatch?.load_rating, skuMatch?.speed_rating].filter(Boolean).join(" ") || product.loadSpeed,
         warranty: skuDetail?.warranty || skuMatch?.warranty || product.warranty,
-        snowRated: skuDetail?.snowRated ?? skuMatch?.three_pmsf ?? product.snowRated,
+        snowRated: catalogFlag(skuDetail?.snowRated) ?? catalogFlag(skuMatch?.three_pmsf) ?? catalogFlag(product.snowRated),
         loadRange: skuDetail?.loadRange || skuMatch?.load_range || product.loadRange,
         treadDepth: skuDetail?.treadDepth || skuMatch?.tread_depth || product.treadDepth,
         utqg: skuDetail?.utqg || skuMatch?.utqg || product.utqg,
-        runFlat: skuDetail?.runFlat ?? skuMatch?.run_flat ?? product.runFlat,
+        runFlat: catalogFlag(skuDetail?.runFlat) ?? catalogFlag(skuMatch?.run_flat) ?? catalogFlag(product.runFlat),
         sidewall: skuDetail?.sidewall || product.sidewall,
         maxLoad: skuDetail?.maxLoad || product.maxLoad,
         maxLoadDual: skuDetail?.maxLoadDual || product.maxLoadDual,
@@ -448,10 +449,10 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         tireLibraryMatched: true,
       };
     });
-    return recoverTireImages(enriched, photoCandidates, true, photoIdentities, photoDetails, preferredImages);
+    return recoverTireImages(enriched.map(normalizeTireBadges), photoCandidates, true, photoIdentities, photoDetails, preferredImages);
   } catch (error) {
     console.warn("Tire Library enrichment skipped:", error instanceof Error ? error.message : error);
-    return recoverTireImages(products, new Map(), false);
+    return recoverTireImages(products.map(normalizeTireBadges), new Map(), false);
   }
 }
 
@@ -557,8 +558,8 @@ export async function tireLibraryTireDetails(id: number) {
     loadRange: tire.load_range || "",
     treadDepth: tire.tread_depth || "",
     utqg: tire.utqg || "",
-    snowRated: tire.three_pmsf,
-    runFlat: tire.run_flat,
+    snowRated: catalogFlag(tire.three_pmsf),
+    runFlat: catalogFlag(tire.run_flat),
     preferredImageUrl,
     imageUrl: preferredImageUrl || await firstHealthyTireImage(rankTireImages([
       tire.tire_model?.image_url, tire.image_0100, tire.image_0200,
