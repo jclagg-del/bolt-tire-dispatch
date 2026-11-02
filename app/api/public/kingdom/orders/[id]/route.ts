@@ -3,6 +3,7 @@ import { hasKingdomAccess } from "@/lib/kingdom-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
 import { fleetOrderRequirementsError, fleetRequestedTime } from "@/lib/fleet-order-requirements";
+import { changedCustomerOrderJobFields } from "@/lib/customer-order-job-fields";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -102,6 +103,7 @@ export async function PATCH(request: Request, { params }: Context) {
     const vehicle = [updates.vehicle_year, updates.vehicle_make, updates.vehicle_model, updates.vehicle_color && `Color: ${updates.vehicle_color}`, updates.license_plate && `Plate: ${updates.license_plate}`].filter(Boolean).join(" • ");
     const notes = [updates.goodyear_order ? "Goodyear Order: Yes" : null, updates.tire_position && `Tire Position: ${updates.tire_position}`, `Submitted By: ${updates.submitted_by}`, updates.notes].filter(Boolean).join("\n") || null;
     const { error: jobError } = await admin.from("jobs").update({
+      ...changedCustomerOrderJobFields(order, updates),
       customer: updates.customer, vehicle, po_number: updates.job_number, mo_number: updates.mo_number,
       facility_id: updates.facility_id, facility_name: updates.facility_name, address: updates.address,
       contact_name: updates.contact_name, phone: updates.contact_number,

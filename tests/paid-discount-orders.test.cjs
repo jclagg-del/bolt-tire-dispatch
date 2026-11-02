@@ -162,8 +162,21 @@ test('approval creates one paid job with original financials; identical unrelate
  assert.equal((await route.POST(req({serviceMethod:null}))).status,400);
  const response=await route.POST(req({scheduledDate:'2026-10-03',scheduledTime:'14:45'}));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const job=db.tables.jobs.find(j=>j.source_quote_id==='quote');assert.ok(job);assert.equal(job.payment_status,'paid');assert.equal(job.job_total,510);assert.equal(job.tax_exempt,true);assert.equal(job.price_tires,90);assert.equal(job.tires_ordered,false);assert.equal(job.tire_supplier,null);assert.equal(job.service_type,'Delivery');
+ assert.equal(job.submitted_by,quote.contact_name);assert.equal(job.vehicle_model,quote.vehicle);assert.equal(job.vehicle,quote.vehicle);
+ assert.equal(job.license_plate,null);assert.equal(job.tire_position,null);assert.equal(job.email,quote.email);
  assert.equal(job.scheduled,'2026-10-03T14:45:00');assert.equal(db.tables.customer_orders[0].requested_date,null);
  assert.equal((await route.POST(req())).status,200);assert.equal(db.tables.jobs.length,2);assert.equal(db.tables.quotes[0].converted_job_id,job.id);assert.equal(db.tables.jobs[0].source_quote_id,undefined);
+});
+test('paid-source recovery links the existing job without replacing manual structured fields or financials',async()=>{
+ const {paidWebsiteOrder}=loader()('lib/paid-website-order');
+ const order={id:9,...paidWebsiteOrder(quote,option)};
+ const prior={id:42,source_quote_id:quote.id,submitted_by:'Staff correction',tire_position:'Right front',license_plate:'STAFF PLATE',vehicle_model:'Manual model',facility_id:7,facility_name:'Staff facility',scheduled:'2026-10-10T10:00:00',job_total:510,payment_status:'paid'};
+ const db=database({quotes:[{...quote,payment_status:'paid'}],customer_orders:[order],jobs:[prior]});
+ const route=loader({'@/lib/supabase/admin':{createAdminClient:()=>db,requireApiUser:async()=>({id:'staff'})}})('app/api/orders/approve/route');
+ const res=await route.POST(new Request('https://example.test',{method:'POST',body:JSON.stringify({orderId:9,serviceMethod:'delivery'})}));
+ assert.equal(res.status,200);assert.equal((await res.json()).existing,true);assert.equal(db.tables.jobs.length,1);
+ for(const [key,value] of Object.entries(prior))assert.equal(db.tables.jobs[0][key],value,key);
+ assert.equal(db.tables.customer_orders[0].approved_job_id,42);assert.equal(db.tables.quotes[0].converted_job_id,42);
 });
 test('approval matches older HPR orders with no facility and preserves explicit staff destinations',async()=>{
  const {paidWebsiteOrder}=loader()('lib/paid-website-order');
