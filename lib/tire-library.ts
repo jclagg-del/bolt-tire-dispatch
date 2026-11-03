@@ -1,6 +1,7 @@
 import "server-only";
 import { catalogCategory, catalogFlag, normalizeTireBadges } from "./tire-badges";
 import { normalizeTireProductName } from "./tire-product-name";
+import { tireLibrarySizeQuery } from "./tire-library-size";
 import { firstHealthyTireImage, rankTireImages, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
 
 const baseUrls = Array.from(new Set([
@@ -8,7 +9,17 @@ const baseUrls = Array.from(new Set([
   "https://app.tireweblibrary.com/api/v1",
 ].filter((value): value is string => Boolean(value)).map((value) => value.replace(/\/$/, ""))));
 
-type TireLibrarySearchResult = {
+type CatalogImages = {
+  angle_image_url?: string | null;
+  front_image_url?: string | null;
+  side_image_url?: string | null;
+  side2_image_url?: string | null;
+  rotation_image_url?: string | null;
+  image_url?: string | null;
+  thumbnail_image?: string | null;
+};
+
+type TireLibrarySearchResult = CatalogImages & {
   id: number;
   tire_model_id?: number | null;
   name?: string | null;
@@ -78,7 +89,7 @@ type TireLibraryTireDetail = TireLibrarySearchResult & {
   image_0301?: string | null;
   image_0302?: string | null;
   tire_make?: { id?: number; name?: string | null; image_url?: string | null } | null;
-  tire_model?: {
+  tire_model?: CatalogImages & {
     id?: number;
     name?: string | null;
     image_url?: string | null;
@@ -93,7 +104,7 @@ type TireLibraryTireDetail = TireLibrarySearchResult & {
   rebates?: TireLibraryRebateSummary[];
 };
 
-type TireLibraryPatternDetail = {
+type TireLibraryPatternDetail = CatalogImages & {
   id?: number;
   name?: string | null;
   image_url?: string | null;
@@ -183,13 +194,17 @@ function safeUrl(value: string | null | undefined) {
   return /^https:\/\//i.test(value || "") ? String(value) : "";
 }
 
-function sizeParts(value: string) {
-  const normalized = value.toUpperCase().replace(/\s/g, "");
-  const conventional = normalized.match(/(?:LT|P)?(\d{3})\/?(\d{2,3})(?:ZR|R)(\d{2}(?:\.5)?)/);
-  if (conventional) return { width: conventional[1], aspect: conventional[2], rim: conventional[3] };
-  const digits = normalized.replace(/\D/g, "");
-  const compact = digits.match(/^(\d{3})(\d{2})(\d{2})$/);
-  return compact ? { width: compact[1], aspect: compact[2], rim: compact[3] } : null;
+function catalogImages(item?: CatalogImages | null): string[] {
+  if (!item) return [];
+  return [item.angle_image_url, item.front_image_url, item.image_url, item.rotation_image_url,
+    item.side_image_url, item.side2_image_url, item.thumbnail_image].map(safeUrl).filter(Boolean);
+}
+
+function normalizeCatalogTire<T extends EnrichableTire>(product: T): T {
+  const normalized = normalizeTireProductName(normalizeTireBadges(product));
+  // A supplier's zero/unknown placeholder is not a treadwear rating.
+  return /^(?:0+(?:\.0+)?|n\/?a|not applicable|unknown)$/i.test(String(product.utqg || "").trim())
+    ? { ...normalized, utqg: "" } : normalized;
 }
 
 function normalize(value: string | null | undefined) {
@@ -227,15 +242,9 @@ function findMatch(product: EnrichableTire, catalog: TireLibrarySearchResult[]) 
   });
 }
 
-async function searchBySize(size: string) {
-  const parts = sizeParts(size);
-  if (!parts) return [];
-  const params = new URLSearchParams({
-    width: parts.width,
-    aspect_ratio: parts.aspect,
-    rim_size: parts.rim,
-    per_page: "100",
-  });
+async function searchBySize(query: string) {
+  const params = new URLSearchParams(query);
+  params.set("per_page", "100");
   const first = await tireLibraryRequest<TireLibraryPage>(`tires/search?${params}`);
   const results = [...(first.data || [])];
   // A common truck size can contain well over 500 catalog entries. Stopping
@@ -296,13 +305,14 @@ async function tireLibraryModelImage(brand: string, model: string): Promise<stri
   const details = await Promise.all(sameModel.slice(0, 2).map(item => tireLibraryTireDetails(item.id).catch(() => null)));
   let image = await firstHealthyTireImage([
     ...details.map(item => item?.preferredImageUrl),
-    ...rankTireImages([...details.map(item => item?.imageUrl), ...sameModel.map(item => item.thumbnail_image)]),
+    ...sameModel.flatMap(item => [item.angle_image_url, item.front_image_url]),
+    ...rankTireImages([...details.map(item => item?.imageUrl), ...sameModel.flatMap(catalogImages)]),
   ]);
   if (image) return image;
   const patterns = await tireLibraryRequest<{ results?: TireLibraryPage<TireLibraryPatternDetail> }>(`tire-patterns/catalog?${params}`);
   const exact = (patterns.results?.data || []).filter(item =>
     tireImageKey(item.make_name || "", item.name || "") === tireImageKey(brand, model));
-  image = await firstHealthyTireImage(exact.flatMap(item => [item.image_url, item.image_360_thumbnail_url]));
+  image = await firstHealthyTireImage(exact.flatMap(item => [...catalogImages(item), item.image_360_thumbnail_url]));
   if (image) return image;
   return null;
 }
@@ -338,7 +348,7 @@ async function recoverTireImages<T extends EnrichableTire>(products: T[], candid
 
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
   if (!products.length) return products;
-  if (!apiKey()) return recoverTireImages(products.map(normalizeTireBadges).map(normalizeTireProductName), new Map(), false);
+  if (!apiKey()) return recoverTireImages(products.map(normalizeCatalogTire), new Map(), false);
   try {
     const supplierImageByPattern = new Map<string, string>();
     for (const product of products) {
@@ -347,7 +357,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
       const key = tireImageKey(product.brand, product.model);
       if (!supplierImageByPattern.has(key)) supplierImageByPattern.set(key, image);
     }
-    const sizes = Array.from(new Set(products.map((product) => sizeParts(product.size)).filter(Boolean).map(parts => `${parts!.width}${parts!.aspect}${parts!.rim}`))).slice(0, 4);
+    const sizes = Array.from(new Set(products.map(product => tireLibrarySizeQuery(product.size)).filter((query): query is string => Boolean(query)))).slice(0, 4);
     const [catalogs, rebatesByPattern] = await Promise.all([
       Promise.all(sizes.map(searchBySize)).then((groups) => groups.flat()),
       activeRebatesByPattern().catch(() => new Map<number, Array<{ code: string; description: string; url: string }>>()),
@@ -356,7 +366,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     const imageByModel = new Map<number, string>();
     for (const item of catalogs) {
       const key = Number(item.tire_model_id || item.id);
-      const image = safeUrl(item.thumbnail_image);
+      const image = catalogImages(item)[0];
       if (image && !imageByModel.has(key)) imageByModel.set(key, image);
     }
     const representativeByModel = new Map<number, TireLibrarySearchResult>();
@@ -369,7 +379,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     const needsImage = ([key]: [number, TireLibrarySearchResult]) =>
       !imageByModel.get(key) && matches.some((match, index) =>
         Number(match?.tire_model_id || match?.id) === key &&
-        !safeUrl(match?.thumbnail_image) &&
+        !catalogImages(match).length &&
         !safeUrl(products[index]?.imageUrl),
       );
     const prioritizedEntries = [
@@ -395,7 +405,7 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
     const photoIdentities = [...products];
     for (const item of catalogs) {
       const key = tireImageKey(item.make_name || "", item.model_name || "");
-      if (item.thumbnail_image) photoCandidates.set(key, [...(photoCandidates.get(key) || []), item.thumbnail_image]);
+      photoCandidates.set(key, [...(photoCandidates.get(key) || []), ...catalogImages(item)]);
     }
     const enriched = products.map((product, index) => {
       const match = matches[index];
@@ -413,9 +423,12 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         photoIdentities[index] = { ...product, brand: match.make_name || product.brand, model: match.model_name || product.model };
         photoKey = tireImageKey(photoIdentities[index].brand, photoIdentities[index].model);
       }
-      const libraryImages = photoMatch ? [detail?.imageUrl, match.thumbnail_image, imageByModel.get(Number(match.tire_model_id || match.id))].filter((url): url is string => Boolean(url)) : [];
+      const libraryImages = photoMatch ? [detail?.imageUrl, ...catalogImages(match), imageByModel.get(Number(match.tire_model_id || match.id))].filter((url): url is string => Boolean(url)) : [];
       if (photoMatch) photoDetails.set(photoKey, match.id);
-      if (photoMatch && detail?.preferredImageUrl) preferredImages.set(photoKey, detail.preferredImageUrl);
+      if (photoMatch) {
+        const preferred = detail?.preferredImageUrl || safeUrl(match.angle_image_url) || safeUrl(match.front_image_url);
+        if (preferred) preferredImages.set(photoKey, preferred);
+      }
       photoCandidates.set(photoKey, [...(photoCandidates.get(photoKey) || []), ...libraryImages]);
       const supplierPatternImage = supplierImageByPattern.get(tireImageKey(product.brand, product.model)) || "";
       const libraryRebates = match.tire_model_id ? rebatesByPattern.get(match.tire_model_id) || [] : [];
@@ -450,10 +463,10 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         tireLibraryMatched: true,
       };
     });
-    return recoverTireImages(enriched.map(normalizeTireBadges).map(normalizeTireProductName), photoCandidates, true, photoIdentities, photoDetails, preferredImages);
+    return recoverTireImages(enriched.map(normalizeCatalogTire), photoCandidates, true, photoIdentities, photoDetails, preferredImages);
   } catch (error) {
     console.warn("Tire Library enrichment skipped:", error instanceof Error ? error.message : error);
-    return recoverTireImages(products.map(normalizeTireBadges).map(normalizeTireProductName), new Map(), false);
+    return recoverTireImages(products.map(normalizeCatalogTire), new Map(), false);
   }
 }
 
@@ -546,7 +559,10 @@ export function sanitizeVehicleFitments(value: unknown): Array<TireLibraryVehicl
 export async function tireLibraryTireDetails(id: number) {
   if (!Number.isInteger(id) || id < 1) throw new Error("A valid Tire Library tire ID is required");
   const tire = await tireLibraryRequest<TireLibraryTireDetail>(`tires/${id}?rebate_status=Active`);
-  const preferredImageUrl = await firstHealthyTireImage([tire.angle_image, tire.front_image]);
+  const preferredImageUrl = await firstHealthyTireImage([
+    tire.tire_model?.angle_image_url, tire.angle_image_url, tire.angle_image,
+    tire.tire_model?.front_image_url, tire.front_image_url, tire.front_image,
+  ]);
   return {
     id: tire.id,
     brand: tire.tire_make?.name || tire.make_name || "",
@@ -563,6 +579,7 @@ export async function tireLibraryTireDetails(id: number) {
     runFlat: catalogFlag(tire.run_flat),
     preferredImageUrl,
     imageUrl: preferredImageUrl || await firstHealthyTireImage(rankTireImages([
+      ...catalogImages(tire.tire_model), ...catalogImages(tire),
       tire.tire_model?.image_url, tire.image_0100, tire.image_0200,
       tire.image_0301, tire.image_0302, tire.thumbnail_image,
       tire.tire_model?.image_360_thumbnail_url, tire.side_image, tire.side2_image,

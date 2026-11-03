@@ -174,7 +174,7 @@ test('M/T flotation can recover the M/T library photo even without another suppl
  let searched=false;
  await withFetch(async url=>{
   url=String(url);
-  if(url.includes('/rebate?'))return json({data:[]});
+  if(url.includes('/rebate?')||url.includes('/tires/search?'))return json({data:[]});
   if(url.includes('/tires/catalog?')){
    assert.equal(new URL(url).searchParams.get('search'),'Open Country M/T');searched=true;
    return json({results:{data:[{id:88,make_name:'Toyo',model_name:'Open Country M/T',thumbnail_image:good}]}});
@@ -185,4 +185,64 @@ test('M/T flotation can recover the M/T library photo even without another suppl
   const [result]=await load('lib/tire-library.ts').enrichWithTireLibrary([product({brand:'TOYO',model:'Toyo OPEN COUNTRY MT FLOTATION',size:'33125018',loadSpeed:'12 ply'})]);
   assert.equal(searched,true);assert.equal(result.imageUrl,good);assert.equal(result.loadSpeed,'12 ply');
  });
+});
+
+test('inch-size KO3 lookup uses OD dimensions, exact part specs, and current model photo fields',async()=>{
+ const angle='https://storage.googleapis.com/autosync_tires/ko3-new-photo.webp';
+ const row={id:600,tire_model_id:77,item_number:'60060',make_name:'BFGoodrich',model_name:'All-Terrain T/A KO3',
+  name:'35x12.50R20',width:'35',rim_size:'20',aspect_ratio:null,load_rating:'125',speed_rating:'R',load_range:'F',
+  warranty:'50000',tread_depth:'16',utqg:null,terrain:'All-Terrain',three_pmsf:true,angle_image_url:angle,thumbnail_image:null};
+ let searches=0;
+ await withFetch(async url=>{
+  url=String(url);
+  if(url.includes('/tires/search?')){const params=new URL(url).searchParams;searches++;assert.equal(params.get('width'),'35');assert.equal(params.get('rim_size'),'20');assert.equal(params.get('size_format'),'OD');assert.equal(params.has('aspect_ratio'),false);return json({data:[row]});}
+  if(url.includes('/rebate?'))return json({data:[]});
+  if(url.includes('/tires/600?'))return json({...row,tire_model:{name:row.model_name,angle_image_url:angle,description:'All-terrain KO3 tread.'}});
+  return new Response(null,{headers:{'content-type':'image/webp'}});
+ },async load=>{
+  const original=product({brand:'BFGOODRICH',model:'BF Goodrich ALL-TERRAIN TA KO3',atdProductNumber:'60060',size:'35125020',loadSpeed:'',loadRange:'',utqg:'0'});
+  const [result,formatted,otherPart]=await load('lib/tire-library.ts').enrichWithTireLibrary([original,{...original,id:'ATD-60060',size:'35X12.50R20LT/12'}, {...original,id:'OTHER',atdProductNumber:'OTHER',size:'35X11.50R20/10',loadSpeed:'121 Q',loadRange:'E'}]);
+  assert.equal(searches,1);assert.equal(result.imageUrl,angle);assert.equal(formatted.imageUrl,angle);assert.equal(result.imageVerified,true);
+  assert.equal(result.model,'All-Terrain T/A KO3');assert.equal(result.loadSpeed,'125 R');assert.equal(result.loadRange,'F');assert.equal(result.warranty,'50000');assert.equal(result.treadDepth,'16');assert.equal(result.utqg,'');assert.equal(result.tireLibraryId,600);
+  assert.equal(result.atdProductNumber,'60060');assert.equal(result.size,'35125020');assert.equal(result.cost,original.cost);
+  assert.equal(otherPart.loadSpeed,'121 Q');assert.equal(otherPart.loadRange,'E');assert.equal(otherPart.tireLibraryId,undefined);
+ });
+});
+
+test('current catalog angle photo works even when detail request fails and legacy thumbnail is null',async()=>{
+ const angle='https://storage.googleapis.com/autosync_tires/modern.webp';
+ await withFetch(async url=>{
+  url=String(url);
+  if(url.includes('/tires/search?'))return json({data:[{id:1,item_number:'123',make_name:'GOODYEAR',model_name:'Wrangler Steadfast HT',angle_image_url:angle,thumbnail_image:null}]});
+  if(url.includes('/rebate?'))return json({data:[]});
+  if(url.includes('/tires/1?'))return new Response(null,{status:503});
+  return new Response(null,{headers:{'content-type':'image/webp'}});
+ },async load=>{const [result]=await load('lib/tire-library.ts').enrichWithTireLibrary([product()]);assert.equal(result.imageUrl,angle);});
+});
+
+test('current model photo fields fall back from broken angle to front and then side',async()=>{
+ const angle='https://storage.googleapis.com/autosync_tires/modern-angle.webp',front='https://storage.googleapis.com/autosync_tires/modern-front.webp',side='https://storage.googleapis.com/autosync_tires/modern-side.webp';
+ for(const failed of [[angle],[angle,front]])await withFetch(async url=>{
+  url=String(url);
+  if(url.includes('/tires/1?'))return json({id:1,tire_model:{angle_image_url:angle,front_image_url:front,side_image_url:side}});
+  return new Response(null,{status:failed.includes(url)?404:200,headers:{'content-type':'image/webp'}});
+ },async load=>{const result=await load('lib/tire-library.ts').tireLibraryTireDetails(1);assert.equal(result.imageUrl,failed.length===1?front:side);});
+});
+
+test('UTQG placeholders are not displayed as ratings, while a real 0 A A grade is retained',async()=>{
+ const oldKey=process.env.TIRE_LIBRARY_API_KEY;delete process.env.TIRE_LIBRARY_API_KEY;
+ try{
+  const values=['0','00','0.0','N/A','unknown','0 A A','500 A A'];
+  const result=await loader()('lib/tire-library.ts').enrichWithTireLibrary(values.map(utqg=>product({utqg})));
+  assert.deepEqual(result.map(p=>p.utqg),['','','','','','0 A A','500 A A']);
+ }finally{if(oldKey!==undefined)process.env.TIRE_LIBRARY_API_KEY=oldKey;}
+});
+
+test('catalog queries retain metric/half-inch dimensions and do not reinterpret invalid sizes',()=>{
+ const {tireLibrarySizeQuery:q}=loader()('lib/tire-library-size.ts');
+ for(const size of ['35125020','35X12.50R20LT/12','35X1250R20/10'])assert.equal(q(size),'width=35&rim_size=20&size_format=OD');
+ for(const size of ['2756520','LT275/65R20/10'])assert.equal(q(size),'width=275&aspect_ratio=65&rim_size=20');
+ for(const size of ['22570195','225/70R19.5/14'])assert.equal(q(size),'width=225&aspect_ratio=70&rim_size=19.5');
+ assert.equal(q('33X12.50R18/10'),'width=33&rim_size=18&size_format=OD');
+ for(const size of ['','nonsense','275/65R200','35X12.50R20/INVALID'])assert.equal(q(size),null);
 });
