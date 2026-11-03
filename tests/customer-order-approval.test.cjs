@@ -290,12 +290,48 @@ test('portal submission through approval retains the original structured fields 
   for (const customer of ['Kingdom Support Services', 'HPR']) {
     const f = fixture({ orders: [] });
     const portal = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/route.ts');
-    const body = order(1, { ...portalFields, customer, facility_id: 7, facility_name: 'Chosen Facility' });
+    const body = order(1, { ...portalFields, customer, facility_id: 7, facility_name: 'Chosen Facility', tire_model: ' Assurance All-Season ' });
     const response = await portal.POST(new Request('https://example.test', { method: 'POST', body: JSON.stringify(body) }));
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()));
     assert.equal((await f.approve(f.tables.customer_orders[0].id)).status, 200);
+    assert.equal(f.tables.customer_orders[0].tire_model, 'Assurance All-Season');
+    assert.equal(f.tables.jobs[0].tires, 'Assurance All-Season');
+    assert.equal(f.tables.jobs[0].size, body.tire_size);
+    assert.equal(f.tables.jobs[0].tire_product_number, body.tire_product_number);
     for (const [field, value] of Object.entries(portalFields)) assert.equal(f.tables.jobs[0][field], value);
     assert.equal(f.tables.jobs[0].facility_id, 7); assert.equal(f.tables.jobs[0].facility_name, 'Chosen Facility');
+  }
+});
+
+test('model edits sync to job tires, while unrelated edits and older portal clients preserve staff corrections', async () => {
+  const original = order('1', { ...portalFields, order_status: 'approved', approved_job_id: 5, facility_name: 'Example', tire_model: 'Original model' });
+  const f = fixture({ orders: [original], jobs: [{ id: 5, complete: false, tires: 'Staff corrected model' }] });
+  const route = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/[id]/route.ts');
+  const save = patch => route.PATCH(new Request('https://example.test', { method: 'PATCH', body: JSON.stringify({ ...original, ...patch }) }), { params: Promise.resolve({ id: '1' }) });
+  assert.equal((await save({ notes: 'Other edit', tire_model: undefined })).status, 200);
+  assert.equal(f.tables.customer_orders[0].tire_model, 'Original model'); assert.equal(f.tables.jobs[0].tires, 'Staff corrected model');
+  assert.equal((await save({ tire_model: ' New model ' })).status, 200); assert.equal(f.tables.jobs[0].tires, 'New model');
+  assert.equal((await save({ tire_model: '' })).status, 200); assert.equal(f.tables.jobs[0].tires, null);
+});
+
+test('fleet model field is optional and invalid values cannot save', async () => {
+  const f = fixture({ orders: [] });
+  const portal = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/route.ts');
+  for (const model of [{ text: 'wrong' }, 'x'.repeat(1001)]) {
+    const res = await portal.POST(new Request('https://example.test', { method: 'POST', body: JSON.stringify(order(1, { ...portalFields, facility_id: 7, facility_name: 'Example', tire_model: model })) }));
+    assert.equal(res.status, 400); assert.equal(f.tables.customer_orders.length, 0);
+  }
+  const fields = loader()('lib/customer-order-job-fields.ts');
+  assert.equal(fields.customerOrderJobFields({}).tires, null);
+  assert.deepEqual(fields.changedCustomerOrderJobFields({}, {}), {});
+});
+
+test('all fleet form variants have separate model and part-number controls', () => {
+  for (const file of ['app/order/kingdom/page.tsx', 'app/kingdom-orders/[id]/page.tsx', 'app/orders/[id]/edit/page.tsx']) {
+    const source = fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');
+    assert.match(source, /Tire model/); assert.match(source, /Part number/);
+    assert.match(source, /tire_model/); assert.match(source, /tire_product_number/);
+    assert.doesNotMatch(source, /Product \/ part number|Tire Product Number|label="Product Number"/);
   }
 });
 test('missing optional order fields become null, and repeated approvals leave subsequent job edits untouched', async () => {

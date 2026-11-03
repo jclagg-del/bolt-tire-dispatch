@@ -88,6 +88,17 @@ test('server uses allowlisted changes and preserves paid/supplier/job metadata',
   const f = fixture(); assert.equal((await f.save({ order_status: 'approved', tires_ordered: true, amount_paid: 100, tax_exempt: true, approved_job_id: 50 })).status, 200);
   for (const key of ['order_status', 'tires_ordered', 'amount_paid', 'tax_exempt', 'approved_job_id']) assert.ok(!(key in f.calls[0].args.p_changes));
 });
+
+test('office edits keep model, size and exact part number in independent fields', async () => {
+  const f = fixture();
+  assert.equal((await f.save({ tire_model: ' Assurance All-Season ', tire_size: '205/55R16', tire_product_number: '407781374' })).status, 200);
+  const changes = f.calls[0].args.p_changes;
+  assert.equal(changes.tire_model, 'Assurance All-Season'); assert.equal(changes.tire_size, '205/55R16'); assert.equal(changes.tire_product_number, '407781374');
+  const existing = fixture({ row: { tire_model: 'Keep this model' } });
+  const opened = await (await existing.get()).json(); delete opened.order.tire_model;
+  assert.equal((await existing.patch({ version: opened.version, changes: opened.order })).status, 200);
+  assert.equal(existing.calls[0].args.p_changes.tire_model, 'Keep this model');
+});
 test('purchase lookup failure fails closed and inactive facility cannot replace current selection', async () => {
   const f = fixture({ queryError: 'supplier_orders' }); assert.equal((await f.get()).status, 500); assert.equal((await f.patch({})).status, 500); assert.equal(f.calls.length, 0);
   const g = fixture(); assert.equal((await g.save({ facility_id: 999 })).status, 400); assert.equal(g.calls.length, 0);
@@ -97,7 +108,7 @@ test('edit page renders all dedicated fields, mobile-safe grid and separate save
   const stateValues = [{ order: base, version: 'test', purchaseLocked: false, facilities: [] }, base, false, false, '', false];
   const Page = loader({ react: { ...React, useEffect() {}, useCallback: fn => fn, useState: () => [stateValues.shift(), () => {}] }, 'next/navigation': { useParams: () => ({ id: '1' }), useRouter: () => ({}) }, '@/components/AppHeader': () => null, '@/lib/supabase': {} })('app/orders/[id]/edit/page.tsx').default;
   const html = renderToStaticMarkup(React.createElement(Page));
-  for (const text of ['Submitted by', 'Contact person', 'Service address', 'Facility name', 'License plate', 'Tire position', 'Job / PO number', 'MO number', 'Product / part number', 'Requested time (Eastern)', 'Save order changes', 'Cancel — keep saved order', 'Approve &amp; Create Job']) assert.ok(html.includes(text), text);
+  for (const text of ['Submitted by', 'Contact person', 'Service address', 'Facility name', 'License plate', 'Tire position', 'Job / PO number', 'MO number', 'Part number', 'Tire model', 'Requested time (Eastern)', 'Save order changes', 'Cancel — keep saved order', 'Approve &amp; Create Job']) assert.ok(html.includes(text), text);
   assert.match(html, /minmax\(min\(100%,240px\),1fr\)/);
   assert.doesNotMatch(html, /api\/public\/kingdom/);
 });

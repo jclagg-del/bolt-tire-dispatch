@@ -66,6 +66,7 @@ export async function PATCH(request: Request, { params }: Context) {
     return NextResponse.json({ error: "A valid tire quantity and tire size are required." }, { status: 400 });
   }
 
+  if (body.tire_model != null && (typeof body.tire_model !== "string" || body.tire_model.length > 1000)) return NextResponse.json({ error: "Enter a tire model of no more than 1,000 characters." }, { status: 400 });
   const updates = {
     customer,
     goodyear_order: Boolean(body.goodyear_order),
@@ -88,6 +89,8 @@ export async function PATCH(request: Request, { params }: Context) {
     tire_position: String(body.tire_position || "").trim() || null,
     qty,
     tire_size: String(body.tire_size).trim(),
+    // Older open forms omit the new field: preserve it rather than clearing it.
+    tire_model: body.tire_model === undefined ? order.tire_model ?? null : String(body.tire_model || "").trim() || null,
     tire_product_number: String(body.tire_product_number || "").trim() || null,
     notes: String(body.notes || "").trim() || null,
   };

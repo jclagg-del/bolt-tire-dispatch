@@ -68,6 +68,7 @@ export default function StaffOrderEditPage() {
   };
   const input = (key: keyof OrderEditFields, text: string, required = false, type = "text") => <label style={label} key={key}>{text}{required ? " *" : ""}
     <input style={field} type={type} required={required} value={String(draft?.[key] ?? "")} min={type === "number" ? 1 : undefined} step={type === "number" ? 1 : undefined}
+      placeholder={key === "tire_size" ? "Example: 205/55R16 (size only)" : key === "tire_model" ? "Example: Assurance All-Season" : key === "tire_product_number" ? "Example: 407781374 (part number only)" : undefined}
       disabled={saving || Boolean(data?.purchaseLocked && (PURCHASE_LOCKED_FIELDS as readonly string[]).includes(key))}
       onChange={event => change(key, type === "number" ? Number(event.target.value) : event.target.value)} />
   </label>;
@@ -102,7 +103,7 @@ export default function StaffOrderEditPage() {
       </div></section>
       <section style={card}><h2>Tires</h2>
         {data.purchaseLocked && <p role="status" style={notice}>A supplier purchase exists or the tires are marked ordered. Tire, quantity, organization and reference fields are locked to protect that purchase.</p>}
-        <div style={grid}>{input("qty", "Quantity", true, "number")}{input("tire_size", "Tire size", true)}{input("tire_product_number", "Product / part number")}{input("tire_position", "Tire position")}</div>
+        <div style={grid}>{input("qty", "Quantity", true, "number")}{input("tire_size", "Tire size", true)}{input("tire_model", "Tire model")}{input("tire_product_number", "Part number")}{input("tire_position", "Tire position")}</div>
         <label style={label}>Notes<textarea style={{ ...field, minHeight: 110 }} value={String(draft.notes ?? "")} disabled={saving} maxLength={10000} onChange={event => change("notes", event.target.value)} /></label>
       </section>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}><button type="submit" disabled={saving || !dirty} style={primary}>{saving ? "Saving…" : "Save order changes"}</button><button type="button" disabled={saving} onClick={back} style={secondary}>Cancel — keep saved order</button></div>

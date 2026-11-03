@@ -33,6 +33,7 @@ type CustomerOrder = {
   tire_position: string | null;
   qty: number;
   tire_size: string;
+  tire_model: string | null;
   tire_product_number: string | null;
   notes: string | null;
   order_status: string;
@@ -160,6 +161,7 @@ export default function OrdersPage() {
         tire_position,
         qty,
         tire_size,
+        tire_model,
         tire_product_number,
         notes,
         order_status,
@@ -752,11 +754,13 @@ function OrderSection({
                   />
 
                   <Detail
-                    label="Product Number"
+                    label="Part number"
                     value={
                       order.tire_product_number || "—"
                     }
                   />
+
+                  {order.tire_model && <Detail label="Tire model" value={order.tire_model} />}
 
                   <Detail
                     label="Job Number"

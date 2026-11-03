@@ -45,7 +45,7 @@ export async function PATCH(request: Request, context: Context) {
     try { body = await request.json(); } catch { throw new EditError("Invalid request."); }
     if (!body || body.version !== version(order)) throw new EditError("This order changed since you opened it. Reload the order before saving; your changes have not been applied.", 409);
     let changes;
-    try { changes = normalizeOrderEdit(body.changes); } catch (error) { throw new EditError(error instanceof Error ? error.message : "Invalid changes."); }
+    try { changes = normalizeOrderEdit(body.changes, order); } catch (error) { throw new EditError(error instanceof Error ? error.message : "Invalid changes."); }
     if (purchaseLocked && changedPurchaseFields(order, changes)) throw new EditError("Tires have already been ordered or a purchase is pending. Tire, quantity, organization and reference details are locked; contact, facility and appointment details can still be corrected.", 409);
     if (changes.facility_id !== order.facility_id && changes.facility_id != null) {
       const facility = await admin.from("kingdom_facilities").select("id,name").eq("id", changes.facility_id).eq("active", true).maybeSingle();

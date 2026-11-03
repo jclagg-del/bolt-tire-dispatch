@@ -29,6 +29,7 @@ type OrderForm = {
   tire_position: string;
   qty: string;
   tire_size: string;
+  tire_model: string;
   tire_product_number: string;
   notes: string;
 };
@@ -77,6 +78,7 @@ const initialForm: OrderForm = {
   tire_position: "",
   qty: "",
   tire_size: "",
+  tire_model: "",
   tire_product_number: "",
   notes: "",
 };
@@ -528,6 +530,7 @@ export default function KingdomOrderPage() {
       tire_position: form.tire_position.trim(),
       qty: Number(form.qty),
       tire_size: form.tire_size.trim(),
+      tire_model: form.tire_model.trim() || null,
       tire_product_number: form.tire_product_number.trim() || null,
       notes: [form.request_earlier_service ? "EARLIER SERVICE REQUESTED — contact customer if an earlier opening becomes available." : "", form.notes.trim()].filter(Boolean).join("\n\n") || null,
       }),
@@ -925,18 +928,21 @@ export default function KingdomOrderPage() {
                   value={form.tire_size}
                   onChange={handleChange}
                   style={input}
-                  placeholder="Example: 11R22.5"
+                  placeholder="Example: 205/55R16 (size only)"
                   autoCapitalize="characters"
                 />
 
-                <FieldLabel text="Tire Product Number" />
+                <FieldLabel text="Tire model" />
+                <input type="text" name="tire_model" value={form.tire_model} onChange={handleChange} style={input} placeholder="Example: Assurance All-Season" maxLength={1000} />
+
+                <FieldLabel text="Part number" />
                 <input
                   type="text"
                   name="tire_product_number"
                   value={form.tire_product_number}
                   onChange={handleChange}
                   style={input}
-                  placeholder="Product or item number"
+                  placeholder="Example: 407781374 (part number only)"
                 />
               </section>
 
