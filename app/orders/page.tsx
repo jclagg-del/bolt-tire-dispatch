@@ -8,6 +8,7 @@ import CustomerOrderPurchase, { purchaseApi, type PurchaseDetails } from "@/comp
 import OrderDuplicateNotice from "@/components/OrderDuplicateNotice";
 import { possibleDuplicateOrders } from "@/lib/customer-order-duplicates";
 import { orderAppointment } from "@/lib/order-appointment";
+import { canEditFleetOrder } from "@/lib/staff-order-edit";
 
 type CustomerOrder = {
   id: number;
@@ -877,6 +878,7 @@ function OrderSection({
                 </div>}
 
                 <div style={actions}>
+                  {canEditFleetOrder(order) && <button type="button" onClick={() => router.push(`/orders/${order.id}/edit`)} disabled={working || Boolean(purchasingOrder)} style={openJobButton}>Edit order</button>}
                   {(approved || completed || cancellationRequested) && order.approved_job_id ? (
                     <button
                       type="button"

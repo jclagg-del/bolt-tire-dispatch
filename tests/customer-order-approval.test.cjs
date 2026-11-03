@@ -21,6 +21,34 @@ const order = (id, extra = {}) => ({ id, customer: 'Kingdom Support Services', j
 const portalFields = { submitted_by: 'Portal Submitter', tire_position: 'Left rear outer', license_plate: 'ABC-123 NY',
   vehicle_year: '2024', vehicle_make: 'Ford', vehicle_model: 'Transit', vehicle_color: 'White' };
 
+test('approval uses saved office corrections, including their dedicated job fields', async () => {
+  const f = fixture({ orders: [order(1, { ...portalFields, contact_name: 'Corrected contact', contact_number: '5550100', address: 'Corrected address', facility_name: 'Corrected facility', facility_id: 9, requested_date: '2026-11-05', requested_time: '14:00', reviewed_at: '2026-11-03T19:00:00Z' })] });
+  assert.equal((await f.approve(1)).status, 200);
+  const job = f.tables.jobs[0];
+  for (const [key, value] of Object.entries(portalFields)) assert.equal(job[key], value);
+  assert.equal(job.contact_name, 'Corrected contact'); assert.equal(job.phone, '5550100');
+  assert.equal(job.address, 'Corrected address'); assert.equal(job.facility_name, 'Corrected facility');
+  assert.equal(job.scheduled, '2026-11-05T14:00:00');
+});
+
+test('office edit between approval read and claim prevents creating a job from stale details', async () => {
+  const f = fixture(); const from = f.admin.from;
+  f.admin.from = table => {
+    const query = from(table), update = query.update;
+    query.update = values => {
+      if (table === 'customer_orders' && values.order_status === 'approved') {
+        f.tables.customer_orders[0].reviewed_at = '2026-11-03T19:00:00Z';
+        f.tables.customer_orders[0].contact_name = 'New office correction';
+      }
+      return update(values);
+    };
+    return query;
+  };
+  assert.equal((await f.approve(1)).status, 409);
+  assert.equal(f.tables.jobs.length, 0); assert.equal(f.tables.customer_orders[0].order_status, 'new');
+  assert.equal(f.tables.customer_orders[0].contact_name, 'New office correction');
+});
+
 // Database boundaries only; every route and filter under test is production code.
 function fixture({ orders = [order(1)], jobs = [], authenticated = true, insertError, lostInsertResponse = false, linkError = false } = {}) {
   const tables = structuredClone({ customer_orders: orders, jobs, supplier_orders: [], usaf_inventory: [{part_number:'413134582'}] });
