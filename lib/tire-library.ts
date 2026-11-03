@@ -1,5 +1,6 @@
 import "server-only";
 import { catalogCategory, catalogFlag, normalizeTireBadges } from "./tire-badges";
+import { normalizeTireProductName } from "./tire-product-name";
 import { firstHealthyTireImage, rankTireImages, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
 
 const baseUrls = Array.from(new Set([
@@ -337,7 +338,7 @@ async function recoverTireImages<T extends EnrichableTire>(products: T[], candid
 
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
   if (!products.length) return products;
-  if (!apiKey()) return recoverTireImages(products.map(normalizeTireBadges), new Map(), false);
+  if (!apiKey()) return recoverTireImages(products.map(normalizeTireBadges).map(normalizeTireProductName), new Map(), false);
   try {
     const supplierImageByPattern = new Map<string, string>();
     for (const product of products) {
@@ -449,10 +450,10 @@ export async function enrichWithTireLibrary<T extends EnrichableTire>(products: 
         tireLibraryMatched: true,
       };
     });
-    return recoverTireImages(enriched.map(normalizeTireBadges), photoCandidates, true, photoIdentities, photoDetails, preferredImages);
+    return recoverTireImages(enriched.map(normalizeTireBadges).map(normalizeTireProductName), photoCandidates, true, photoIdentities, photoDetails, preferredImages);
   } catch (error) {
     console.warn("Tire Library enrichment skipped:", error instanceof Error ? error.message : error);
-    return recoverTireImages(products.map(normalizeTireBadges), new Map(), false);
+    return recoverTireImages(products.map(normalizeTireBadges).map(normalizeTireProductName), new Map(), false);
   }
 }
 
