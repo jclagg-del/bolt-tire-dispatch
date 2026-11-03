@@ -4,6 +4,7 @@ import { purchasingRequestId, supplierOrderDetails } from "@/lib/customer-order-
 import { websitePaymentFields } from "@/lib/paid-website-order";
 import { websiteOrderFacility } from "@/lib/website-order-facility";
 import { orderAppointment } from "@/lib/order-appointment";
+import { customerOrderJobFields } from "@/lib/customer-order-job-fields";
 
 type CustomerOrder = {
   id: number;
@@ -180,6 +181,7 @@ export async function POST(request: NextRequest) {
     if (!claimed) return NextResponse.json({ error: "This order was already accepted in another window." }, { status: 409 });
 
     const { data: newJob, error: jobError } = await admin.from("jobs").insert({
+      ...customerOrderJobFields(order),
       customer: order.customer,
       contact_name: order.contact_name,
       phone: order.contact_number,

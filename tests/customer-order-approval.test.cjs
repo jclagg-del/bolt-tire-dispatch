@@ -18,6 +18,8 @@ function loader(stubs = {}) {
 }
 const request = (id = 1, extra = {}) => new Request('https://example.test/api/orders/approve', { method: 'POST', body: JSON.stringify({ orderId: id, tireSupplier: 'U.S. AutoForce', estimatedDeliveryDate: '2026-10-01', ...extra }) });
 const order = (id, extra = {}) => ({ id, customer: 'Kingdom Support Services', job_number: '3097885', mo_number: `MO-${id}`, tire_product_number: '413134582', qty: 4, tire_size: '235/40R18', contact_name: 'Example', contact_number: '2015550123', address: 'Example St', submitted_by: 'Example', service_method: 'delivery', order_status: 'new', tires_ordered: true, approved_job_id: null, reviewed_at: null, requested_date: '2026-10-01', requested_time: '09:30', ...extra });
+const portalFields = { submitted_by: 'Portal Submitter', tire_position: 'Left rear outer', license_plate: 'ABC-123 NY',
+  vehicle_year: '2024', vehicle_make: 'Ford', vehicle_model: 'Transit', vehicle_color: 'White' };
 
 // Database boundaries only; every route and filter under test is production code.
 function fixture({ orders = [order(1)], jobs = [], authenticated = true, insertError, lostInsertResponse = false, linkError = false } = {}) {
@@ -237,4 +239,68 @@ test('customer tracking also retains separate entries and links when PO and part
   assert.ok(html.includes('href="/kingdom-orders/1"')); assert.ok(html.includes('href="/kingdom-orders/2"'));
   assert.equal((html.match(/Job\/PO 3097885/g) || []).length, 2);
   assert.equal((html.match(/Pending Review/g) || []).length, 2);
+});
+
+test('KSS and HPR approval map all structured fields without changing destination, references or service', async () => {
+  for (const customer of ['Kingdom Support Services', 'HPR']) for (const [method, service] of [['installed', 'Installation'], ['delivery', 'Delivery'], ['pickup', 'Pickup'], ['delivery_pickup', 'Delivery']]) {
+    const row = order(1, { ...portalFields, customer, service_method: method, facility_id: 7, facility_name: 'Selected Facility',
+      job_number: '000123', mo_number: '000456', goodyear_order: true, notes: 'Call at gate' });
+    const f = fixture({ orders: [row] });
+    assert.equal((await f.approve(1, { scheduledDate: '2026-10-03', scheduledTime: '14:45' })).status, 200);
+    const job = f.tables.jobs[0];
+    for (const [field, value] of Object.entries(portalFields)) assert.equal(job[field], value, field);
+    for (const field of ['customer', 'facility_id', 'facility_name', 'address', 'contact_name', 'qty', 'mo_number', 'tire_product_number']) assert.equal(job[field], row[field], field);
+    assert.equal(job.phone, row.contact_number); assert.equal(job.po_number, '000123'); assert.equal(job.size, row.tire_size);
+    assert.equal(job.vehicle, '2024 Ford Transit • Color: White • Plate: ABC-123 NY');
+    assert.match(job.notes, /Order request #1/); assert.match(job.notes, /Goodyear Order: Yes/); assert.match(job.notes, /Call at gate/);
+    assert.equal(job.scheduled, '2026-10-03T14:45:00'); assert.equal(job.estimated_delivery_date, '2026-10-01');
+    assert.equal(job.service_type, service); assert.equal(job.payment_status, 'unpaid'); assert.equal(job.tires_ordered, true);
+    assert.equal(job.tire_supplier, 'U.S. AutoForce'); assert.equal(f.tables.supplier_orders.length, 0);
+  }
+});
+test('portal submission through approval retains the original structured fields end to end', async () => {
+  for (const customer of ['Kingdom Support Services', 'HPR']) {
+    const f = fixture({ orders: [] });
+    const portal = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/route.ts');
+    const body = order(1, { ...portalFields, customer, facility_id: 7, facility_name: 'Chosen Facility' });
+    const response = await portal.POST(new Request('https://example.test', { method: 'POST', body: JSON.stringify(body) }));
+    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()));
+    assert.equal((await f.approve(f.tables.customer_orders[0].id)).status, 200);
+    for (const [field, value] of Object.entries(portalFields)) assert.equal(f.tables.jobs[0][field], value);
+    assert.equal(f.tables.jobs[0].facility_id, 7); assert.equal(f.tables.jobs[0].facility_name, 'Chosen Facility');
+  }
+});
+test('missing optional order fields become null, and repeated approvals leave subsequent job edits untouched', async () => {
+  const f = fixture({ orders: [order(1, { ...portalFields, license_plate: '  ', vehicle_color: null })] });
+  assert.equal((await f.approve(1)).status, 200);
+  const job = f.tables.jobs[0]; assert.equal(job.license_plate, null); assert.equal(job.vehicle_color, null);
+  Object.assign(job, { submitted_by: 'Staff correction', tire_position: 'Right front', license_plate: 'MANUAL', vehicle_model: 'Manual model' });
+  const snapshot = structuredClone(job);
+  assert.equal((await f.approve(1)).status, 200);
+  assert.deepEqual(job, snapshot); assert.equal(f.tables.jobs.length, 1);
+});
+test('approved portal edits sync changed structured fields but preserve unrelated manual field edits', async () => {
+  const original = order('1', { ...portalFields, order_status: 'approved', approved_job_id: 5, facility_name: 'Facility', facility_id: null });
+  const f = fixture({ orders: [original], jobs: [{ id: 5, ...portalFields, license_plate: 'STAFF PLATE', vehicle_color: 'Staff color',
+    submitted_by: 'Staff submitter', scheduled: '2026-10-03T14:45:00', complete: false, payment_status: 'unpaid', job_total: 999 }] });
+  const route = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/[id]/route.ts');
+  const edit = async change => route.PATCH(new Request('https://example.test', { method: 'PATCH', body: JSON.stringify({ ...f.tables.customer_orders[0], ...change }) }), { params: Promise.resolve({ id: '1' }) });
+  assert.equal((await edit({ contact_number: '2015559999' })).status, 200);
+  const job = f.tables.jobs[0];
+  assert.equal(job.submitted_by, 'Staff submitter'); assert.equal(job.license_plate, 'STAFF PLATE'); assert.equal(job.vehicle_color, 'Staff color');
+  assert.equal((await edit({ submitted_by: 'New submitter', tire_position: 'Both fronts', license_plate: '', vehicle_year: '2025', vehicle_make: 'GMC', vehicle_model: 'Savana', vehicle_color: 'Blue' })).status, 200);
+  assert.equal(job.submitted_by, 'New submitter'); assert.equal(job.tire_position, 'Both fronts'); assert.equal(job.license_plate, null);
+  for (const [field, value] of Object.entries({ vehicle_year: '2025', vehicle_make: 'GMC', vehicle_model: 'Savana', vehicle_color: 'Blue' })) assert.equal(job[field], value);
+  assert.equal(job.scheduled, '2026-10-03T14:45:00'); assert.equal(job.job_total, 999); assert.equal(job.payment_status, 'unpaid');
+});
+test('mapping changes retain portal authorization and completed/paid-order edit guards', async () => {
+  const denied = fixture({ authenticated: false }); assert.equal((await denied.approve(1)).status, 401); assert.equal(denied.insertAttempts, 0);
+  for (const guard of ['unauthorized', 'completed', 'paid']) {
+    const original = order('1', { ...portalFields, order_status: 'approved', approved_job_id: 5, payment_status: guard === 'paid' ? 'paid' : 'unpaid' });
+    const f = fixture({ orders: [original], jobs: [{ id: 5, complete: guard === 'completed', license_plate: 'MANUAL' }] });
+    const before = structuredClone(f.tables);
+    const route = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => guard !== 'unauthorized' } })('app/api/public/kingdom/orders/[id]/route.ts');
+    const res = await route.PATCH(new Request('https://example.test', { method: 'PATCH', body: JSON.stringify({ ...original, license_plate: 'NEW' }) }), { params: Promise.resolve({ id: '1' }) });
+    assert.equal(res.status, guard === 'unauthorized' ? 401 : 409); assert.deepEqual(f.tables, before);
+  }
 });
