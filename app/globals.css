@@ -240,7 +240,9 @@ body{
   .tire-receiving-label+.tire-receiving-label{break-before:page;page-break-before:always}
   .tire-receiving-label header{display:flex;align-items:center;justify-content:space-between;gap:.1in;border-bottom:3px solid #000;padding-bottom:.08in}
   .tire-receiving-label header strong{font-size:21pt;line-height:1}
-  .tire-receiving-label header span{max-width:48%;overflow-wrap:anywhere;padding:.06in .08in;background:#000;color:#fff;font-size:12pt;font-weight:900;text-align:center}
+  .tire-label-header-meta{display:grid;gap:.04in;max-width:48%;text-align:center;overflow-wrap:anywhere}
+  .tire-label-header-meta span{padding:.06in .08in;background:#000;color:#fff;font-size:12pt;font-weight:900}
+  .tire-label-header-meta b{font-size:11pt;line-height:1.1}
   .tire-label-job-number{display:grid;gap:.03in;padding:.1in 0;border-bottom:2px solid #000}
   .tire-label-job-number small,.tire-receiving-label small{font-size:8pt;font-weight:800;letter-spacing:.06em}
   .tire-label-job-number b{font-size:30pt;line-height:1.05;overflow-wrap:anywhere}

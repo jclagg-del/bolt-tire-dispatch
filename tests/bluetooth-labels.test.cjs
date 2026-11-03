@@ -7,6 +7,30 @@ mod._compile(ts.transpileModule(fs.readFileSync(path.join(__dirname,'../lib/tire
 const {tireLabelPdf,smoothPrintUrl,labelCount}=mod.exports;
 const job={id:'sample',jobNumber:'3097885',moNumber:'919205',customer:'Sample Fleet',facilityName:'North Facility',serviceType:'Delivery',tires:'GOODYEAR Assurance ComfortDrive',size:'235/40R18 95W XL',productNumber:'413134582',quantity:2,vehicle:'2017 Honda Civic - White',scheduled:'2026-10-08T16:00:00Z'};
 function content(doc,page){return page.node.Contents().asArray().map(ref=>Buffer.from(decodePDFRawStream(doc.context.lookup(ref)).decode()).toString()).join('\n');}
+test('job and MO numbers have matching large bold blocks, with label count in the header',async()=>{
+ const doc=await PDFDocument.load(await tireLabelPdf(job));
+ for(const [index,page] of doc.getPages().entries()){
+  const draws=[...content(doc,page).matchAll(/BT\s([\s\S]*?)ET/g)].map(m=>m[1]);
+  const drawFor=value=>draws.find(draw=>draw.includes(`<${Buffer.from(value).toString('hex').toUpperCase()}>`));
+  const jobDraw=drawFor(job.jobNumber),moDraw=drawFor(job.moNumber);
+  assert.match(jobDraw,/ 30 Tf/);assert.match(moDraw,/ 30 Tf/);
+  assert.match(jobDraw,/\/Helvetica-Bold-\d+ 30 Tf/);
+  assert.match(moDraw,/\/Helvetica-Bold-\d+ 30 Tf/);
+  assert.match(jobDraw,/1 0 0 1 14 336 Tm/);
+  assert.match(moDraw,/1 0 0 1 14 283 Tm/);
+  assert.match(drawFor(`${index+1} OF 2`),/1 0 0 1 172 386 Tm/);
+ }
+});
+test('missing and long MO references retain one page per tire and do not push contact fields off',async()=>{
+ for(const moNumber of [null,'906600','(188820) Sample technician with a longer reference']){
+  const doc=await PDFDocument.load(await tireLabelPdf({...job,moNumber,quantity:1,contactName:'Sample Person',phone:'555-0100'}));
+  assert.equal(doc.getPageCount(),1);
+  const stream=content(doc,doc.getPage(0));
+  const text=[...stream.matchAll(/<([0-9A-F]+)>\s*Tj/gi)].map(m=>Buffer.from(m[1],'hex').toString('latin1')).join(' ');
+  assert.ok(text.includes(moNumber || '-'));
+  assert.ok(text.includes('Sample Person'));assert.ok(text.includes('555-0100'));assert.ok(text.includes(job.vehicle));
+ }
+});
 test('PDF facility never substitutes the billing customer; contact remains separate',async()=>{
  for(const facilityName of ['North Facility',null,'   ']){
   const doc=await PDFDocument.load(await tireLabelPdf({...job,facilityName,contactName:'Sample Person'}));

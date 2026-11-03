@@ -46,13 +46,16 @@ test('real print engine keeps each whole label on one 4x6 page, including long v
           const box = el.getBoundingClientRect();
           const content = el.querySelector('.tire-label-content').getBoundingClientRect();
           const footer = el.querySelector('p').getBoundingClientRect();
-          return { height: box.height, bottom: box.bottom, right: box.right, contentBottom: content.bottom, footerBottom: footer.bottom, footerRight: footer.right };
+          const refs = [...el.querySelectorAll('.tire-label-job-number b')].map(ref => ({size:getComputedStyle(ref).fontSize,weight:getComputedStyle(ref).fontWeight}));
+          return { height: box.height, bottom: box.bottom, right: box.right, contentBottom: content.bottom, footerBottom: footer.bottom, footerRight: footer.right, refs };
         }));
         for (const g of geometry) {
           assert.ok(g.height < 5.7 * 96);
           assert.ok(g.contentBottom <= g.bottom + 1);
           assert.ok(g.footerBottom <= g.bottom + 1);
           assert.ok(g.footerRight <= g.right + 1);
+          assert.equal(g.refs.length, 2);
+          assert.deepEqual(g.refs[0], g.refs[1], 'job and MO must retain the same visual emphasis after fitting');
         }
         if (engine === chromium) {
           const bytes = await page.pdf({ preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false });

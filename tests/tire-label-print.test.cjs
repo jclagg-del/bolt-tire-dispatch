@@ -42,6 +42,14 @@ test('one, four and maximum label counts do not add spacer labels', () => {
     assert.equal((render(quantity).match(/<section /g) || []).length, count);
   }
 });
+test('browser labels give the job and MO equal styling and move the count to the header', () => {
+  const html = render();
+  assert.match(html, /class="tire-label-job-number"><small>JOB NUMBER<\/small><b>3097885<\/b>/);
+  assert.match(html, /class="tire-label-job-number"><small>MO NUMBER<\/small><b>919205<\/b>/);
+  assert.match(html, /<header>[\s\S]*?class="tire-label-header-meta"><span>DELIVERY<\/span><b>1 OF 2<\/b><\/div><\/header>/);
+  const css = fs.readFileSync(require.resolve('../app/globals.css'), 'utf8');
+  assert.match(css, /\.tire-label-job-number b\{font-size:30pt/);
+});
 test('labels show only the destination facility, never the billing customer fallback', () => {
   const html = render(2, { customer: 'Kingdom Support Services', facilityName: ' Wallkill ' });
   assert.match(html, /<small>FACILITY<\/small><strong>Wallkill<\/strong>/);

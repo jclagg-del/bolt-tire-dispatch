@@ -49,16 +49,18 @@ export async function tireLabelPdf(job: TireLabelJob, scalePercent = 80): Promis
     const rule = (y: number) => page.drawLine({start:{x:14,y},end:{x:274,y},thickness:0.7});
     const caption = (text: string, x: number, y: number) => page.drawText(text,{x,y,size:7,font:regular});
     block(page,"BOLT TIRE",bold,14,414,148,25,20);
-    block(page,String(job.serviceType || "Tire Service").toUpperCase(),bold,172,414,102,25,10);
+    block(page,String(job.serviceType || "Tire Service").toUpperCase(),bold,172,420,102,22,10);
+    block(page,`${index+1} OF ${quantity}`,bold,172,397,102,14,11);
     rule(383);
     caption("JOB NUMBER",14,371);
     block(page,job.jobNumber || job.id,bold,14,366,260,42,30);
-    caption("MO NUMBER",14,314); caption("LABEL",172,314);
-    block(page,job.moNumber,bold,14,309,148,30,12);
-    block(page,`${index+1} OF ${quantity}`,bold,172,309,102,30,14);
-    rule(278); caption("TIRE",14,267);
-    block(page,[job.tires,job.size].filter(Boolean).join(" - ") || "Tire information not entered",bold,14,262,260,47,16,9);
-    block(page,`Part #: ${job.productNumber || "Not provided"}`,regular,14,213,260,18,10);
+    // Give both references a full-width, equally prominent block. Long values
+    // can still wrap/shrink inside their own box without pushing the footer.
+    caption("MO NUMBER",14,318);
+    block(page,job.moNumber,bold,14,313,260,42,30);
+    rule(269); caption("TIRE",14,258);
+    block(page,[job.tires,job.size].filter(Boolean).join(" - ") || "Tire information not entered",bold,14,253,260,46,16,9);
+    block(page,`Part #: ${job.productNumber || "Not provided"}`,regular,14,205,260,14,10);
     rule(190);
     caption("FACILITY",14,179); caption("SERVICE DATE",172,179);
     block(page,job.facilityName?.trim() || "Facility not set",bold,14,175,148,28,12);

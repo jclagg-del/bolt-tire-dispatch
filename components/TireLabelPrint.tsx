@@ -70,15 +70,18 @@ export default function TireLabelPrint({ job }: { job: TireLabelJob | null }) {
           <div className="tire-label-content">
           <header>
             <strong>BOLT TIRE</strong>
-            <span>{service}</span>
+            <div className="tire-label-header-meta">
+              <span>{service}</span>
+              <b>{index + 1} OF {quantity}</b>
+            </div>
           </header>
           <div className="tire-label-job-number">
             <small>JOB NUMBER</small>
             <b>{job.jobNumber || String(job.id).slice(0, 12)}</b>
           </div>
-          <div className="tire-label-grid">
-            <div><small>MO NUMBER</small><strong>{job.moNumber || "—"}</strong></div>
-            <div><small>LABEL</small><strong>{index + 1} OF {quantity}</strong></div>
+          <div className="tire-label-job-number">
+            <small>MO NUMBER</small>
+            <b>{job.moNumber || "—"}</b>
           </div>
           <div className="tire-label-tire">
             <small>TIRE</small>
