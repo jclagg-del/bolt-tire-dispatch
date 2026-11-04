@@ -17,13 +17,13 @@ function loader(stubs = {}) {
 const helpers = loader()('lib/staff-order-edit.ts');
 const base = { id: 1, customer: 'Kingdom Support Services', goodyear_order: false, service_method: 'delivery', submitted_by: 'Dispatcher', contact_name: 'Contact', contact_number: '5550100', facility_id: 1, facility_name: 'Example Facility', address: 'Example Address', requested_date: '2026-11-05', requested_time: '09:30:00', vehicle_year: '2024', vehicle_make: 'Ford', vehicle_model: 'Transit', vehicle_color: 'White', license_plate: 'ABC123', job_number: '001234', mo_number: '005678', tire_position: 'Left rear', qty: 4, tire_size: '235/65R16', tire_product_number: '123456', notes: 'Original notes', order_status: 'new', approved_job_id: null, reviewed_at: null, tires_ordered: false, source_quote_id: null, payment_status: 'unpaid', amount_paid: null, tire_items: null };
 const context = { params: Promise.resolve({ id: '1' }) };
-function fixture({ role = 'admin', setup = false, row = {}, purchase = null, rpcError = null, queryError = null } = {}) {
+function fixture({ role = 'admin', setup = false, missingStaff = false, row = {}, purchase = null, rpcError = null, queryError = null } = {}) {
   const order = { ...base, ...row }, calls = [];
   const facilities = [{ id: 1, name: 'Example Facility', address: 'Example Address' }, { id: 2, name: 'Second Facility', address: 'Second Address' }];
   const admin = { from(table) {
     const filters = {};
     const run = async single => {
-      let data = table === 'staff_security' ? { role, password_change_required: setup } : table === 'customer_orders' ? structuredClone(order) : table === 'supplier_orders' ? purchase : single ? facilities.find(item => item.id === filters.id) : facilities;
+      let data = table === 'staff_security' ? (missingStaff ? null : { role, password_change_required: setup }) : table === 'customer_orders' ? structuredClone(order) : table === 'supplier_orders' ? purchase : single ? facilities.find(item => item.id === filters.id) : facilities;
       return { data, error: table === queryError ? { message: 'failure' } : null };
     };
     const chain = { select() { return chain; }, eq(k, v) { filters[k] = v; return chain; }, order() { return chain; }, maybeSingle: () => run(true), then: (yes, no) => run(false).then(yes, no) };
@@ -36,14 +36,39 @@ function fixture({ role = 'admin', setup = false, row = {}, purchase = null, rpc
   return { route, calls, order, facilities, get, patch, save };
 }
 
-test('staff edit GET/PATCH require fully set-up office/admin, not portal PIN or technician access', async () => {
-  for (const config of [{ role: null }, { role: 'technician' }, { role: 'customer' }, { setup: true }, { queryError: 'staff_security' }]) {
+test('staff edit GET/PATCH require a registered employee with completed setup, not portal or anonymous access', async () => {
+  for (const config of [{ role: null }, { role: 'customer' }, { role: '' }, { missingStaff: true }, { setup: true }, { role: 'technician', setup: true }, { setup: null }]) {
     const f = fixture(config);
     assert.equal((await f.get()).status, config.role === null ? 401 : 403);
     assert.equal((await f.patch({})).status, config.role === null ? 401 : 403);
     assert.equal(f.calls.length, 0);
   }
-  for (const role of ['admin', 'office']) assert.equal((await fixture({ role }).get()).status, 200);
+  for (const role of ['admin', 'office', 'technician']) {
+    const f = fixture({ role });
+    assert.equal((await f.get()).status, 200);
+    assert.equal((await f.save({ notes: 'Employee correction' })).status, 200);
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].args.p_changes.notes, 'Employee correction');
+  }
+});
+test('employee lookup errors are not misreported as role restrictions and never permit a write', async () => {
+  const f = fixture({ role: 'technician', queryError: 'staff_security' });
+  const response = await f.get();
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).error, /could not be verified/);
+  assert.equal((await f.patch({})).status, 503);
+  assert.equal(f.calls.length, 0);
+});
+test('technician order editing retains accepted, paid, stale and supplier purchase protections', async () => {
+  for (const row of [{ order_status: 'approved' }, { approved_job_id: 5 }, { payment_status: 'paid' }, { source_quote_id: 'quote' }]) {
+    const f = fixture({ role: 'technician', row });
+    assert.equal((await f.get()).status, 409); assert.equal((await f.patch({})).status, 409); assert.equal(f.calls.length, 0);
+  }
+  const purchased = fixture({ role: 'technician', purchase: { status: 'placed' } });
+  assert.equal((await purchased.save({ qty: 2 })).status, 409); assert.equal(purchased.calls.length, 0);
+  assert.equal((await purchased.save({ contact_name: 'Correct contact' })).status, 200);
+  const stale = fixture({ role: 'technician' }); const opened = await (await stale.get()).json(); stale.order.notes = 'Newer edit';
+  assert.equal((await stale.patch({ version: opened.version, changes: opened.order })).status, 409); assert.equal(stale.calls.length, 0);
 });
 test('accepted, claimed, rejected, cancelled, paid and nonportal orders cannot be edited', async () => {
   for (const row of [{ order_status: 'approved' }, { approved_job_id: 5 }, { order_status: 'rejected' }, { order_status: 'cancellation_requested' }, { payment_status: 'paid' }, { amount_paid: 1 }, { source_quote_id: 'quote' }, { customer: 'Website buyer' }, { tire_items: [{ quantity: 4 }] }]) {

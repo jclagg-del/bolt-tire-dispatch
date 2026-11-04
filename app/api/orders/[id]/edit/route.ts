@@ -15,7 +15,11 @@ async function load(request: Request, context: Context) {
   if (!user) throw new EditError("Please sign in again.", 401);
   const admin = createAdminClient();
   const staff = await admin.from("staff_security").select("role,password_change_required").eq("user_id", user.id).maybeSingle();
-  if (staff.error || !["admin", "office"].includes(staff.data?.role || "") || staff.data?.password_change_required) throw new EditError("Office or admin access with completed password setup is required.", 403);
+  if (staff.error) throw new EditError("Employee access could not be verified. Reload the order and try again.", 503);
+  // All registered employees may edit pending fleet orders, including technicians.
+  // A portal PIN or an authenticated account without a staff record is not enough.
+  if (!["admin", "office", "technician"].includes(staff.data?.role || "")) throw new EditError("Sign in with an employee account to edit orders.", 403);
+  if (staff.data?.password_change_required !== false) throw new EditError("Complete your password setup before editing orders.", 403);
   const { id } = await context.params;
   if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) throw new EditError("Invalid order number.");
   const result = await admin.from("customer_orders").select("*").eq("id", Number(id)).maybeSingle();
