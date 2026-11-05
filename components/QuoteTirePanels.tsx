@@ -1,4 +1,5 @@
 import { quoteOptionSize } from "@/lib/quote-tire-size";
+import { tireManufacturerName } from "@/lib/tire-manufacturer";
 type TireOption = {
   tire_size?: string | null;
   brand?: string | null; model?: string | null; image_url?: string | null;
@@ -15,6 +16,8 @@ export default function QuoteTirePanels({ q, option, creditPricing = false }: {
   q: Fitment; option: TireOption; creditPricing?: boolean;
 }) {
   const split = hasSplitFitment(q, option);
+  const brand = tireManufacturerName(option.brand);
+  const rearBrand = tireManufacturerName(option.rear_brand) || brand;
   return (
     <div className={`quote-public-tires ${split ? "split" : ""}`}>
       <div className="quote-public-tire">
@@ -23,12 +26,12 @@ export default function QuoteTirePanels({ q, option, creditPricing = false }: {
           <img
             className="quote-tire-image"
             src={option.image_url}
-            alt={`${option.brand} ${option.model}`}
+            alt={`${brand} ${option.model}`}
           />
         ) : (
           <div className="quote-image-placeholder">Tire image</div>
         )}
-        <h2>{option.brand}</h2>
+        <h2>{brand}</h2>
         <h3>{option.model}</h3>
         <p className="quote-public-fitment">
           {quoteOptionSize(q, option) || "Size TBD"} · Qty {q.quantity}
@@ -44,12 +47,12 @@ export default function QuoteTirePanels({ q, option, creditPricing = false }: {
             <img
               className="quote-tire-image"
               src={option.rear_image_url}
-              alt={`${option.rear_brand || option.brand} ${option.rear_model || "Rear tire"}`}
+              alt={`${rearBrand} ${option.rear_model || "Rear tire"}`}
             />
           ) : (
             <div className="quote-image-placeholder">Rear tire image</div>
           )}
-          <h2>{option.rear_brand || option.brand || "Rear tire"}</h2>
+          <h2>{rearBrand || "Rear tire"}</h2>
           <h3>{option.rear_model || "Model not specified"}</h3>
           <p className="quote-public-fitment">
             {q.rear_tire_size || "Size TBD"} · Qty {q.rear_quantity || 0}

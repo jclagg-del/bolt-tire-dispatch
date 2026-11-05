@@ -1,6 +1,7 @@
 import "server-only";
 import { catalogCategory, catalogFlag, normalizeTireBadges } from "./tire-badges";
 import { normalizeTireProductName } from "./tire-product-name";
+import { tireManufacturerName } from "./tire-manufacturer";
 import { tireLibrarySizeQuery } from "./tire-library-size";
 import { firstHealthyTireImage, rankTireImages, tireImageBrand, tireImageKey, tireImageModel } from "./tire-image-health";
 
@@ -212,7 +213,7 @@ function normalize(value: string | null | undefined) {
 }
 
 function normalizeBrand(value: string | null | undefined) {
-  return normalize(value)
+  return normalize(tireManufacturerName(value))
     .replace(/(?:tires?|tyres?)$/, "")
     .replace(/(?:rubber|company|corp|corporation|incorporated|inc)$/, "");
 }
@@ -348,6 +349,7 @@ async function recoverTireImages<T extends EnrichableTire>(products: T[], candid
 
 export async function enrichWithTireLibrary<T extends EnrichableTire>(products: T[]): Promise<T[]> {
   if (!products.length) return products;
+  products = products.map(product => ({ ...product, brand: tireManufacturerName(product.brand) }));
   if (!apiKey()) return recoverTireImages(products.map(normalizeCatalogTire), new Map(), false);
   try {
     const supplierImageByPattern = new Map<string, string>();
@@ -565,7 +567,7 @@ export async function tireLibraryTireDetails(id: number) {
   ]);
   return {
     id: tire.id,
-    brand: tire.tire_make?.name || tire.make_name || "",
+    brand: tireManufacturerName(tire.tire_make?.name || tire.make_name),
     model: tire.tire_model?.name || tire.model_name || "",
     category: tire.category || "",
     season: tire.season || "",

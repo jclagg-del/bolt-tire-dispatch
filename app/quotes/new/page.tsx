@@ -11,6 +11,7 @@ import QuoteCustomerInput from "@/components/QuoteCustomerInput";
 import AdditionalItemsEditor from "@/components/AdditionalItemsEditor";
 import QuoteTirePhoto from "@/components/QuoteTirePhoto";
 import { quoteOptionSize } from "@/lib/quote-tire-size";
+import { tireManufacturerName } from "@/lib/tire-manufacturer";
 import { AdditionalItem, additionalItemsError } from "@/lib/additional-items";
 import { changeQuoteCustomerName, QuoteCustomer } from "@/lib/quote-customer";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
@@ -245,7 +246,7 @@ export default function NewQuotePage() {
     savedQuoteId.current = quote.id;
     if (editId) quoteVersion.current = quote.updated_at;
     const optionValues = (option: QuoteOption) => ({
-      quote_id: quote.id, tire_size: quoteOptionSize(form, option) || null, tier: option.tier, brand: option.brand.trim(), model: option.model.trim(),
+      quote_id: quote.id, tire_size: quoteOptionSize(form, option) || null, tier: option.tier, brand: tireManufacturerName(option.brand), model: option.model.trim(),
       image_url: option.image_url.trim() || null, price_per_tire: Number(option.price_per_tire) || 0,
       warranty_miles: option.warranty_miles ? Number(option.warranty_miles) : null, tire_type: option.tire_type.trim() || null,
       load_speed_rating: option.load_speed_rating.trim() || null, snow_rating: option.snow_rating.trim() || null,
@@ -253,7 +254,7 @@ export default function NewQuotePage() {
       supplier: option.supplier || null, supplier_product_id: option.supplier_product_id || null,
       manufacturer_product_id: option.manufacturer_product_id || null, wholesale_cost: option.wholesale_cost == null ? null : Number(option.wholesale_cost),
       supplier_availability: option.supplier_availability || null, recommended: option.recommended, sort_order: option.sort_order,
-      rear_brand: option.rear_brand?.trim() || null, rear_model: option.rear_model?.trim() || null,
+      rear_brand: tireManufacturerName(option.rear_brand) || null, rear_model: option.rear_model?.trim() || null,
       rear_image_url: option.rear_image_url?.trim() || null, rear_price_per_tire: option.rear_price_per_tire ? Number(option.rear_price_per_tire) : null,
       rear_supplier: option.rear_supplier || null, rear_supplier_product_id: option.rear_supplier_product_id || null,
       rear_manufacturer_product_id: option.rear_manufacturer_product_id || null, rear_wholesale_cost: option.rear_wholesale_cost == null ? null : Number(option.rear_wholesale_cost),
