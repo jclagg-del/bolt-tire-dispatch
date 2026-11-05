@@ -69,9 +69,23 @@ type Quote = {
   quote_options: Option[];
 };
 function QuoteTirePanels({ q, option }: { q: Quote; option: Option }) {
-  const creditPricing = q.payment_pricing_version === 1 && q.payment_status !== "paid";
-  const displayOption = creditPricing ? quotePaymentPrice(q, option, "regular").option : option;
-  return <TirePanels q={q} option={{ ...option, price_per_tire: displayOption.price_per_tire, rear_price_per_tire: displayOption.rear_price_per_tire }} creditPricing={creditPricing} />;
+  // Unpaid quotes retain the saved cash prices; paid quotes arrive with their
+  // settled snapshot. Credit pricing belongs in the total, not each tire card.
+  return <TirePanels q={q} option={option} />;
+}
+function paymentTotalCents(q: Quote, option: Option, pricing: "regular" | "discounted", beforeTax = false) {
+  const price = quotePaymentPrice(q, option, pricing);
+  return price.subtotalCents + (beforeTax || q.tax_exempt ? 0 : Math.round(price.taxableCents * Number(q.sales_tax_rate) / 100));
+}
+function CreditTotalDetails({ q, option, beforeTax = false }: { q: Quote; option: Option; beforeTax?: boolean }) {
+  const cash = paymentTotalCents(q, option, "discounted", beforeTax);
+  const credit = paymentTotalCents(q, option, "regular", beforeTax);
+  return (
+    <details style={{ fontSize: 14, color: "#475569" }}>
+      <summary style={{ cursor: "pointer" }}>Credit-card {beforeTax ? "subtotal before tax" : "total"}: ${(credit / 100).toFixed(2)}</summary>
+      <p>Credit-card adjustment: +${((credit - cash) / 100).toFixed(2)}{!beforeTax && !q.tax_exempt ? " (including additional estimated tax)" : ""}. Cash, ACH, debit and prepaid use the cash price.</p>
+    </details>
+  );
 }
 const tireSummary = (q: Quote) =>
   [
@@ -212,7 +226,7 @@ export default function PublicQuote() {
     q.quote_options[0];
   const options = (purchase || paid) && chosen ? [chosen] : q.quote_options;
   const creditPricing = q.payment_pricing_version === 1 && !paid;
-  const displayFees = creditPricing && options[0] ? quotePaymentPrice(q, options[0], "regular").quote : q;
+  const displayFees = q;
   const information = !paid && q.purchase_source !== "website" ? <QuoteCheckoutInformation value={details} onChange={value => { setDetails(value); setError(""); }} disabled={Boolean(paying || checkout)} /> : null;
   if (purchase)
     return (
@@ -260,6 +274,7 @@ export default function PublicQuote() {
                   <dt>Installation</dt>
                   <dd>${Number(q.installation_cost).toFixed(2)}</dd>
                 </div>
+                {Number(q.service_call_fee) > 0 ? <div><dt>Service call</dt><dd>${Number(q.service_call_fee).toFixed(2)}</dd></div> : null}
                 {Number(q.disposal_fee) > 0 ? (
                   <div>
                     <dt>Disposal</dt>
@@ -272,11 +287,11 @@ export default function PublicQuote() {
                 </div>
                 {(q.additional_items || []).map((item, index) => <div key={index}><dt>{item.description}<small style={{ display: "block" }}>{item.quantity} × ${item.unit_price.toFixed(2)}{!item.taxable ? " · Non-taxable" : ""}</small></dt><dd>${additionalItemAmount(item).toFixed(2)}</dd></div>)}
                 <div className="total">
-                  <dt>{q.payment_pricing_version === 1 ? "ACH / debit subtotal before sales tax" : "Subtotal before sales tax"}</dt>
-                  <dd>${total(q, chosen, false).toFixed(2)}</dd>
+                  <dt>{creditPricing ? "Cash subtotal before sales tax" : "Subtotal before sales tax"}</dt>
+                  <dd>${(chosen ? creditPricing ? paymentTotalCents(q, chosen, "discounted", true) / 100 : total(q, chosen, false) : 0).toFixed(2)}</dd>
                 </div>
               </dl>
-              {q.payment_pricing_version === 1 && <p><strong>Credit subtotal: ${(quotePaymentPrice(q, chosen, "regular").subtotalCents / 100).toFixed(2)}</strong><br />ACH/debit/prepaid subtotal: ${(quotePaymentPrice(q, chosen, "discounted").subtotalCents / 100).toFixed(2)}</p>}
+              {creditPricing && chosen ? <CreditTotalDetails q={q} option={chosen} beforeTax /> : null}
               <small>
                 {q.tax_exempt ? "Your approved sales-tax exemption applies to tires and services." : q.payment_pricing_version === 1 ? "Stripe calculates final sales tax from your confirmed service / delivery address." : "Stripe calculates final sales tax from your billing address."}
               </small>
@@ -386,9 +401,13 @@ export default function PublicQuote() {
               <p className="quote-highlights">{o.highlights}</p>
             ) : null}
             <div className="quote-installed-total">
-              <span>{paid && q.amount_paid != null ? "Total paid" : creditPricing ? "Estimated total · Credit" : purchase ? "Order total" : "Installed total"}</span>
-              <strong>${(paid && q.amount_paid != null ? Number(q.amount_paid) : q.payment_pricing_version === 1 && !paid ? (() => { const p=quotePaymentPrice(q,o,"regular"); return (p.subtotalCents+(q.tax_exempt?0:Math.round(p.taxableCents*Number(q.sales_tax_rate)/100)))/100; })() : total(q, o)).toFixed(2)}</strong>
+              <span>{paid && q.amount_paid != null ? "Total paid" : creditPricing ? "Cash total" : purchase ? "Order total" : "Installed total"}</span>
+              <strong>${(paid && q.amount_paid != null ? Number(q.amount_paid) : creditPricing ? paymentTotalCents(q, o, "discounted") / 100 : total(q, o)).toFixed(2)}</strong>
             </div>
+            {creditPricing ? <>
+              <small>{q.tax_exempt ? "Sales-tax exemption applied." : "Includes estimated sales tax."}</small>
+              <CreditTotalDetails q={q} option={o} />
+            </> : null}
             <button
               className="quote-select-button"
               disabled={paid || Boolean(paying) || Boolean(checkout) || Boolean(search.get("payment") && q.payment_pricing_version !== 1)}
@@ -409,7 +428,7 @@ export default function PublicQuote() {
       </section>
       <section className="quote-form-card">
         <h2>{purchase ? "Order details" : "Included in every option"}</h2>
-        {creditPricing && <p>Prices shown are credit-card prices. Lower ACH, debit and prepaid prices are available at payment. Final tax and total are confirmed before you pay.</p>}
+        {creditPricing && <p>Tire and service prices shown are cash prices, also available with ACH, debit or prepaid. Credit-card pricing is shown separately with each total. Final tax and payment total are confirmed before you pay.</p>}
         {!paid && search.get("payment") && q.payment_pricing_version !== 1 && <p role="status">Checking payment confirmation. A submitted bank transfer may still be pending. Please do not submit another payment.</p>}
         <AdditionalItemsSummary items={displayFees.additional_items} />
         {q.discount_code_label && <p>Discount code {q.discount_code_label}: ${Number(q.discount_amount || 0).toFixed(2)} tire savings included in the prices above.{q.discount_organization ? ` Organization: ${q.discount_organization}.` : ""}</p>}

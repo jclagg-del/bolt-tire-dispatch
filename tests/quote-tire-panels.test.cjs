@@ -47,12 +47,11 @@ test('rear size, quantity or photo independently retain the rear panel even with
   assert.ok(html.includes('Rear tire image'));
   assert.ok(!html.includes('/rear-test.jpg'));
 });
-test('public panels preserve regular credit and paid pricing for each axle', () => {
-  const { quotePaymentPrice } = loader()('lib/quote-payment-pricing');
-  const regular = quotePaymentPrice(quote, option, 'regular').option;
+test('public panels show saved cash prices for each axle and leave settled paid prices alone', () => {
   const unpaid = page({ ...quote, payment_pricing_version: 1 }, true);
-  for (const price of [regular.price_per_tire, regular.rear_price_per_tire]) assert.ok(unpaid.includes(`$${price.toFixed(2)}`));
-  assert.ok(unpaid.includes('per tire · Credit'));
+  for (const price of [option.price_per_tire, option.rear_price_per_tire]) assert.ok(unpaid.includes(`$${price.toFixed(2)}`));
+  assert.ok(!unpaid.includes('per tire · Credit'));
+  assert.ok(unpaid.includes('Credit-card total'));
   const paid = page({ ...quote, payment_pricing_version: 1, payment_status: 'paid', selected_option_id: option.id }, true);
   assert.ok(paid.includes('$291.00')); assert.ok(paid.includes('$885.00'));
   assert.ok(!paid.includes('per tire · Credit'));
