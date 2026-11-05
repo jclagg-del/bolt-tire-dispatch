@@ -68,6 +68,19 @@ function fixture({funding='credit',tax=100,active=null,tokenPatch={},rpcError=nu
   const service=loader({'@/lib/supabase/admin':{},'@/lib/discounts-server':{lookupDiscount:async()=>null},'@/lib/stripe-payments':{stripePaymentRequest:request,StripePaymentError}})('lib/quote-payment-checkout');
   return{service,admin,calls,writes,token,get attempt(){return a}};
 }
+test('conversion never claims payment; paid, refunded and converted blocks are distinct and do not charge',async()=>{
+  const cases = [
+    [{ converted_job_id: 438, payment_status: 'unpaid' }, /converted to a job.*does not mean it has been paid/i],
+    [{ converted_job_id: 438, payment_status: 'pending' }, /converted to a job.*does not mean it has been paid/i],
+    [{ converted_job_id: 438, payment_status: 'paid' }, /Payment has already been received/],
+    [{ converted_job_id: 438, payment_status: 'refunded' }, /payment was refunded/],
+  ];
+  for (const [patch, message] of cases) {
+    const f=fixture();
+    await assert.rejects(f.service.reviewQuotePayment(f.admin,{...q,...patch},'option','ctoken_test'),message);
+    assert.equal(f.calls.length,0); assert.equal(f.writes.length,0);
+  }
+});
 test('review trusts Stripe funding and saved prices, calculates tax, and stores a bound snapshot without charging',async()=>{
   for(const funding of ['credit','debit','prepaid','us_bank_account']) {
     const f=fixture({funding});const result=await f.service.reviewQuotePayment(f.admin,q,'option','ctoken_test');

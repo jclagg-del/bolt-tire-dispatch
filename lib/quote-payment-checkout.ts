@@ -19,7 +19,9 @@ export type PaymentAttempt = {
 };
 export async function validatePaymentQuote(q: Record<string, any>) {
   if (q.payment_pricing_version !== 1 || q.stripe_checkout_session_id) throw new Error("This quote uses its original payment checkout.");
-  if (["paid", "refunded"].includes(q.payment_status) || q.converted_job_id) throw new Error("This quote is already paid or converted.");
+  if (q.payment_status === "paid") throw new Error("Payment has already been received for this quote.");
+  if (q.payment_status === "refunded") throw new Error("This quote’s payment was refunded. Contact Bolt Tire before making another payment.");
+  if (q.converted_job_id) throw new Error("This quote has been converted to a job. That does not mean it has been paid. Contact Bolt Tire to arrange payment for the job.");
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   if (q.expires_at && q.expires_at < today) throw new Error("This quote has expired.");
   const error = q.purchase_source === "website" ? shopCustomerError({ ...q, name: q.contact_name || q.customer }) : quoteCheckoutDetailsError(quoteCheckoutDetails(q));

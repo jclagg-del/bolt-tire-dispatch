@@ -109,6 +109,17 @@ test('normal and direct sent-quote pages keep the editable form visible after va
     assert.match(html, /value="test@example.com"/);
   }
 });
+test('converted customer quote distinguishes unpaid, pending, refunded and actually paid on both layouts', () => {
+  for (const purchase of [false,true]) for (const payment_status of ['unpaid','pending','refunded','paid']) {
+    let index=0;
+    const row={...quote,...details,converted_job_id:438,payment_status,amount_paid:payment_status==='paid'?530:null};
+    const state=[row,'',null,null,details];
+    const Page=loader({react:{...React,useEffect(){},useState:initial=>[state[index++]??initial,()=>{}]},'next/navigation':{useParams:()=>({token:'token'}),useSearchParams:()=>new URLSearchParams(purchase?'purchase=1':'')},'@/components/EmbeddedStripeCheckout':()=>null})('app/q/[token]/page.tsx').default;
+    const html=renderToStaticMarkup(React.createElement(Page));
+    if(payment_status==='paid'){assert.match(html,/Payment received/);assert.doesNotMatch(html,/no payment recorded|Creating a job does not mark it paid/);}
+    else {assert.match(html,/Your job quote/);assert.match(html,/Creating a job does not mark it paid/);assert.doesNotMatch(html,/Payment received|Your paid order is confirmed|Total paid/);assert.match(html,payment_status==='pending'?/payment pending/:payment_status==='refunded'?/payment refunded/:/no payment recorded on this quote/);}
+  }
+});
 test('staff quote displays requested date and retains it when converting to a job', () => {
   let index = 0; const row = { ...quote, ...details };
   const Page = loader({ react: { ...React, useEffect() {}, useState: initial => [index++ === 0 ? row : index === 2 ? false : initial, () => {}] }, 'next/navigation': { usePathname: () => '/quotes/quote', useParams: () => ({ id: 'quote' }), useRouter: () => ({}) }, '@/lib/supabase': { supabase: {} }, '@/components/AppHeader': () => null })('app/quotes/[id]/page.tsx').default;

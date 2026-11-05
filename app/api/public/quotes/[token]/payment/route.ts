@@ -21,7 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       if (active.error) throw new Error("Payment status could not be checked.");
       return NextResponse.json({ paid: quote.payment_status === "paid", payment: active.data ? paymentReview(active.data) : null }, { headers: { "Cache-Control": "no-store" } });
     }
-    if (["paid", "refunded"].includes(quote.payment_status)) return NextResponse.json({ error: "This quote has already been paid." }, { status: 409 });
+    if (quote.payment_status === "paid") return NextResponse.json({ error: "Payment has already been received for this quote." }, { status: 409 });
+    if (quote.payment_status === "refunded") return NextResponse.json({ error: "This quote’s payment was refunded. Contact Bolt Tire before making another payment." }, { status: 409 });
     if (body.action === "review") return NextResponse.json(await reviewQuotePayment(admin, quote, String(body.optionId || ""), String(body.confirmationToken || ""), body.serviceAddress));
     if (body.action === "confirm") {
       if (!/^[0-9a-f-]{36}$/i.test(body.reviewId || "")) throw new Error("Review the payment first.");

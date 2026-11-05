@@ -61,6 +61,7 @@ type Quote = {
   selected_option_id: string | null;
   expires_at: string | null;
   payment_status: string;
+  converted_job_id?: string | number | null;
   amount_paid: number | null;
   stripe_sales_tax_amount?: number | null;
   requested_date: string | null;
@@ -199,6 +200,13 @@ export default function PublicQuote() {
     );
   // A return URL is not proof of payment, especially for delayed ACH payments.
   const paid = q.payment_status === "paid";
+  const jobCreated = Boolean(q.converted_job_id);
+  const jobPaymentNotice = jobCreated && !paid ? (
+    <div role="status" className="quote-message">
+      <strong>Job created — {q.payment_status === "pending" ? "payment pending" : q.payment_status === "refunded" ? "payment refunded" : "no payment recorded on this quote"}.</strong>
+      <p>Creating a job does not mark it paid. Contact Bolt Tire if you need help with payment.</p>
+    </div>
+  ) : null;
   const chosen =
     q.quote_options.find((o) => o.id === q.selected_option_id) ||
     q.quote_options[0];
@@ -214,7 +222,7 @@ export default function PublicQuote() {
           <img src="/bolt-logo.png" alt="Bolt Tire" />
           <div>
             <span>SECURE CHECKOUT</span>
-            <h1>{paid ? "Payment received" : "Complete your purchase"}</h1>
+            <h1>{paid ? "Payment received" : jobCreated ? "Your job quote" : "Complete your purchase"}</h1>
             <p>
               {[q.vehicle, tireSummary(q)]
                 .filter(Boolean)
@@ -222,6 +230,7 @@ export default function PublicQuote() {
             </p>
           </div>
         </header>
+        {jobPaymentNotice}
         {information}
         {error && <div role="alert" className="quote-error">{error}</div>}
         {!paid && search.get("payment") && q.payment_pricing_version !== 1 && <p role="status" className="quote-message">Checking payment confirmation. A submitted bank transfer may still be pending. Please do not submit another payment.</p>}
@@ -304,6 +313,8 @@ export default function PublicQuote() {
           <h1>
             {paid
               ? "Payment received"
+              : jobCreated
+                ? "Your job quote"
               : purchase
                 ? "Review your order"
                 : "Choose your tire"}
@@ -315,6 +326,7 @@ export default function PublicQuote() {
           </p>
         </div>
       </header>
+      {jobPaymentNotice}
       {information}
       {error && <div role="alert" className="quote-error">{error}</div>}
       {paid ? (
