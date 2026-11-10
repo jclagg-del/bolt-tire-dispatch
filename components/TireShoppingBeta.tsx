@@ -16,7 +16,8 @@ import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 import { quoteShopKey, applyQuoteShopSelection, matchesQuoteSnapshot, singleSizeQuoteDraft, type QuoteShopDraft } from "@/lib/quote-shop-edit";
-import { tireShopSizeEntry } from "@/lib/tire-shop-entry";
+import { tireShopSizeEntry, tireShopSource, type TireShopSource } from "@/lib/tire-shop-entry";
+import CustomerOrderPurchase, { purchaseApi, type PurchaseOrder, type ShopSelection } from "@/components/CustomerOrderPurchase";
 
 type Product = {
   quoteOptionKey?: string;
@@ -205,6 +206,11 @@ export default function TireShoppingBeta({
   const [quoteEditError, setQuoteEditError] = useState("");
   const [quoteEditAxle, setQuoteEditAxle] = useState<"front" | "rear">("front");
   const [fromOrder, setFromOrder] = useState(false);
+  const [linkedSource, setLinkedSource] = useState<TireShopSource | null>(null);
+  const [linkedRequested, setLinkedRequested] = useState(false);
+  const [linkedBusy, setLinkedBusy] = useState(false);
+  const [linkedMessage, setLinkedMessage] = useState("");
+  const [linkedPurchase, setLinkedPurchase] = useState<{ order: PurchaseOrder; selection: ShopSelection; supplier: "ATD" | "USAF" } | null>(null);
   useEffect(() => {
     if (!internal) return;
     const quoteId = new URLSearchParams(window.location.search).get("quote");
@@ -219,6 +225,9 @@ export default function TireShoppingBeta({
     }
     const entry = tireShopSizeEntry(window.location.search);
     if (entry) {
+      const params = new URLSearchParams(window.location.search);
+      setLinkedRequested(params.has("jobId") || params.has("orderId"));
+      setLinkedSource(tireShopSource(window.location.search));
       setQuery(entry.size); setQuantity(entry.quantity); setMode("size"); setFromOrder(entry.fromOrder);
       setLoading(true); setSearched(true); setError("");
       let active = true;
@@ -325,6 +334,26 @@ export default function TireShoppingBeta({
     } finally {
       setLoading(false);
     }
+  }
+  async function orderSelectedTire(tire: Product, count: number) {
+    if (!linkedRequested) {
+      if (tire.supplier === "USAF") { setOrderQuantity(count); setUsafOrderProduct(tire); }
+      else beginOrder(tire, count);
+      return;
+    }
+    if (linkedBusy) return;
+    if (!linkedSource) { setLinkedMessage("This job/order link is invalid. Return to its card and reopen Tire Shop."); return; }
+    setLinkedBusy(true); setLinkedMessage("");
+    try {
+      const result = await purchaseApi({ action: "context", ...linkedSource });
+      if (result.completed) { setLinkedMessage(`Already purchased: ${result.completed.confirmation}. Do not order again.${result.warning ? " " + result.warning : ""}`); return; }
+      const order: PurchaseOrder = result.order;
+      if (order.tire_product_number?.trim() || order.tire_size !== query || order.qty !== count) throw new Error("The original size, quantity or part has changed. Return to the original card and reopen Tire Shop.");
+      if (!order.job_number?.trim()) throw new Error("Enter and save the job / PO number on the original card before purchasing, then try again.");
+      if (!["USAF", "ATD"].includes(tire.supplier || "")) throw new Error("Choose a connected ordering supplier.");
+      setLinkedPurchase({ order, selection: { part: tire.atdProductNumber, expectedSize: order.tire_size, expectedQuantity: order.qty }, supplier: tire.supplier as "ATD" | "USAF" });
+    } catch (reason) { setLinkedMessage(reason instanceof Error ? reason.message : "Could not open this linked purchase."); }
+    finally { setLinkedBusy(false); }
   }
   async function searchPartNumber() {
     setStaffDrafts({});
@@ -767,7 +796,9 @@ export default function TireShoppingBeta({
           />
         )}
       </header>
-      {internal && fromOrder && <p role="status" className="atd-order-policy">Shopping for an order or job. Your original tab is unchanged. Review the tire and supplier before purchasing, then return to record the selected part, supplier and delivery details. Opening this search does not mark tires ordered.</p>}
+      {internal && fromOrder && <p role="status" className="atd-order-policy">{linkedRequested ? "Linked purchase: after supplier confirmation, the selected part, supplier and estimated delivery will save to the original job or order automatically. Review the tire, quantity and supplier before purchasing." : "Unlinked search. Reopen Tire Shop from the saved job or order to save purchase details automatically."} Opening this search does not mark tires ordered.</p>}
+      {linkedBusy && <p role="status">Checking the original job or order…</p>}
+      {linkedMessage && <p role="alert" className="atd-order-policy">{linkedMessage}</p>}
       <section className="tire-beta-search-card">
         <div className="tire-beta-tabs">
           {!internal && (
@@ -1272,7 +1303,7 @@ export default function TireShoppingBeta({
                   onImage={() => setImagePreview(display)} onSupplier={next => updateStaffDraft(tire, next, price)}
                   onPrice={value => updateStaffDraft(tire, offer, value)} onQuantity={changeQuoteQuantity}
                   onQuote={() => toggleSelected(display)}
-                  onOrder={() => { const count = staggered ? 2 : quantity; if (display.supplier === "USAF") { setOrderQuantity(count); setUsafOrderProduct(display); } else beginOrder(display, count); }}
+                  onOrder={() => { void orderSelectedTire(display, staggered ? 2 : quantity); }}
                   onDetails={() => loadTireDetails(offer)}
                   onWarehouses={() => { if (warehouseProductId !== display.id) toggleWarehouseDetails(display); }}
                   warehouses={warehouseProductId === display.id ? warehouseDetails : []}
@@ -1695,6 +1726,13 @@ export default function TireShoppingBeta({
           </section>
         </div>
       ) : null}
+      {internal && linkedPurchase && linkedSource && <CustomerOrderPurchase
+        order={linkedPurchase.order} shopSelection={linkedPurchase.selection} initialSupplier={linkedPurchase.supplier}
+        jobContext={linkedSource.jobId != null} onClose={() => setLinkedPurchase(null)}
+        onComplete={details => {
+          setLinkedMessage(details.syncApplied === false ? `Supplier confirmed ${details.confirmation}, but the original card needs review. Do not reorder.` : `Purchased — ${details.confirmation}. Part, supplier and delivery details saved to the original card.`);
+          try { localStorage.setItem("bolt-tire-purchase-updated", JSON.stringify({ ...linkedSource, at: Date.now() })); } catch { /* The original card also refreshes on focus. */ }
+        }} />}
       {internal && usafOrderProduct && <UsafPurchase
         initialPart={usafOrderProduct.atdProductNumber}
         initialQuantity={orderQuantity}

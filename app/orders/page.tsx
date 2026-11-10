@@ -133,8 +133,8 @@ export default function OrdersPage() {
   const [workingId, setWorkingId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async (quiet?: unknown) => {
+    if (quiet !== true) setLoading(true);
     setErrorMessage("");
 
     const { data, error } = await supabase
@@ -253,6 +253,10 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
+    const refresh = () => { void fetchOrders(true); };
+    const changed = (event: StorageEvent) => { if (event.key === "bolt-tire-purchase-updated") refresh(); };
+    window.addEventListener("focus", refresh); window.addEventListener("storage", changed);
+    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("storage", changed); };
   }, [fetchOrders]);
 
   const toggleTiresOrdered = async (order: CustomerOrder) => {
@@ -808,13 +812,13 @@ function OrderSection({
 
                 {order.order_status === "new" && <div style={{ marginTop: 16 }}>
                   <button type="button" style={openJobButton} disabled={working || Boolean(purchasingOrder) || (order.tires_ordered && !order.purchase) || (!order.purchase && (order.tire_product_number?.trim() ? !order.job_number?.trim() : !tireShopSizeLink(order.tire_size, order.qty)))} onClick={() => {
-                    const shopLink = !order.purchase && !order.tire_product_number?.trim() ? tireShopSizeLink(order.tire_size, order.qty) : null;
+                    const shopLink = !order.purchase && !order.tire_product_number?.trim() ? tireShopSizeLink(order.tire_size, order.qty, { orderId: order.id }) : null;
                     if (shopLink) window.open(shopLink, "_blank", "noopener,noreferrer");
                     else setPurchasingOrder(order);
                   }}>
                     {order.purchase?.status === "placed" ? "View supplier confirmation" : order.purchase ? "Check supplier order" : "Order tires"}
                   </button>
-                  {!order.purchase && !order.tires_ordered && <p style={{ fontSize: 13, color: "#475569", margin: "8px 0" }}>{order.tire_product_number?.trim() ? "Order from U.S. AutoForce or ATD here. The requested part, quantity and job/PO number are filled in for you. Supplier and estimated delivery save to this card after confirmation." : "Opens Tire Shop by size in a new tab. After purchasing, return to this order to record the part, supplier and delivery details."}</p>}
+                  {!order.purchase && !order.tires_ordered && <p style={{ fontSize: 13, color: "#475569", margin: "8px 0" }}>{order.tire_product_number?.trim() ? "Order from U.S. AutoForce or ATD here. The requested part, quantity and job/PO number are filled in for you. Supplier and estimated delivery save to this card after confirmation." : "Opens a linked Tire Shop search. After supplier confirmation, the part, supplier and estimated delivery automatically appear on this order."}</p>}
                   {!order.purchase && (order.tire_product_number?.trim() ? !order.job_number?.trim() : !tireShopSizeLink(order.tire_size, order.qty)) && <p style={{ color: "#92400e", fontSize: 13 }}>{order.tire_product_number?.trim() ? "A job number is needed to order this part." : "Enter the tire size to search Tire Shop."}</p>}
                   {(order.tire_items?.length || 0) > 1 && <p>Different front/rear tires: order each listed part in Tire Shop, then record the supplier and delivery date below.</p>}
                   {order.purchase?.status === "placed" && <p style={{ color: "#166534", fontSize: 13 }}>{order.purchase.supplier} confirmation: {order.purchase.confirmation} · Expected delivery: {order.purchase.deliveryDate ? formatDate(order.purchase.deliveryDate) : "Not provided by supplier"}</p>}

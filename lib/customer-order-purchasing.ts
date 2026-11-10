@@ -43,7 +43,9 @@ export function supplierOrderDetails(response: unknown) {
     shipMethod: String(item.shipmethod || ""),
   }));
   const dates = shipments.map(item => item.deliveryDate).filter((date): date is string => Boolean(date)).sort();
+  const selected = object(root.selectedTire);
   return {
+    ...(selected.partNumber ? { partNumber: String(selected.partNumber), manufacturerPartNumber: selected.manufacturerPartNumber ? String(selected.manufacturerPartNumber) : null, tireName: String(selected.tireName || "") } : {}),
     supplier: root.supplier === "U.S. AutoForce" ? "U.S. AutoForce" : "ATD",
     confirmation: String(order.confirmationnumber || root.confirmationnumber || ""),
     total: order.ordertotal == null ? null : Number(order.ordertotal),

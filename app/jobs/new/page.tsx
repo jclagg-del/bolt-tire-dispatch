@@ -649,7 +649,7 @@ export default function NewJobPage() {
 
           <JobTireOrdering form={form} disabled={saving} onPrepare={async () => (await handleSubmit(undefined, true)) ?? null}
             onManualChange={ordered => setForm(current => ({ ...current, tires_ordered: ordered }))}
-            onComplete={details => setForm(current => ({ ...current, tires_ordered: true, tire_supplier: details.supplier, estimated_delivery_date: details.deliveryDate || "" }))} />
+            onComplete={details => { if (details.syncApplied !== false) setForm(current => ({ ...current, ...(details.partNumber ? { tire_product_number: details.partNumber, tire_manufacturer_part_number: details.manufacturerPartNumber || "", tires: details.tireName || current.tires } : {}), tires_ordered: true, tire_supplier: details.supplier, estimated_delivery_date: details.deliveryDate || "" })); }} />
 
           <div style={twoColumnGrid}>
             <Field>

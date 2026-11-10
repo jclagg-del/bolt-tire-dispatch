@@ -17,12 +17,12 @@ function loader(stubs = {}) {
 }
 const helpers = loader()('lib/customer-order-purchasing');
 const job = { id: 81, customer: 'Example', po_number: 'JOB123', mo_number: 'MO321', qty: 4, size: '2755520', tire_product_number: '04493930000', tires_ordered: false, complete: false, archived: false };
-function fixture({ role = 'office', authenticated = true, supplierFailure = false, jobValues = {}, linked = [], purchases = [], saveFailure = false } = {}) {
+function fixture({ role = 'office', authenticated = true, supplierFailure = false, jobValues = {}, linked = [], purchases = [], saveFailure = false, onPlace = () => {} } = {}) {
   const tables = structuredClone({ jobs: [{ ...job, ...jobValues }], customer_orders: linked, supplier_orders: purchases, staff_security: [{ user_id: 'staff', role }] });
   const calls = [];
   const admin = { from(table) {
     let op = 'select', value, filters = [], limit = Infinity;
-    const query = { select() { return query; }, eq(k, v) { filters.push(r => String(r[k]) === String(v)); return query; }, limit(n) { limit = n; return query; }, insert(v) { op = 'insert'; value = v; return query; }, update(v) { op = 'update'; value = v; return query; }, single: () => run(true), maybeSingle: () => run(true), then: (yes, no) => run(false).then(yes, no) };
+    const query = { select() { return query; }, eq(k, v) { filters.push(r => String(r[k]) === String(v)); return query; }, is(k, v) { filters.push(r => (r[k] ?? null) === v); return query; }, limit(n) { limit = n; return query; }, insert(v) { op = 'insert'; value = v; return query; }, update(v) { op = 'update'; value = v; return query; }, single: () => run(true), maybeSingle: () => run(true), then: (yes, no) => run(false).then(yes, no) };
     async function run(single) {
       let selected = tables[table].filter(r => filters.every(f => f(r))).slice(0, limit);
       if (op === 'insert') {
@@ -38,16 +38,101 @@ function fixture({ role = 'office', authenticated = true, supplierFailure = fals
     return query;
   } };
   const preview = { order: { ordertotal: 500, orderlines: [{ fulfillments: [{ quantity: 4, estimateddelivery: '2026-10-01' }] }] } };
-  const product = { atdProductNumber: job.tire_product_number, lineCode: 'GY', model: 'Grabber H/T', brand: 'General', size: '275/55R20' };
+  const product = { atdProductNumber: job.tire_product_number, manufacturerProductNumber: 'MFG-EXAMPLE', lineCode: 'GY', model: 'Grabber H/T', brand: 'General', size: '275/55R20' };
   const route = loader({
     '@/lib/supabase/admin': { createAdminClient: () => admin, requireApiUser: async () => authenticated ? { id: 'staff' } : null },
-    '@/lib/atd': { atdEnvironment: 'production', searchAtdByPartNumber: async part => { calls.push({ action: 'search', part }); return [product]; }, previewAtdOrder: async input => { calls.push({ action: 'preview', input }); return preview; }, placeAtdOrder: async input => { calls.push({ action: 'place', input }); if (supplierFailure) throw new Error('Timeout'); return { order: { ...preview.order, confirmationnumber: 'ATD-CONFIRMED' } }; } },
+    '@/lib/atd': { atdEnvironment: 'production', searchAtdByPartNumber: async part => { calls.push({ action: 'search', part }); return [product]; }, previewAtdOrder: async input => { calls.push({ action: 'preview', input }); return preview; }, placeAtdOrder: async input => { calls.push({ action: 'place', input }); onPlace(tables); if (supplierFailure) throw new Error('Timeout'); return { order: { ...preview.order, confirmationnumber: 'ATD-CONFIRMED' } }; } },
     '@/lib/usaf': { usaForceOrderingStatus: () => ({ production: true }) },
-    '@/lib/usaf-ordering': { searchUsafOrderProduct: async (part, qty) => { calls.push({ action: 'search', part, qty }); return [product]; }, previewUsafOrder: async input => { calls.push({ action: 'preview', input }); return { supplier: 'U.S. AutoForce', ...preview }; }, placeUsafOrder: async input => { calls.push({ action: 'place', input }); if (supplierFailure) throw new Error('Timeout'); return { supplier: 'U.S. AutoForce', order: { ...preview.order, confirmationnumber: 'USAF-CONFIRMED' } }; } },
+    '@/lib/usaf-ordering': { searchUsafOrderProduct: async (part, qty) => { calls.push({ action: 'search', part, qty }); return [product]; }, previewUsafOrder: async input => { calls.push({ action: 'preview', input }); return { supplier: 'U.S. AutoForce', ...preview }; }, placeUsafOrder: async input => { calls.push({ action: 'place', input }); onPlace(tables); if (supplierFailure) throw new Error('Timeout'); return { supplier: 'U.S. AutoForce', order: { ...preview.order, confirmationnumber: 'USAF-CONFIRMED' } }; } },
   })('app/api/orders/purchase/route');
   const request = extra => route.POST(new Request('https://example.test', { method: 'POST', body: JSON.stringify({ jobId: 81, action: 'place', supplier: 'USAF', productNumber: job.tire_product_number, lineCode: 'GY', branch: '4853', expectedTotal: 500, expectedQuantity: 4, expectedPo: 'JOB123', expectedDeliveryDate: '2026-10-01', ...extra }) }));
-  return { tables, calls, request };
+  return { tables, calls, request, product, preview };
 }
+
+const shopSelection = { part: job.tire_product_number, expectedSize: job.size, expectedQuantity: job.qty };
+test('linked size-shopping confirms the selected part and automatically fills job fields for both suppliers', async () => {
+  for (const supplier of ['ATD', 'USAF']) {
+    const f = fixture({ jobValues: { tire_product_number: null, price_tires: 250, paid: false, scheduled: '2026-11-10T12:30:00' } });
+    const original = structuredClone(f.tables.jobs[0]);
+    assert.equal((await f.request({ action: 'context' })).status, 200); assert.equal(f.calls.length, 0);
+    assert.equal((await f.request({ action: 'search', supplier, shopSelection })).status, 200);
+    assert.equal((await f.request({ action: 'preview', supplier, shopSelection })).status, 200);
+    assert.deepEqual(f.tables.jobs[0], original); assert.equal(f.tables.supplier_orders.length, 0);
+    const result = await (await f.request({ supplier, shopSelection })).json();
+    assert.equal(result.completed.syncApplied, true, JSON.stringify(result));
+    assert.equal(result.completed.partNumber, job.tire_product_number);
+    assert.equal(f.tables.jobs[0].tire_product_number, job.tire_product_number);
+    assert.equal(f.tables.jobs[0].tire_manufacturer_part_number, 'MFG-EXAMPLE');
+    assert.equal(f.tables.jobs[0].tires, 'General Grabber H/T');
+    assert.equal(f.tables.jobs[0].estimated_delivery_date, '2026-10-01');
+    assert.equal(f.tables.jobs[0].tire_supplier, supplier === 'USAF' ? 'U.S. AutoForce' : 'ATD');
+    for (const field of ['price_tires', 'paid', 'scheduled', 'po_number', 'mo_number', 'qty', 'size']) assert.equal(f.tables.jobs[0][field], original[field]);
+    const recovered = await (await f.request({ action: 'context' })).json();
+    assert.equal(recovered.completed.syncApplied, true, JSON.stringify(recovered));
+    assert.equal(f.calls.filter(c => c.action === 'place').length, 1);
+  }
+});
+test('linked purchase updates the original order, persists supplier receipt, and supports order-only purchases', async () => {
+  for (const fromJob of [true, false]) {
+    const order = { id: 42, customer: 'Example', job_number: 'JOB123', mo_number: 'MO321', qty: 4, tire_size: job.size, tire_product_number: null, tires_ordered: false, order_status: fromJob ? 'approved' : 'new', approved_job_id: fromJob ? 81 : null };
+    const f = fixture({ jobValues: { tire_product_number: null }, linked: [order] });
+    const result = await (await f.request({ shopSelection, ...(fromJob ? {} : { jobId: null, orderId: 42 }) })).json();
+    assert.equal(result.completed.syncApplied, true, JSON.stringify(result));
+    assert.equal(f.tables.customer_orders[0].tire_product_number, job.tire_product_number);
+    assert.equal(f.tables.customer_orders[0].tire_model, 'General Grabber H/T');
+    assert.equal(f.tables.customer_orders[0].tires_ordered, true);
+    assert.equal(f.tables.supplier_orders[0].request_id, helpers.purchasingRequestId(42));
+    assert.equal(helpers.supplierOrderDetails(f.tables.supplier_orders[0].response).deliveryDate, '2026-10-01');
+    if (fromJob) assert.equal(f.tables.jobs[0].tires_ordered, true);
+    else assert.equal(f.tables.jobs[0].tires_ordered, false, 'an unrelated job must not be updated');
+  }
+});
+test('linked purchases reject stale size/quantity/part, wrong product size and unauthorized sources', async () => {
+  for (const options of [{ role: 'customer' }, { authenticated: false }, { jobValues: { tire_product_number: 'MANUAL' } }, { jobValues: { qty: 2, tire_product_number: null } }, { jobValues: { size: '2057515', tire_product_number: null } }]) {
+    const f = fixture({ jobValues: { tire_product_number: null }, ...options });
+    assert.ok((await f.request({ shopSelection })).status >= 400); assert.equal(f.calls.filter(c => c.action === 'place').length, 0);
+  }
+  const f = fixture({ jobValues: { tire_product_number: null } }); f.product.size = '205/75R15';
+  assert.equal((await f.request({ shopSelection })).status, 400); assert.equal(f.tables.supplier_orders.length, 0);
+});
+test('linked confirmation preserves concurrent manual edits and retry cannot buy twice', async () => {
+  const f = fixture({ jobValues: { tire_product_number: null }, onPlace(tables) { tables.jobs[0].tire_product_number = 'MANUAL-EDIT'; } });
+  const result = await (await f.request({ shopSelection })).json();
+  assert.equal(result.completed.syncApplied, false); assert.match(result.warning, /not overwritten/);
+  assert.equal(f.tables.jobs[0].tire_product_number, 'MANUAL-EDIT'); assert.equal(f.tables.jobs[0].tires_ordered, false);
+  await f.request({ shopSelection });
+  assert.equal(f.calls.filter(c => c.action === 'place').length, 1);
+});
+test('linked supplier failures and interrupted saves do not silently complete or duplicate a purchase', async () => {
+  const failed = fixture({ jobValues: { tire_product_number: null }, supplierFailure: true });
+  assert.equal((await failed.request({ shopSelection })).status, 502);
+  assert.equal(failed.tables.jobs[0].tire_product_number, null); assert.equal(failed.tables.jobs[0].tires_ordered, false);
+  assert.equal((await failed.request({ shopSelection })).status, 409);
+  assert.equal(failed.calls.filter(c => c.action === 'place').length, 1);
+  const sync = fixture({ jobValues: { tire_product_number: null }, saveFailure: true });
+  const result = await (await sync.request({ shopSelection })).json();
+  assert.equal(result.completed.syncApplied, false); assert.match(result.warning, /Do not reorder/);
+  await sync.request({ action: 'context' }); assert.equal(sync.calls.filter(c => c.action === 'place').length, 1);
+});
+test('a partial linked sync is recovered from the receipt without another supplier call', async () => {
+  const linked = [{ id: 42, approved_job_id: 81, job_number: 'JOB123', qty: 4, tire_size: job.size, tire_product_number: null, tires_ordered: false, order_status: 'approved' }];
+  const first = fixture({ jobValues: { tire_product_number: null }, linked, saveFailure: true });
+  const result = await (await first.request({ shopSelection })).json();
+  assert.equal(result.completed.syncApplied, false);
+  assert.equal(first.tables.customer_orders[0].tires_ordered, true);
+  const retry = fixture({ jobValues: first.tables.jobs[0], linked: first.tables.customer_orders, purchases: first.tables.supplier_orders });
+  const recovered = await (await retry.request({ action: 'context' })).json();
+  assert.equal(recovered.completed.syncApplied, true, JSON.stringify(recovered));
+  assert.equal(retry.tables.jobs[0].tire_product_number, job.tire_product_number);
+  assert.equal(retry.tables.jobs[0].tires_ordered, true); assert.equal(retry.calls.length, 0);
+});
+test('USAF line-code choices can be resolved but size-less choices cannot be purchased', async () => {
+  const f = fixture({ jobValues: { tire_product_number: null } }); f.product.size = '';
+  const search = await (await f.request({ action: 'search', shopSelection })).json();
+  assert.equal(search.products.length, 1);
+  assert.equal((await f.request({ shopSelection })).status, 400);
+  assert.equal(f.calls.filter(c => c.action === 'place').length, 0);
+});
 test('job button looks up the saved exact part; preview does not buy; USAF/ATD confirmation fills job details', async () => {
   for (const supplier of ['USAF', 'ATD']) {
     const f = fixture();
@@ -131,7 +216,7 @@ test('clicking Order tires saves first and populates the dialog without purchasi
   let stateIndex = 0, refIndex = 0, saves = 0, completed;
   const states = [], refs = [];
   const Dialog = () => null;
-  const hooks = { ...React, useState(initial) { const i = stateIndex++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = value; }]; }, useRef(initial) { const i = refIndex++; return refs[i] ||= { current: initial }; } };
+  const hooks = { ...React, useEffect() {}, useState(initial) { const i = stateIndex++; if (!(i in states)) states[i] = initial; return [states[i], value => { states[i] = value; }]; }, useRef(initial) { const i = refIndex++; return refs[i] ||= { current: initial }; } };
   const Component = loader({ react: hooks, './CustomerOrderPurchase': { __esModule: true, default: Dialog } })('components/JobTireOrdering').default;
   const props = { form, disabled: false, onPrepare: async () => { saves++; return 81; }, onComplete: details => { completed = details; }, onManualChange() {} };
   const nodes = element => !element || typeof element !== 'object' ? [] : [element, ...React.Children.toArray(element.props?.children).flatMap(nodes)];

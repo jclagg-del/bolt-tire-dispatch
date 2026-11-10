@@ -37,25 +37,26 @@ test('size links preserve metric, LT/ST, decimal and flotation sizes and validat
   assert.equal(helpers.tireShopSizeEntry('?size=2057515&quantity=12').quantity, 12);
   assert.equal(helpers.tireShopSizeLink('x'.repeat(161)), null);
 });
-test('job without a part opens size search in a new tab without saving, changing status or requiring a PO', async () => {
+test('job without a part saves its identity before opening the linked size search, without purchasing', async () => {
   const originalWindow = global.window; const opened = []; let saves = 0, changes = 0;
-  global.window = { open: (...args) => opened.push(args) };
+  global.window = { open: (...args) => { const tab = { location: {}, close() { this.closed = true; } }; opened.push({ args, tab }); return tab; } };
   try {
     for (const part of ['', '   ']) {
       const h = harness();
       const Component = loader({ react: h.react, './CustomerOrderPurchase': { __esModule: true, default: 'purchase-dialog' } })('components/JobTireOrdering').default;
-      const props = { form: { ...form, tire_product_number: part }, disabled: false, onPrepare: async () => { saves++; }, onComplete() { changes++; }, onManualChange() { changes++; } };
+      const props = { form: { ...form, tire_product_number: part }, disabled: false, onPrepare: async () => { saves++; return 81; }, onComplete() { changes++; }, onManualChange() { changes++; } };
       const button = h.render(Component, props).find(n => n.type === 'button');
       assert.equal(button.props.disabled, false); await button.props.onClick();
-      assert.equal(opened.at(-1)[0], '/tire-shop?size=205%2F75R15&source=order&quantity=2');
-      assert.deepEqual(opened.at(-1).slice(1), ['_blank', 'noopener,noreferrer']);
+      assert.equal(opened.at(-1).tab.location.href, '/tire-shop?size=205%2F75R15&source=order&quantity=2&jobId=81');
+      assert.deepEqual(opened.at(-1).args, ['about:blank', '_blank']);
+      assert.equal(opened.at(-1).tab.opener, null);
       assert.ok(!h.render(Component, props).some(n => n.type === 'purchase-dialog'));
       for (const extra of [{ disabled: true }, { form: { ...form, size: '' } }]) {
         const b = h.render(Component, { ...props, ...extra }).find(n => n.type === 'button');
         assert.equal(b.props.disabled, true); await b.props.onClick();
       }
     }
-    assert.equal(opened.length, 2); assert.equal(saves, 0); assert.equal(changes, 0);
+    assert.equal(opened.length, 2); assert.equal(saves, 2); assert.equal(changes, 0);
   } finally { global.window = originalWindow; }
 });
 test('order cards browse missing parts but preserve existing supplier receipt and pending-order recovery', () => {
@@ -97,4 +98,64 @@ test('larger order quantities remain visibly selected in staff search controls',
   const Controls = loader()('components/TireResultControls').default;
   const tree = nodes(Controls({ internal: true, quantity: 12, sort: 'margin', onQuantityChange() {}, onSortChange() {} }));
   assert.ok(tree.some(n => n.type === 'option' && n.props.value === 12));
+});
+
+test('a failed job save closes the empty shop tab rather than creating an unlinked purchase', async () => {
+  const previous = global.window; let closed = false, href;
+  global.window = { open: () => ({ close() { closed = true; }, location: { set href(value) { href = value; } } }) };
+  try {
+    const h = harness(), Component = loader({ react: h.react, './CustomerOrderPurchase': { __esModule: true, default: 'purchase-dialog' } })('components/JobTireOrdering').default;
+    const props = { form, disabled: false, onPrepare: async () => null, onComplete() {}, onManualChange() {} };
+    await h.render(Component, props).find(n => n.type === 'button').props.onClick();
+    assert.equal(closed, true); assert.equal(href, undefined);
+    assert.ok(h.render(Component, props).some(n => n.props?.role === 'alert'));
+  } finally { global.window = previous; }
+});
+
+test('returning to a linked job retrieves the saved receipt, updates fields, and preserves local manual edits', async () => {
+  const previous = global.window;
+  try {
+    for (const manualEdit of [false, true]) {
+      const events = {}, applied = [], requests = [];
+      global.window = { open: () => ({ location: {}, close() {} }), addEventListener: (name, fn) => { events[name] = fn; }, removeEventListener() {} };
+      const details = { supplier: 'ATD', confirmation: 'TEST', deliveryDate: '2026-11-11', partNumber: 'PART123', syncApplied: true };
+      const h = harness(), Component = loader({ react: h.react, './CustomerOrderPurchase': { __esModule: true, default: 'purchase-dialog', purchaseApi: async body => { requests.push(body); return { completed: details }; } } })('components/JobTireOrdering').default;
+      const props = { form: { ...form }, disabled: false, onPrepare: async () => 81, onComplete: data => applied.push(data), onManualChange() {} };
+      await h.render(Component, props).find(n => n.type === 'button').props.onClick();
+      if (manualEdit) props.form = { ...form, tire_product_number: 'MANUAL' };
+      h.render(Component, props); const cleanups = h.effects.splice(0).map(fn => fn());
+      await events.focus();
+      assert.deepEqual(requests, [{ action: 'context', jobId: 81 }]);
+      assert.equal(applied.length, manualEdit ? 0 : 1);
+      if (!manualEdit) assert.equal(applied[0].partNumber, 'PART123');
+      else assert.ok(h.render(Component, props).some(n => n.props?.role === 'alert'));
+      cleanups.forEach(fn => typeof fn === 'function' && fn());
+    }
+  } finally { global.window = previous; }
+});
+
+test('Tire Shop routes linked selections through the original purchase claim, not the standalone supplier dialog', async () => {
+  const previous = { window: global.window, fetch: global.fetch, sessionStorage: global.sessionStorage, localStorage: global.localStorage };
+  const product = { id: 'example', supplier: 'USAF', brand: 'Example', model: 'Trailer Tire', size: '205/75R15', loadSpeed: '107 N', loadRange: 'D', sidewall: 'BSW', category: 'Trailer', warranty: '', snowRated: false, runFlat: false, hasRebate: false, rebates: [], serviceCategory: 'passenger', fitmentPosition: 'both', imageUrl: null, manufacturerProductNumber: 'PART123', atdProductNumber: 'PART123', availability: { local: 4, localPlus: 8, nationwide: 12 }, quotePrice: 120, cost: 100, installedPrice: 200, estimatedTotals: { 2: 400 } };
+  try {
+    for (const source of [{ jobId: 81 }, { orderId: 42 }]) {
+      const key = Object.keys(source)[0], calls = [], events = [];
+      global.window = { location: { search: `?size=205%2F75R15&quantity=2&source=order&${key}=${source[key]}` } };
+      global.sessionStorage = { getItem: () => null }; global.localStorage = { setItem: (...args) => events.push(args) };
+      global.fetch = async () => ({ ok: true, json: async () => ({ products: [product] }) });
+      const h = harness(), Component = loader({ react: h.react, 'next/navigation': { useRouter: () => ({}) }, '@/lib/supabase': { supabase: { auth: { getSession: async () => ({ data: { session: { access_token: 'TEST' } } }) } } }, '@/components/StaffTireCard': { __esModule: true, default: 'staff-card' }, '@/components/UsafPurchase': { __esModule: true, default: 'standalone-dialog' }, '@/components/CustomerTirePricing': {}, '@/components/SelectedQuoteTires': {}, '@/components/TireResultControls': {}, '@/components/CustomerOrderPurchase': { __esModule: true, default: 'linked-dialog', purchaseApi: async body => { calls.push(body); return { order: { id: source[key], customer: 'Example', job_number: 'PO123', qty: 2, tire_size: form.size, tire_product_number: null } }; } } })('components/TireShoppingBeta').default;
+      h.render(Component, { internal: true }); h.effects.splice(0).forEach(fn => fn());
+      await new Promise(resolve => setImmediate(resolve));
+      h.render(Component, { internal: true }).find(n => n.type === 'staff-card').props.onOrder();
+      await new Promise(resolve => setImmediate(resolve));
+      const tree = h.render(Component, { internal: true }), dialog = tree.find(n => n.type === 'linked-dialog');
+      assert.deepEqual(calls, [{ action: 'context', [key]: String(source[key]) }]);
+      assert.ok(dialog); assert.equal(dialog.props.jobContext, key === 'jobId');
+      assert.deepEqual(dialog.props.shopSelection, { part: 'PART123', expectedSize: form.size, expectedQuantity: 2 });
+      assert.ok(!tree.some(n => n.type === 'standalone-dialog'));
+      dialog.props.onComplete({ confirmation: 'TEST', syncApplied: true });
+      assert.equal(events[0][0], 'bolt-tire-purchase-updated'); assert.equal(JSON.parse(events[0][1])[key], String(source[key]));
+      assert.ok(calls.every(c => c.action === 'context'), 'selecting a tire must not submit a purchase');
+    }
+  } finally { Object.assign(global, previous); }
 });
