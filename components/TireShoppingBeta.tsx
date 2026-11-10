@@ -16,6 +16,7 @@ import { paymentMethodPricingEnabled } from "@/lib/quote-payment-pricing";
 import UsafPurchase from "@/components/UsafPurchase";
 import { readShoppingSession, saveShoppingSession, shopSessionKey, quoteDraftKey } from "@/lib/tire-shopping-session";
 import { quoteShopKey, applyQuoteShopSelection, matchesQuoteSnapshot, singleSizeQuoteDraft, type QuoteShopDraft } from "@/lib/quote-shop-edit";
+import { tireShopSizeEntry } from "@/lib/tire-shop-entry";
 
 type Product = {
   quoteOptionKey?: string;
@@ -203,6 +204,7 @@ export default function TireShoppingBeta({
   const [editingQuote, setEditingQuote] = useState<QuoteShopDraft<{ customer: string; tire_size: string; rear_tire_size: string; quantity: string; rear_quantity: string }> | null>(null);
   const [quoteEditError, setQuoteEditError] = useState("");
   const [quoteEditAxle, setQuoteEditAxle] = useState<"front" | "rear">("front");
+  const [fromOrder, setFromOrder] = useState(false);
   useEffect(() => {
     if (!internal) return;
     const quoteId = new URLSearchParams(window.location.search).get("quote");
@@ -214,6 +216,18 @@ export default function TireShoppingBeta({
       setEditingQuote(draft); setQuery(draft.form.tire_size); setQuantity(Number(draft.form.quantity) || 4);
       setSelected((draft.result || draft.products) as Product[]); setSearched(true); setResumingQuote(true);
       return;
+    }
+    const entry = tireShopSizeEntry(window.location.search);
+    if (entry) {
+      setQuery(entry.size); setQuantity(entry.quantity); setMode("size"); setFromOrder(entry.fromOrder);
+      setLoading(true); setSearched(true); setError("");
+      let active = true;
+      atdApi({ action: "size", query: entry.size }).then(payload => {
+        if (active) { setProducts(payload.products || []); setFailedImages(new Set()); }
+      }).catch(reason => {
+        if (active) { setProducts([]); setError(reason instanceof Error ? reason.message : "Supplier search failed"); }
+      }).finally(() => { if (active) setLoading(false); });
+      return () => { active = false; };
     }
     const saved = readShoppingSession<{
       query: string; products: Product[]; selected: Product[]; quantity: number;
@@ -753,6 +767,7 @@ export default function TireShoppingBeta({
           />
         )}
       </header>
+      {internal && fromOrder && <p role="status" className="atd-order-policy">Shopping for an order or job. Your original tab is unchanged. Review the tire and supplier before purchasing, then return to record the selected part, supplier and delivery details. Opening this search does not mark tires ordered.</p>}
       <section className="tire-beta-search-card">
         <div className="tire-beta-tabs">
           {!internal && (
@@ -805,14 +820,14 @@ export default function TireShoppingBeta({
           </label>
         ) : mode === "size" ? (
           <label className="tire-beta-search">
-            <span>Enter tire size using digits only</span>
+            <span>{internal ? "Enter tire size" : "Enter tire size using digits only"}</span>
             <div>
               <input
                 value={query}
-                inputMode="numeric"
-                pattern="[0-9]*"
+                inputMode={internal ? "text" : "numeric"}
+                pattern={internal ? undefined : "[0-9]*"}
                 onChange={(event) =>
-                  setQuery(event.target.value.replace(/[^0-9]/g, ""))
+                  setQuery(internal ? event.target.value : event.target.value.replace(/[^0-9]/g, ""))
                 }
                 onKeyDown={(event) => {
                   if (event.key === "Enter") search();
@@ -827,7 +842,7 @@ export default function TireShoppingBeta({
                 {loading ? "Searching tires…" : "Search tires"}
               </button>
             </div>
-            <small>Example: enter 2756518 for 275/65R18.</small>
+            <small>{internal ? "Example: 205/75R15 or 2057515. Confirm the tire's size and load rating before ordering." : "Example: enter 2756518 for 275/65R18."}</small>
           </label>
         ) : (
           <div className="tire-beta-fitment">

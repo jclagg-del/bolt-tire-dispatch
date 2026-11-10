@@ -24,7 +24,8 @@ test('KSS and HPR cards review the exact tire, warehouse, PO and MO in an enable
 });
 test('Order tires on the staff card opens the local dialog and confirmation updates the original card',()=>{
  const page=fs.readFileSync(require.resolve('../app/orders/page.tsx'),'utf8');
- assert.match(page,/onClick=\{\(\) => setPurchasingOrder\(order\)\}/);
+ assert.match(page,/else setPurchasingOrder\(order\);/);
+ assert.match(page,/!order.purchase && !order.tire_product_number\?\.trim\(\) \? tireShopSizeLink\(order.tire_size, order.qty\) : null/);
  assert.match(page,/: "Order tires"/);
  assert.match(page,/<CustomerOrderPurchase order=\{purchasingOrder\}/);
  assert.match(page,/onClose=\{\(\) => setPurchasingOrder\(null\)\}/);

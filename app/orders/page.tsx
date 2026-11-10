@@ -9,6 +9,7 @@ import OrderDuplicateNotice from "@/components/OrderDuplicateNotice";
 import { possibleDuplicateOrders } from "@/lib/customer-order-duplicates";
 import { orderAppointment } from "@/lib/order-appointment";
 import { canEditFleetOrder } from "@/lib/staff-order-edit";
+import { tireShopSizeLink } from "@/lib/tire-shop-entry";
 
 type CustomerOrder = {
   id: number;
@@ -806,11 +807,15 @@ function OrderSection({
                 </div>
 
                 {order.order_status === "new" && <div style={{ marginTop: 16 }}>
-                  <button type="button" style={openJobButton} disabled={working || Boolean(purchasingOrder) || (order.tires_ordered && !order.purchase) || !order.tire_product_number || !order.job_number} onClick={() => setPurchasingOrder(order)}>
+                  <button type="button" style={openJobButton} disabled={working || Boolean(purchasingOrder) || (order.tires_ordered && !order.purchase) || (!order.purchase && (order.tire_product_number?.trim() ? !order.job_number?.trim() : !tireShopSizeLink(order.tire_size, order.qty)))} onClick={() => {
+                    const shopLink = !order.purchase && !order.tire_product_number?.trim() ? tireShopSizeLink(order.tire_size, order.qty) : null;
+                    if (shopLink) window.open(shopLink, "_blank", "noopener,noreferrer");
+                    else setPurchasingOrder(order);
+                  }}>
                     {order.purchase?.status === "placed" ? "View supplier confirmation" : order.purchase ? "Check supplier order" : "Order tires"}
                   </button>
-                  {!order.purchase && !order.tires_ordered && <p style={{ fontSize: 13, color: "#475569", margin: "8px 0" }}>Order from U.S. AutoForce or ATD here. The requested part, quantity and job/PO number are filled in for you. Supplier and estimated delivery save to this card after confirmation.</p>}
-                  {(!order.tire_product_number || !order.job_number) && <p style={{ color: "#92400e", fontSize: 13 }}>A product number and job number are needed to order.</p>}
+                  {!order.purchase && !order.tires_ordered && <p style={{ fontSize: 13, color: "#475569", margin: "8px 0" }}>{order.tire_product_number?.trim() ? "Order from U.S. AutoForce or ATD here. The requested part, quantity and job/PO number are filled in for you. Supplier and estimated delivery save to this card after confirmation." : "Opens Tire Shop by size in a new tab. After purchasing, return to this order to record the part, supplier and delivery details."}</p>}
+                  {!order.purchase && (order.tire_product_number?.trim() ? !order.job_number?.trim() : !tireShopSizeLink(order.tire_size, order.qty)) && <p style={{ color: "#92400e", fontSize: 13 }}>{order.tire_product_number?.trim() ? "A job number is needed to order this part." : "Enter the tire size to search Tire Shop."}</p>}
                   {(order.tire_items?.length || 0) > 1 && <p>Different front/rear tires: order each listed part in Tire Shop, then record the supplier and delivery date below.</p>}
                   {order.purchase?.status === "placed" && <p style={{ color: "#166534", fontSize: 13 }}>{order.purchase.supplier} confirmation: {order.purchase.confirmation} · Expected delivery: {order.purchase.deliveryDate ? formatDate(order.purchase.deliveryDate) : "Not provided by supplier"}</p>}
                   {order.purchase && order.purchase.status !== "placed" && <p style={{ color: "#92400e", fontSize: 13 }}>A supplier order is pending or needs review. Check its status before ordering again.</p>}

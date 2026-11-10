@@ -11,7 +11,7 @@ export default function TireResultControls({ internal, quantity, sort, onQuantit
     <label>
       Quantity
       <select value={quantity} onChange={event => onQuantityChange(Number(event.target.value))}>
-        {[1, 2, 3, 4, 5, 6].map(item => <option key={item} value={item}>{item}</option>)}
+        {(internal && quantity > 6 && quantity <= 24 ? [1, 2, 3, 4, 5, 6, quantity] : [1, 2, 3, 4, 5, 6]).map(item => <option key={item} value={item}>{item}</option>)}
       </select>
     </label>
     <label>
