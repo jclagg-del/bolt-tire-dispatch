@@ -118,7 +118,8 @@ export async function PATCH(request: Request, { params }: Context) {
   }
   let notificationSent = false;
   try {
-    await sendFleetOrderNotification("changed", { ...order, ...updates });
+    // Compare against the server-loaded order, never client-supplied previous values.
+    await sendFleetOrderNotification("changed", { ...order, ...updates }, undefined, order);
     notificationSent = true;
   } catch (notificationError) {
     console.error("Order change email notification failed:", notificationError instanceof Error ? notificationError.message : notificationError, { orderId: order.id });

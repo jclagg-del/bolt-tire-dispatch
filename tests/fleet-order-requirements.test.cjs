@@ -90,6 +90,21 @@ test('portal authorization still protects create and edit', async () => {
   assert.equal(f.writes.length, 0);
 });
 
+test('change email receives server-loaded previous values and normalized saved values for both organizations', async () => {
+  for (const customer of ['Kingdom Support Services', 'HPR']) {
+    const f = fixture({ existing: { customer, notes: 'Old note', requested_time: '11:00:00' } });
+    const response = await f.call('PATCH', { ...valid, customer, qty: 2, notes: ' New note ', requested_time: '14:00', previousOrder: { qty: 999 } });
+    assert.equal(response.status, 200);
+    assert.equal(f.notifications.length, 1);
+    const [kind, current, key, previous] = f.notifications[0];
+    assert.equal(kind, 'changed'); assert.equal(key, undefined);
+    assert.equal(previous.qty, 4); assert.equal(current.qty, 2);
+    assert.equal(previous.notes, 'Old note'); assert.equal(current.notes, 'New note');
+    assert.equal(previous.requested_time, '11:00:00'); assert.equal(current.requested_time, '14:00');
+    assert.equal(previous.customer, customer);
+  }
+});
+
 test('both forms use the shared rule and visibly require job and MO', () => {
   const create = fs.readFileSync(path.join(__dirname, '../app/order/kingdom/page.tsx'), 'utf8');
   const edit = fs.readFileSync(path.join(__dirname, '../app/kingdom-orders/[id]/page.tsx'), 'utf8');
