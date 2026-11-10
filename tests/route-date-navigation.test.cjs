@@ -18,7 +18,7 @@ function nodes(tree) {
 const helpers=load('lib/route-order.ts',{});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
-function harness() {
+function harness({ transferFailure = false } = {}) {
   let cursor=0,tree;const hooks=[], effects=[], reads=[], writes=[], barriers=new Map();
   const originalFetch=global.fetch;
   const today=helpers.routeDate(new Date());
@@ -35,12 +35,18 @@ function harness() {
   const supabase={auth:{getSession:async()=>({data:{session:{access_token:'TEST'}}})},from(table){
     let date,write;const q={select(){return q},eq(key,value){if(key==='assignment_date')date=value;return q},order(){return q},gte(key,value){date=helpers.shiftRouteDate(value.slice(0,10),1);return q},lt(){return q},upsert(value){write=value;return q},then(yes,no){
       if(write){writes.push({table,value:write});return Promise.resolve({error:null}).then(yes,no);}
-      if(table==='vehicles')return Promise.resolve({data:[{id:'stepvan',name:'Stepvan',color:'#2563eb',active:true,sort_order:1}]}).then(yes,no);
+      if(table==='vehicles')return Promise.resolve({data:[{id:'stepvan',name:'Stepvan',color:'#2563eb',active:true,sort_order:1},{id:'service',name:'Service Truck',color:'#facc15',active:true,sort_order:2}]}).then(yes,no);
       reads.push({table,date});
       return barrier(date).promise.then(()=>({data:table==='jobs'?[{id:date,customer:date,scheduled:date+'T09:00:00',vehicle_id:'stepvan',complete:false}]:[{vehicle_id:'stepvan',technician_name:'Tech '+date}]})).then(yes,no);
     }};return q;
   }};
-  global.fetch=async url=>{const date=new URL(url,'https://example.test').searchParams.get('date');reads.push({table:'route_day_orders',date});await barrier(date).promise;return {ok:true,json:async()=>({orders:[{vehicle_id:'stepvan',job_ids:[date],revision:date===today?1:2}]})};};
+  global.fetch=async (url,init)=>{
+    if(init?.method==='POST') {
+      const value=JSON.parse(init.body);writes.push({table:'route-transfer',value});
+      return {ok:!transferFailure,json:async()=>transferFailure?{error:'This job changed while you were moving it.'}:{job:{id:value.jobId,vehicle_id:value.toVehicleId,scheduled:value.expectedScheduled}}};
+    }
+    const date=new URL(url,'https://example.test').searchParams.get('date');reads.push({table:'route_day_orders',date});await barrier(date).promise;return {ok:true,json:async()=>({orders:[{vehicle_id:'stepvan',job_ids:[date],revision:date===today?1:2}]})};
+  };
   const component=type=>({__esModule:true,default:type});
   const Page=load('app/route/page.tsx',{react,'next/navigation':{useRouter:()=>({push(){}})},'@/lib/supabase':{supabase},'@/components/AppHeader':component('app-header'),'@/components/JobJhaButton':component('jha-button'),'@/components/RouteStopList':component('route-stop-list'),'@/components/RouteAppointmentDialog':component('appointment-dialog'),'@/components/WheelTorqueInput':component('wheel-torque'),'@/lib/job-jha-client':{},'@/lib/quo':{}}).default;
   function render(){cursor=0;tree=Page();for(const effect of effects.splice(0))effect();return tree;}
@@ -83,5 +89,37 @@ test('previous/next days and a picked date work while a date is still loading',a
     h.change('2027-01-04');await h.release('2027-01-04');
     assert.equal(h.find(n=>n.type==='route-stop-list').props.jobs[0].id,'2027-01-04');
     h.change('');assert.equal(h.find(n=>n.props?.['aria-label']==='Route date').props.value,'2027-01-04');
+  }finally{h.close();}
+});
+
+test('vehicle transfer updates the route only after save, prevents duplicate requests and keeps the time',async()=>{
+  const h=harness();try{
+    h.render();await h.release(h.today);
+    const list=h.find(n=>n.type==='route-stop-list');
+    const first=list.props.onTransfer(h.today,'service');
+    const duplicate=list.props.onTransfer(h.today,'service');
+    h.render();
+    assert.equal(h.find(n=>n.props?.['aria-label']==='Route date').props.disabled,true);
+    assert.equal(h.find(n=>n.type==='route-stop-list').props.vehicleId,'stepvan','do not claim success before the server responds');
+    await Promise.all([first,duplicate]);h.render();
+    assert.equal(h.writes.length,1);
+    assert.deepEqual(h.writes[0].value,{date:h.today,jobId:h.today,fromVehicleId:'stepvan',toVehicleId:'service',expectedScheduled:h.today+'T09:00:00'});
+    const moved=h.find(n=>n.type==='route-stop-list');
+    assert.equal(moved.props.vehicleId,'service');
+    assert.equal(moved.props.jobs[0].scheduled,h.today+'T09:00:00');
+    assert.equal(h.find(n=>n.props?.['aria-label']==='Route date').props.disabled,false);
+  }finally{h.close();}
+});
+
+test('failed transfer reloads authoritative jobs, and non-today route cannot transfer',async()=>{
+  const h=harness({transferFailure:true});try{
+    h.render();await h.release(h.today);
+    await h.find(n=>n.type==='route-stop-list').props.onTransfer(h.today,'service');h.render();
+    assert.equal(h.find(n=>n.type==='route-stop-list').props.vehicleId,'stepvan');
+    assert.ok(h.find(n=>n.props?.role==='status'&&String(n.props.children).includes('This job changed')));
+    assert.equal(h.reads.filter(r=>r.table==='jobs'&&r.date===h.today).length,2);
+    const tomorrow=helpers.shiftRouteDate(h.today,1);h.change(tomorrow);await h.release(tomorrow);
+    await h.find(n=>n.type==='route-stop-list').props.onTransfer(tomorrow,'service');
+    assert.equal(h.writes.length,1);
   }finally{h.close();}
 });

@@ -100,6 +100,7 @@ export default function RoutePage() {
   const [routeOrders, setRouteOrders] = useState<Record<string, SavedRouteOrder>>({});
   const [routeOrderReady, setRouteOrderReady] = useState(false);
   const [savingRoute, setSavingRoute] = useState(false);
+  const [transferHover, setTransferHover] = useState<string | null>(null);
   const routeSaveLock = useRef(false);
   const [routeMessage, setRouteMessage] = useState("");
   const [pendingRouteMove, setPendingRouteMove] = useState<{
@@ -226,9 +227,9 @@ export default function RoutePage() {
     }
   };
 
-  async function routeRequest(method: "GET" | "PUT", body?: unknown, date = selectedDateRef.current) {
+  async function routeRequest(method: "GET" | "PUT" | "POST", body?: unknown, date = selectedDateRef.current) {
     const { data } = await supabase.auth.getSession();
-    const response = await fetch(`/api/route-order?date=${date}`, {
+    const response = await fetch(`/api/${method === "POST" ? "route-transfer" : "route-order"}?date=${date}`, {
       method, cache: "no-store",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token || ""}` },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -280,6 +281,27 @@ export default function RoutePage() {
       setPendingRouteMove(null);
       routeSaveLock.current = false;
       setSavingRoute(false);
+    }
+  }
+
+  async function transferJob(jobId: string, toVehicleId: string) {
+    if (readOnlyDay || loading || !routeOrderReady || routeSaveLock.current || pendingRouteMove || completingId || showCompleteModal) return;
+    const job = jobs.find(item => String(item.id) === jobId);
+    const vehicle = vehicles.find(item => item.id === toVehicleId && item.active);
+    if (!job?.scheduled || job.complete || job.archived || !vehicle || (job.vehicle_id || "stepvan") === toVehicleId) return;
+    routeSaveLock.current = true;
+    setSavingRoute(true); setTransferHover(null);
+    setRouteMessage(`Moving job to ${vehicle.name}…`);
+    try {
+      const result = await routeRequest("POST", { date: selectedDate, jobId, fromVehicleId: job.vehicle_id || "stepvan", toVehicleId, expectedScheduled: job.scheduled.replace(" ", "T") });
+      setJobs(current => current.map(item => String(item.id) === jobId ? { ...item, vehicle_id: result.job.vehicle_id } : item));
+      setRouteMessage(`Job #${job.po_number || job.id} moved to ${vehicle.name}. Appointment time unchanged: ${formatTimeNY(result.job.scheduled)}.`);
+    } catch (error) {
+      // The request may have reached the server even if its response was lost.
+      await Promise.all([fetchJobs(), fetchRouteOrders()]);
+      setRouteMessage(error instanceof Error ? error.message : "Could not confirm the move. Please refresh the route.");
+    } finally {
+      routeSaveLock.current = false; setSavingRoute(false);
     }
   }
 
@@ -437,21 +459,23 @@ export default function RoutePage() {
           <p style={subtitle}>
             {readOnlyDay
               ? `Viewing ${routeDayLabel(selectedDate)}. This route is read-only. ${selectedDate < todayKey ? "Completed stops are included." : "Return to Today to rearrange or complete stops."}`
-              : "Drag a job within its vehicle, or use the arrows, then confirm its new date and time. Other appointments stay unchanged."}
+              : "Drag a job to another vehicle to reassign it without changing its appointment time. You can also use Move to vehicle. Reordering within a vehicle still asks you to confirm the time."}
           </p>
         </div>
 
         {errorText ? <div style={errorBanner}>Error: {errorText} <button type="button" onClick={() => loadPage(selectedDate)} disabled={loading || dateNavigationLocked}>Retry</button></div> : null}
         <p role="status" aria-live="polite">{routeMessage}</p>
 
-        {loading ? <div role="status" style={loadingBox}>Loading route for {routeDayLabel(selectedDate)}…</div> : <div style={columnsWrap}>
+        {loading ? <div role="status" style={loadingBox}>Loading route for {routeDayLabel(selectedDate)}…</div> : <div data-route-board style={columnsWrap}>
           {vehicles.filter(vehicle => vehicle.active || (jobsByVehicle[vehicle.id]?.length || 0) > 0).map((vehicle) => {
             const vehicleJobs = jobsByVehicle[vehicle.id] || [];
             const techName = assignments[vehicle.id] || "";
             const textColor = getReadableTextColor(vehicle.color);
 
             return (
-              <div key={vehicle.id} style={column}>
+              <div key={vehicle.id} data-route-vehicle={vehicle.id}
+                data-route-drop-enabled={!readOnlyDay && vehicle.active && routeOrderReady && !savingRoute && !pendingRouteMove && !completingId && !showCompleteModal}
+                style={{ ...column, outline: transferHover === vehicle.id ? "3px solid #2563eb" : undefined, outlineOffset: 3 }}>
                 <div
                   style={{
                     ...columnHeader,
@@ -492,7 +516,8 @@ export default function RoutePage() {
 
                 <div style={columnBody}>
                   {vehicleJobs.length > 0 ? (
-                    <RouteStopList jobs={vehicleJobs} disabled={readOnlyDay || !routeOrderReady || savingRoute || !!pendingRouteMove || !!completingId || showCompleteModal} onReorder={(ids, movedId, targetId) => promptRouteMove(vehicle.id, ids, movedId, targetId)} renderJob={(job, index) => (
+                    <RouteStopList jobs={vehicleJobs} vehicleId={vehicle.id} transferVehicles={vehicles.filter(item => item.active)} onTransfer={transferJob} onTransferHover={setTransferHover}
+                      disabled={readOnlyDay || !routeOrderReady || savingRoute || !!pendingRouteMove || !!completingId || showCompleteModal} onReorder={(ids, movedId, targetId) => promptRouteMove(vehicle.id, ids, movedId, targetId)} renderJob={(job, index) => (
                       <RouteCard
                         key={job.id}
                         job={job}
@@ -503,7 +528,7 @@ export default function RoutePage() {
                       />
                     )} />
                   ) : (
-                    <div style={empty}>No {vehicle.name} jobs {readOnlyDay ? "on this date" : "today"}</div>
+                    <div style={{ ...empty, minHeight: 100 }}>No {vehicle.name} jobs {readOnlyDay ? "on this date" : "today"}{!readOnlyDay && vehicle.active ? ". Drop a job here to assign it." : ""}</div>
                   )}
                 </div>
               </div>
