@@ -883,7 +883,7 @@ export default function KingdomOrderPage() {
                   placeholder="Job or work-order number"
                 />
 
-                <FieldLabel text="MO Number" required />
+                <FieldLabel text="MO Number / Description" required />
                 <input
                   type="text"
                   name="mo_number"
@@ -891,7 +891,7 @@ export default function KingdomOrderPage() {
                   value={form.mo_number}
                   onChange={handleChange}
                   style={input}
-                  placeholder="MO number"
+                  placeholder="MO number or description"
                 />
               </section>
 

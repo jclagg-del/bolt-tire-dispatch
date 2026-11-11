@@ -113,6 +113,8 @@ test('both forms use the shared rule and visibly require job and MO', () => {
     assert.doesNotMatch(source, /value[=:]\s*"12:30"/);
     assert.match(source, /12:00 PM and 1:00 PM/);
   }
+  assert.ok(create.includes('text="MO Number / Description" required'));
+  assert.ok(create.includes('placeholder="MO number or description"'));
   for (const name of ['job_number','mo_number']) assert.match(create, new RegExp(`name="${name}"\\s+required`));
-  for (const label of ['Job / PO Number','MO Number']) assert.ok(edit.includes(`label="${label}" required`));
+  for (const label of ['Job / PO Number','MO Number / Description']) assert.ok(edit.includes(`label="${label}" required`));
 });
