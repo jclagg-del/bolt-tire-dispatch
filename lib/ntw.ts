@@ -3,6 +3,7 @@ import { request as httpsRequest } from "node:https";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fallbackBusinessSettings, installationDefault, type BusinessSettings } from "@/lib/business-settings";
 import { markupPricing } from "@/lib/tire-shop-pricing";
+import { ntwCustomerId, ntwShopAddress, ntwInventoryBody, ntwErrorDetail, type NtwInventorySearch } from "./ntw-inventory-request";
 
 const baseUrl = (process.env.NTW_API_URL || "https://tbcservicesqa.tbccorp.com/tbccorp/qa/tbc/api/v2/products/tires").trim();
 export const ntwEnvironment = (process.env.NTW_ENVIRONMENT || "qa").trim().toLowerCase();
@@ -48,12 +49,10 @@ type NtwResponse = {
 function configuration() {
   const clientId = process.env.NTW_CLIENT_ID?.trim();
   const clientSecret = process.env.NTW_CLIENT_SECRET;
-  // NTW customer numbers are numeric identifiers; normalize legacy values that
-  // were stored with left-padding so the API receives the canonical account.
   const rawCustomerId = process.env.NTW_CUSTOMER_ID?.trim();
-  const customerId = rawCustomerId?.replace(/^0+(?=\d)/, "");
   const dealerCode = process.env.NTW_DEALER_CODE?.trim();
-  if (!clientId || !clientSecret || !customerId) throw new Error("NTW credentials are not configured");
+  if (!clientId || !clientSecret || !rawCustomerId) throw new Error("NTW credentials are not configured");
+  const customerId = ntwCustomerId(rawCustomerId);
   return { clientId, clientSecret, customerId, dealerCode };
 }
 
@@ -106,18 +105,8 @@ async function postJson(
 }
 
 function ntwFailureMessage(status: number, payload: NtwResponse) {
-  const values = [payload.message, payload.error, payload.errorMessage, payload.errors, payload.detail, payload.title];
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return `NTW request failed (${status}): ${value.trim()}`;
-    if (value && typeof value === "object") {
-      const detail = JSON.stringify(value);
-      if (detail && detail !== "{}" && detail !== "[]") return `NTW request failed (${status}): ${detail.slice(0, 1200)}`;
-    }
-  }
-  const detail = JSON.stringify(payload);
-  return detail && detail !== "{}"
-    ? `NTW request failed (${status}): ${detail.slice(0, 1200)}`
-    : `NTW request failed (${status})`;
+  const detail = ntwErrorDetail(payload, [process.env.NTW_CLIENT_ID || "", process.env.NTW_CLIENT_SECRET || "", process.env.NTW_CUSTOMER_ID || ""]);
+  return `NTW request failed (${status})${detail ? `: ${detail}` : ""}`;
 }
 
 export function ntwConfigured() {
@@ -136,7 +125,7 @@ function parseTireSize(value: string) {
   return { width: match[1], ratio: match[2], diameter: match[3] };
 }
 
-async function ntwRequest(criteria: Record<string, unknown>[], searchType: "ByTireSize" | "ByPartNumber") {
+async function ntwRequest(search: NtwInventorySearch) {
   const { clientId, clientSecret, customerId, dealerCode } = configuration();
   const url = new URL(baseUrl);
   if (dealerCode) url.searchParams.set("dealerCode", dealerCode);
@@ -148,20 +137,14 @@ async function ntwRequest(criteria: Record<string, unknown>[], searchType: "ByTi
       "X-IBM-Client-Id": clientId,
       "X-IBM-Client-Secret": clientSecret,
     },
-    {
-      customerId,
-      isDropShip: false,
-      customerType: "external",
-      searchType,
-      source: "Bolt Tire",
-      criteria,
-    }
+    ntwInventoryBody(customerId, ntwShopAddress(process.env.NTW_SHIP_TO_ADDRESS_JSON), search)
   );
   if (response.status < 200 || response.status >= 300) {
     throw new Error(ntwFailureMessage(response.status, response.payload));
   }
-  const products = response.payload.product || [];
-  console.info("NTW inventory lookup succeeded", { searchType, productCount: products.length });
+  if (!Array.isArray(response.payload.product)) throw new Error(ntwFailureMessage(response.status, response.payload));
+  const products = response.payload.product;
+  console.info("NTW inventory lookup succeeded", { searchType: "tireSize" in search ? "ByTireSize" : "ByProductId", productCount: products.length });
   return products;
 }
 
@@ -246,17 +229,18 @@ export async function searchNtwBySize(query: string, includeCost: boolean) {
   const tireSize = parseTireSize(query);
   if (!tireSize || !ntwConfigured()) return [];
   const [products, settings] = await Promise.all([
-    ntwRequest([{ tireSize, requestedQty: 4 }], "ByTireSize"),
+    ntwRequest({ tireSize, requestedQty: 4 }),
     pricingSettings(),
   ]);
   return presentProducts(products, includeCost, settings);
 }
 
-export async function searchNtwByPartNumber(query: string, includeCost: boolean) {
+export async function searchNtwByPartNumber(query: string, includeCost: boolean, brandName = "") {
   const partNo = query.trim().replace(/[^a-zA-Z0-9-]/g, "");
   if (!partNo || !ntwConfigured()) return [];
+  if (!brandName.trim()) throw new Error("NTW part-number search needs a verified tire brand; use tire-size search when the brand is unknown.");
   const [products, settings] = await Promise.all([
-    ntwRequest([{ partNo, requestedQty: 4 }], "ByPartNumber"),
+    ntwRequest({ partNo, brandName: brandName.trim(), requestedQty: 4 }),
     pricingSettings(),
   ]);
   return presentProducts(products, includeCost, settings);

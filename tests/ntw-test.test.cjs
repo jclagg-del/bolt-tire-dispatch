@@ -93,6 +93,43 @@ test('documented errorMsg is displayed safely instead of a generic 400', () => {
   assert.equal(helper.ntwTestFailureDetail({ errorCd: 1006, errorDesc: 'NOT_FOUND', errorMsg: 'Could not get any inventory from backend, check your request' }, []), 'Could not get any inventory from backend, check your request');
   assert.equal(helper.ntwTestFailureDetail({ errorMsg: 'Invalid qa-secret account 0037317114' }, ['qa-secret', '0037317114']), 'Invalid [redacted] account [redacted]');
 });
+test('part brand is inferred only from an exact manufacturer part and an unambiguous brand', () => {
+  const { ntwPartBrand } = load('lib/ntw-part-brand.ts');
+  assert.equal(ntwPartBrand('123', [{ manufacturerProductNumber: '123', brand: 'Toyo' }]), 'Toyo');
+  assert.equal(ntwPartBrand('123', [{ manufacturerProductNumber: '1234', brand: 'Toyo' }]), '');
+  assert.equal(ntwPartBrand('123', [{ manufacturerProductNumber: '123', brand: 'Toyo' }, { manufacturerProductNumber: '123', brand: 'Michelin' }]), '');
+  assert.equal(ntwPartBrand('123', [{ atdProductNumber: '123', brand: 'Toyo' }]), '');
+});
+test('normal adapter sends documented size/product requests and refuses unknown brands', async t => {
+  const keys = ['NTW_CLIENT_ID', 'NTW_CLIENT_SECRET', 'NTW_CUSTOMER_ID', 'NTW_SHIP_TO_ADDRESS_JSON', 'NTW_API_URL'];
+  const saved = Object.fromEntries(keys.map(k => [k, process.env[k]]));
+  t.after(() => { for (const k of keys) saved[k] === undefined ? delete process.env[k] : process.env[k] = saved[k]; });
+  Object.assign(process.env, { NTW_CLIENT_ID: 'test-id', NTW_CLIENT_SECRET: 'test-secret', NTW_CUSTOMER_ID: '37317114' });
+  delete process.env.NTW_SHIP_TO_ADDRESS_JSON; delete process.env.NTW_API_URL;
+  let captured, calls = 0, status = 200, payload = { product: [] };
+  const chain = { select() { return this; }, eq() { return this; }, async maybeSingle() { return { data: {} }; } };
+  const api = load('lib/ntw.ts', {
+    '@/lib/supabase/admin': { createAdminClient: () => ({ from: () => chain }) },
+    '@/lib/business-settings': load('lib/business-settings.ts'),
+    '@/lib/tire-shop-pricing': { markupPricing: () => ({}) },
+    'node:https': { request(url, options, callback) {
+      const request = new EventEmitter(); request.setTimeout = () => {}; request.write = body => { captured = JSON.parse(body); };
+      request.end = () => { calls++; const response = new EventEmitter(); response.statusCode = status; callback(response); response.emit('data', Buffer.from(JSON.stringify(payload))); response.emit('end'); };
+      return request;
+    } },
+  });
+  await api.searchNtwBySize('205/75R15', true);
+  assert.equal(captured.customerId, '0037317114'); assert.equal(captured.shipTo[0].address.city, 'Pine Bush');
+  assert.equal(captured.searchType, 'ByTireSize');
+  await api.searchNtwByPartNumber('2001834', true, 'Hankook');
+  assert.equal(captured.searchType, 'ByProductId'); assert.equal(captured.criteria[0].brandName, 'Hankook');
+  assert.equal('tireSize' in captured.criteria[0], false);
+  const before = calls; await assert.rejects(() => api.searchNtwByPartNumber('2001834', true), /verified tire brand/); assert.equal(calls, before);
+  status = 400; payload = { errorMsg: 'Invalid test-secret request' };
+  await assert.rejects(() => api.searchNtwBySize('205/75R15', true), error => /Invalid \[redacted\] request/.test(error.message) && !error.message.includes('test-secret'));
+  status = 200; payload = { errorMsg: 'Backend failure' };
+  await assert.rejects(() => api.searchNtwBySize('205/75R15', true), /Backend failure/);
+});
 test('temporary page and route do not invoke orders, payments, or database writes', () => {
   for (const file of ['app/ntw-test/page.tsx', 'app/api/ntw-test/route.ts', 'lib/ntw-test.ts']) {
     const code = fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');

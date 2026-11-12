@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { atdEnvironment, fitmentList, placeAtdOrder, previewAtdOrder, searchAtdByFitment, searchAtdByPartNumber, searchAtdBySize } from "@/lib/atd";
 import { searchUsafByPartNumber, searchUsafBySize } from "@/lib/usaf-catalog";
 import { ntwEnvironment, searchNtwByPartNumber, searchNtwBySize } from "@/lib/ntw";
+import { ntwPartBrand } from "@/lib/ntw-part-brand";
 import { auditSupplierMatches } from "@/lib/inventory-match-audit";
 import { enrichWithTireLibrary, sanitizeVehicleFitments, tireLibraryFitmentList, tireLibraryFitmentSize, tireLibraryStatus, tireLibraryTireDetails } from "@/lib/tire-library";
 
@@ -98,11 +99,12 @@ export async function POST(request: NextRequest) {
     if (body.action === "part-number") {
       if (!includeCost) return NextResponse.json({ error: "Staff access is required." }, { status: 401 });
       const query = String(body.query || "");
-      const [atdProducts, usafProducts, ntwProducts] = await Promise.all([
+      const [atdProducts, usafProducts] = await Promise.all([
         searchAtdByPartNumber(query, true),
         searchUsafByPartNumber(query, true, "staff", true),
-        optionalNtw(() => searchNtwByPartNumber(query, true)),
       ]);
+      const brand = typeof body.brandName === "string" ? body.brandName.trim() : ntwPartBrand(query, [...atdProducts, ...usafProducts]);
+      const ntwProducts = brand ? await optionalNtw(() => searchNtwByPartNumber(query, true, brand)) : [];
       const products = await enrichWithTireLibrary([...atdProducts, ...usafProducts, ...ntwProducts]);
       if (includeCost) await auditSupplierMatches(products);
       return NextResponse.json({ products, sandbox: atdEnvironment !== "production" });
