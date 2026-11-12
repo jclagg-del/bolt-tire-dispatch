@@ -123,6 +123,31 @@ test('USAF catalog retains transfer inventory without calling it local or nearby
   assert.equal(result.warehouses[0].address, '');
 });
 
+test('USAF transfer warehouses show verified cities without changing stock buckets or branch codes', () => {
+  const { usafWarehouse, usafCatalogInventory } = loader()('lib/usaf-warehouses.ts');
+  const expected = { '4857': 'Lewiston, ME', '4858': 'Randolph Center, VT', '4861': 'Rochester, NY', '4864': 'Hanover, MD', '4865': 'Winchester, VA', '4866': 'Colonial Heights, VA', '4867': 'Imperial, PA' };
+  for (const [code, city] of Object.entries(expected)) {
+    const warehouse = usafWarehouse(` ${code} `);
+    assert.equal(warehouse.name, city);
+    assert.ok(warehouse.address.includes(city));
+    assert.equal(warehouse.regional, false);
+    assert.equal(warehouse.local, false);
+  }
+  const inventory = [
+    { warehouse: '4864', quantity: 14 }, { warehouse: '4867', quantity: 17 },
+    { warehouse: '4861', quantity: 30 }, { warehouse: '4866', quantity: 18 },
+    { warehouse: '4862', quantity: 4 }, { warehouse: '4854', quantity: 2 },
+  ];
+  const result = usafCatalogInventory(inventory);
+  assert.equal(result.availableQuantity, 85);
+  assert.equal(result.localQuantity, 0);
+  assert.equal(result.regionalQuantity, 6);
+  assert.deepEqual(result.warehouses.map(w => w.warehouse), inventory.map(w => w.warehouse));
+  assert.deepEqual(result.warehouses.map(w => w.name), ['Hanover, MD', 'Imperial, PA', 'Rochester, NY', 'Colonial Heights, VA', 'Northborough, MA', 'Kirkwood, NY']);
+  assert.equal(usafWarehouse('4853').local, true);
+  assert.equal(usafWarehouse('9999').name, 'U.S. AutoForce warehouse 9999', 'unknown codes must not be assigned a guessed location');
+});
+
 test('USAF size stock check omits warehouse restriction and retains every returned branch', async t => {
   const saved = { ...process.env };
   t.after(() => { for (const key of ['USAF_API_URL', 'USAF_API_USER', 'USAF_API_PASSWORD', 'USAF_ACCOUNT_NUMBER']) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } });

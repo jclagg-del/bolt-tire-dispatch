@@ -13,12 +13,26 @@ export function regionalUsafWarehouse(warehouse: string) {
   return USAF_REGIONAL_WAREHOUSES[String(warehouse).trim()] || null;
 }
 
-// The regional directory supplies labels, not an inventory allowlist.
+// Verified against U.S. AutoForce's own directory on 2026-11-12:
+// https://oneplatform.usautoforce.com/warehousehours/
+// Naming a transfer warehouse must NOT reclassify it as nearby inventory.
+const USAF_TRANSFER_WAREHOUSES: Record<string, { name: string; address: string }> = {
+  "4857": { name: "Lewiston, ME", address: "9 Gendron Drive, Lewiston, ME 04240" },
+  "4858": { name: "Randolph Center, VT", address: "2281B Route 66, Randolph Center, VT 05061" },
+  "4861": { name: "Rochester, NY", address: "401 Pixley Road, Rochester, NY 14602" },
+  "4864": { name: "Hanover, MD", address: "1425 Magellan Road, Hanover, MD 21076" },
+  "4865": { name: "Winchester, VA", address: "40 Tyson Drive, Winchester, VA 22601" },
+  "4866": { name: "Colonial Heights, VA", address: "1962 Ruffin Mill Road, Colonial Heights, VA 23834" },
+  "4867": { name: "Imperial, PA", address: "200 Solar Drive, Imperial, PA 15126" },
+};
+
+// These directories supply labels, not an inventory allowlist.
 export function usafWarehouse(warehouse: string) {
   const region = regionalUsafWarehouse(warehouse);
+  const location = region || USAF_TRANSFER_WAREHOUSES[String(warehouse).trim()];
   return {
-    name: region?.name || `U.S. AutoForce warehouse ${String(warehouse).trim()}`,
-    address: region?.address || "",
+    name: location?.name || `U.S. AutoForce warehouse ${String(warehouse).trim()}`,
+    address: location?.address || "",
     local: Boolean(region?.local),
     regional: Boolean(region),
   };
