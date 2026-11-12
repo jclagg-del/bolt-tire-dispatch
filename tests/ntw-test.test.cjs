@@ -4,7 +4,7 @@ const fs = require('node:fs'), path = require('node:path'), Module = require('no
 const { EventEmitter } = require('node:events');
 function load(file, stubs = {}) {
   const name = path.resolve(__dirname, '..', file), mod = new Module(name, module); mod.paths = module.paths;
-  mod.require = id => id === 'server-only' ? {} : Object.hasOwn(stubs, id) ? stubs[id] : require(id);
+  mod.require = id => id === 'server-only' ? {} : Object.hasOwn(stubs, id) ? stubs[id] : id === './ntw-inventory-request' ? load('lib/ntw-inventory-request.ts') : require(id);
   mod._compile(ts.transpileModule(fs.readFileSync(name, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, name);
   return mod.exports;
 }
@@ -50,11 +50,13 @@ test('valid staff may test; invalid input cannot reach NTW; results are not cach
   }
 });
 test('transport uses QA-only credentials and fixed inventory endpoint with TLS verification', async t => {
-  const keys = ['NTW_TEST_CLIENT_ID', 'NTW_TEST_CLIENT_SECRET', 'NTW_TEST_CUSTOMER_ID', 'NTW_DEALER_CODE', 'NTW_CA_CERT', 'NTW_TEST_CA_CERT'];
+  const keys = ['NTW_TEST_CLIENT_ID', 'NTW_TEST_CLIENT_SECRET', 'NTW_TEST_CUSTOMER_ID', 'NTW_DEALER_CODE', 'NTW_TEST_DEALER_CODE', 'NTW_TEST_SHIP_TO_ADDRESS_JSON', 'NTW_CA_CERT', 'NTW_TEST_CA_CERT'];
   const saved = Object.fromEntries(keys.map(k => [k, process.env[k]]));
   t.after(() => { for (const k of keys) saved[k] === undefined ? delete process.env[k] : process.env[k] = saved[k]; });
   Object.assign(process.env, { NTW_TEST_CLIENT_ID: 'qa-id', NTW_TEST_CLIENT_SECRET: 'qa-secret', NTW_TEST_CUSTOMER_ID: '0037317114' });
   delete process.env.NTW_DEALER_CODE; delete process.env.NTW_CA_CERT; delete process.env.NTW_TEST_CA_CERT;
+  delete process.env.NTW_TEST_DEALER_CODE; delete process.env.NTW_TEST_SHIP_TO_ADDRESS_JSON;
+  process.env.NTW_DEALER_CODE = 'unverified-normal-code';
   let captured;
   const api = load('lib/ntw-test.ts', { 'node:https': { request(url, options, callback) {
     const request = new EventEmitter(); request.setTimeout = () => {}; request.end = body => {
@@ -64,10 +66,32 @@ test('transport uses QA-only credentials and fixed inventory endpoint with TLS v
   } } });
   assert.equal((await api.runNtwTest('205/75R15')).count, 0);
   assert.equal(captured.url.hostname, 'tbcservicesqa.tbccorp.com'); assert.equal(captured.url.pathname, '/tbccorp/qa/tbc/api/v2/products/tires');
-  assert.equal(captured.body.customerId, '37317114'); assert.equal(captured.body.searchType, 'ByTireSize');
+  assert.equal(captured.body.customerId, '0037317114'); assert.equal(captured.body.searchType, 'ByTireSize');
+  assert.equal(captured.body.shipTo[0].address.city, 'Pine Bush');
+  assert.equal(captured.body.shipTo[0].address.zipCode, '12566');
+  assert.equal(captured.body.isDropShip, false); assert.equal(captured.url.search, '');
   assert.equal(captured.options.headers['X-IBM-Client-Secret'], 'qa-secret'); assert.notEqual(captured.options.rejectUnauthorized, false);
   delete process.env.NTW_TEST_CLIENT_SECRET;
   await assert.rejects(() => api.runNtwTest('205/75R15'), /not configured/);
+});
+const contract = load('lib/ntw-inventory-request.ts');
+test('SAP Ship-to zeros survive and legacy eight-digit IDs are padded', () => {
+  assert.equal(contract.ntwCustomerId('0037317114'), '0037317114');
+  assert.equal(contract.ntwCustomerId('37317114'), '0037317114');
+  for (const value of ['', undefined, '12x34', '12345678901']) assert.throws(() => contract.ntwCustomerId(value));
+});
+test('size and product searches use separate documented criteria', () => {
+  const address = contract.ntwShopAddress();
+  const size = contract.ntwInventoryBody('0037317114', address, { tireSize: { width: '205', ratio: '75', diameter: '15' } });
+  assert.equal(size.searchType, 'ByTireSize'); assert.equal('brandName' in size.criteria[0], false); assert.equal('partNo' in size.criteria[0], false);
+  const part = contract.ntwInventoryBody('0037317114', address, { partNo: '2001834', brandName: 'Hankook' });
+  assert.equal(part.searchType, 'ByProductId'); assert.deepEqual(part.criteria, [{ partNo: '2001834', brandName: 'Hankook', requestedQty: 4 }]);
+  assert.throws(() => contract.ntwInventoryBody('0037317114', address, { partNo: '2001834', brandName: '' }));
+  assert.throws(() => contract.ntwShopAddress('{"name":"Incomplete"}'));
+});
+test('documented errorMsg is displayed safely instead of a generic 400', () => {
+  assert.equal(helper.ntwTestFailureDetail({ errorCd: 1006, errorDesc: 'NOT_FOUND', errorMsg: 'Could not get any inventory from backend, check your request' }, []), 'Could not get any inventory from backend, check your request');
+  assert.equal(helper.ntwTestFailureDetail({ errorMsg: 'Invalid qa-secret account 0037317114' }, ['qa-secret', '0037317114']), 'Invalid [redacted] account [redacted]');
 });
 test('temporary page and route do not invoke orders, payments, or database writes', () => {
   for (const file of ['app/ntw-test/page.tsx', 'app/api/ntw-test/route.ts', 'lib/ntw-test.ts']) {

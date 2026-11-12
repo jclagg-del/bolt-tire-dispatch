@@ -1,5 +1,6 @@
 import "server-only";
 import { request as httpsRequest } from "node:https";
+import { ntwCustomerId, ntwShopAddress, ntwInventoryBody, ntwErrorDetail } from "./ntw-inventory-request";
 
 // Temporary diagnostic: deliberately independent of the live catalog adapter.
 const endpoint = "https://tbcservicesqa.tbccorp.com/tbccorp/qa/tbc/api/v2/products/tires";
@@ -17,14 +18,7 @@ const record = (value: unknown): Row => value && typeof value === "object" && !A
 const text = (value: unknown) => typeof value === "string" || typeof value === "number" ? String(value).slice(0, 240) : "";
 const number = (value: unknown) => value !== null && value !== "" && ["string", "number"].includes(typeof value) && Number.isFinite(Number(value)) ? Number(value) : null;
 export function ntwTestFailureDetail(payload: unknown, secrets: string[]) {
-  const body = record(payload);
-  // Show only the supplier's error message, never arbitrary response bodies/headers.
-  const error = record(body.error);
-  const candidate = [body.message, body.errorMessage, body.detail, error.message, body.error].find(value => typeof value === "string" && value.trim());
-  if (typeof candidate !== "string") return "";
-  let safe = candidate;
-  for (const secret of secrets.filter(Boolean)) safe = safe.split(secret).join("[redacted]");
-  return safe.replace(/https?:\/\/\S+/gi, "[URL omitted]").replace(/<[^>]*>/g, "").replace(/[A-Za-z0-9_+=/-]{24,}/g, "[identifier omitted]").replace(/[\r\n\t]+/g, " ").slice(0, 350);
+  return ntwErrorDetail(payload, secrets);
 }
 export function summarizeNtwTest(payload: unknown) {
   const body = record(payload);
@@ -45,13 +39,14 @@ export function summarizeNtwTest(payload: unknown) {
 export async function runNtwTest(size: unknown) {
   const tireSize = testSize(size);
   const clientId = process.env.NTW_TEST_CLIENT_ID?.trim(), secret = process.env.NTW_TEST_CLIENT_SECRET?.trim();
-  const customerId = process.env.NTW_TEST_CUSTOMER_ID?.trim().replace(/^0+(?=\d)/, "");
-  if (!clientId || !secret || !customerId || !/^\d+$/.test(customerId)) throw new NtwTestError("The isolated NTW test credentials or Ship-to number are not configured yet.", 503);
+  if (!clientId || !secret || !process.env.NTW_TEST_CUSTOMER_ID) throw new NtwTestError("The isolated NTW test credentials or Ship-to number are not configured yet.", 503);
+  const customerId = ntwCustomerId(process.env.NTW_TEST_CUSTOMER_ID);
   const url = new URL(endpoint);
-  const dealer = process.env.NTW_DEALER_CODE?.trim();
+  // Do not borrow an unverified dealer code from the normal supplier adapter.
+  const dealer = process.env.NTW_TEST_DEALER_CODE?.trim();
   if (dealer) url.searchParams.set("dealerCode", dealer);
   const ca = (process.env.NTW_TEST_CA_CERT || process.env.NTW_CA_CERT)?.trim().replace(/\\n/g, "\n");
-  const body = JSON.stringify({ customerId, isDropShip: false, customerType: "external", searchType: "ByTireSize", source: "Bolt Tire", criteria: [{ tireSize, requestedQty: 4 }] });
+  const body = JSON.stringify(ntwInventoryBody(customerId, ntwShopAddress(process.env.NTW_TEST_SHIP_TO_ADDRESS_JSON), { tireSize }));
   const started = Date.now();
   const result = await new Promise<unknown>((resolve, reject) => {
     const request = httpsRequest(url, { method: "POST", ca, allowPartialTrustChain: Boolean(ca), headers: { Accept: "application/json", "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body).toString(), "X-IBM-Client-Id": clientId, "X-IBM-Client-Secret": secret } }, response => {
