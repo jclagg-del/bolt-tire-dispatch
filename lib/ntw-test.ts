@@ -16,6 +16,16 @@ type Row = Record<string, unknown>;
 const record = (value: unknown): Row => value && typeof value === "object" && !Array.isArray(value) ? value as Row : {};
 const text = (value: unknown) => typeof value === "string" || typeof value === "number" ? String(value).slice(0, 240) : "";
 const number = (value: unknown) => value !== null && value !== "" && ["string", "number"].includes(typeof value) && Number.isFinite(Number(value)) ? Number(value) : null;
+export function ntwTestFailureDetail(payload: unknown, secrets: string[]) {
+  const body = record(payload);
+  // Show only the supplier's error message, never arbitrary response bodies/headers.
+  const error = record(body.error);
+  const candidate = [body.message, body.errorMessage, body.detail, error.message, body.error].find(value => typeof value === "string" && value.trim());
+  if (typeof candidate !== "string") return "";
+  let safe = candidate;
+  for (const secret of secrets.filter(Boolean)) safe = safe.split(secret).join("[redacted]");
+  return safe.replace(/https?:\/\/\S+/gi, "[URL omitted]").replace(/<[^>]*>/g, "").replace(/[A-Za-z0-9_+=/-]{24,}/g, "[identifier omitted]").replace(/[\r\n\t]+/g, " ").slice(0, 350);
+}
 export function summarizeNtwTest(payload: unknown) {
   const body = record(payload);
   if (!Array.isArray(body.product)) throw new NtwTestError("NTW responded, but did not return the expected product list. The connection is not verified yet.");
@@ -50,7 +60,11 @@ export async function runNtwTest(size: unknown) {
       response.on("error", () => reject(new NtwTestError("The NTW response was interrupted. Please retry.")));
       response.on("end", () => {
         const status = response.statusCode || 502;
-        if (status < 200 || status >= 300) { reject(new NtwTestError(`NTW returned HTTP ${status}. ${status === 401 || status === 403 ? "Check the QA subscription, API keys and Ship-to access." : "The inventory lookup was not successful."}`)); return; }
+        if (status < 200 || status >= 300) {
+          let detail = "";
+          try { detail = ntwTestFailureDetail(JSON.parse(Buffer.concat(chunks).toString("utf8")), [clientId, secret, customerId]); } catch { /* Never echo HTML error pages. */ }
+          reject(new NtwTestError(`NTW returned HTTP ${status}. ${detail || (status === 401 || status === 403 ? "Check the QA subscription, API keys and Ship-to access." : "The inventory lookup was not successful.")}`)); return;
+        }
         try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(new NtwTestError("NTW returned an unreadable response.")); }
       });
     });

@@ -9,6 +9,11 @@ function load(file, stubs = {}) {
   return mod.exports;
 }
 const helper = load('lib/ntw-test.ts');
+test('supplier error detail is bounded and strips credentials and URLs', () => {
+  const value = helper.ntwTestFailureDetail({ message: 'Invalid account qa-secret https://example.test/?token=secret', headers: { secret: 'hidden' } }, ['qa-secret']);
+  assert.match(value, /Invalid account/); assert.doesNotMatch(value, /qa-secret|https:|token=|hidden/);
+  assert.equal(helper.ntwTestFailureDetail({ product: [], internal: 'do not show' }, []), '');
+});
 test('only metric size lookups are accepted, including LT', () => {
   assert.deepEqual(helper.testSize('LT245/75R16'), { width: '245', ratio: '75', diameter: '16' });
   assert.deepEqual(helper.testSize('2057515'), { width: '205', ratio: '75', diameter: '15' });
