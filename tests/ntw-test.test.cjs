@@ -66,7 +66,8 @@ test('transport uses QA-only credentials and fixed inventory endpoint with TLS v
   } } });
   assert.equal((await api.runNtwTest('205/75R15')).count, 0);
   assert.equal(captured.url.hostname, 'tbcservicesqa.tbccorp.com'); assert.equal(captured.url.pathname, '/tbccorp/qa/tbc/api/v2/products/tires');
-  assert.equal(captured.body.customerId, '0037317114'); assert.equal(captured.body.searchType, 'ByTireSize');
+  assert.equal(captured.body.customerId, '37317114'); assert.equal(captured.body.searchType, 'ByTireSize');
+  assert.equal(process.env.NTW_TEST_CUSTOMER_ID, '0037317114');
   assert.equal(captured.body.shipTo[0].address.city, 'Pine Bush');
   assert.equal(captured.body.shipTo[0].address.zipCode, '12566');
   assert.equal(captured.body.isDropShip, false); assert.equal(captured.url.search, '');

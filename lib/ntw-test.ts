@@ -40,13 +40,16 @@ export async function runNtwTest(size: unknown) {
   const tireSize = testSize(size);
   const clientId = process.env.NTW_TEST_CLIENT_ID?.trim(), secret = process.env.NTW_TEST_CLIENT_SECRET?.trim();
   if (!clientId || !secret || !process.env.NTW_TEST_CUSTOMER_ID) throw new NtwTestError("The isolated NTW test credentials or Ship-to number are not configured yet.", 503);
-  const customerId = ntwCustomerId(process.env.NTW_TEST_CUSTOMER_ID);
+  const configuredCustomerId = ntwCustomerId(process.env.NTW_TEST_CUSTOMER_ID);
+  // Explicit QA comparison requested by Bolt Tire; never change the saved ID
+  // or the normal supplier adapter's documented ten-digit representation.
+  const customerId = configuredCustomerId.replace(/^0+(?=\d)/, "");
   const url = new URL(endpoint);
   // Do not borrow an unverified dealer code from the normal supplier adapter.
   const dealer = process.env.NTW_TEST_DEALER_CODE?.trim();
   if (dealer) url.searchParams.set("dealerCode", dealer);
   const ca = (process.env.NTW_TEST_CA_CERT || process.env.NTW_CA_CERT)?.trim().replace(/\\n/g, "\n");
-  const body = JSON.stringify(ntwInventoryBody(customerId, ntwShopAddress(process.env.NTW_TEST_SHIP_TO_ADDRESS_JSON), { tireSize }));
+  const body = JSON.stringify({ ...ntwInventoryBody(configuredCustomerId, ntwShopAddress(process.env.NTW_TEST_SHIP_TO_ADDRESS_JSON), { tireSize }), customerId });
   const started = Date.now();
   const result = await new Promise<unknown>((resolve, reject) => {
     const request = httpsRequest(url, { method: "POST", ca, allowPartialTrustChain: Boolean(ca), headers: { Accept: "application/json", "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body).toString(), "X-IBM-Client-Id": clientId, "X-IBM-Client-Secret": secret } }, response => {
@@ -57,7 +60,7 @@ export async function runNtwTest(size: unknown) {
         const status = response.statusCode || 502;
         if (status < 200 || status >= 300) {
           let detail = "";
-          try { detail = ntwTestFailureDetail(JSON.parse(Buffer.concat(chunks).toString("utf8")), [clientId, secret, customerId]); } catch { /* Never echo HTML error pages. */ }
+          try { detail = ntwTestFailureDetail(JSON.parse(Buffer.concat(chunks).toString("utf8")), [clientId, secret, configuredCustomerId, customerId]); } catch { /* Never echo HTML error pages. */ }
           reject(new NtwTestError(`NTW returned HTTP ${status}. ${detail || (status === 401 || status === 403 ? "Check the QA subscription, API keys and Ship-to access." : "The inventory lookup was not successful.")}`)); return;
         }
         try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(new NtwTestError("NTW returned an unreadable response.")); }
