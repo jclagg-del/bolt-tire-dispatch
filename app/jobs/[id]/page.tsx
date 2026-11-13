@@ -12,7 +12,7 @@ import { requireCompletedJha } from "@/lib/job-jha-client";
 import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
-import { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
+import { isDeliveryService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import { type TireLabelJob } from "@/components/TireLabelPrint";
 import PrintLabelsButton from "@/components/PrintLabelsButton";
 
@@ -651,7 +651,7 @@ export default function EditJobPage() {
 
             <div style={heroActions}>
               {completionTextJob && <CompletionTextButton key={String(completionTextJob.id)} job={completionTextJob} />}
-              {id && !isDeliveryService(savedServiceType) && <JobJhaButton jobId={id} />}
+              {id && !isJhaExemptService(savedServiceType) && <JobJhaButton jobId={id} />}
               <button
                 type="button"
                 onClick={() => handleSave()}

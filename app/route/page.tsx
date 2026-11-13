@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import JobJhaButton from "@/components/JobJhaButton";
 import { requireCompletedJha } from "@/lib/job-jha-client";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
-import { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
+import { isDeliveryService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import WheelTorqueInput from "@/components/WheelTorqueInput";
 import RouteStopList from "@/components/RouteStopList";
 import RouteAppointmentDialog from "@/components/RouteAppointmentDialog";
@@ -667,7 +667,7 @@ function RouteCard({
       {job.notes && <div style={notes}>📝 {job.notes}</div>}
 
       <div style={buttonRow}>
-        {!readOnly && !isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
+        {!readOnly && !isJhaExemptService(job.service_type) && <JobJhaButton jobId={job.id} />}
         {job.address ? (
           <a href={mapsUrl(job.address)} target="_blank" rel="noreferrer" style={goBtn}>
             Go

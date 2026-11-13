@@ -5,6 +5,13 @@ export function isDeliveryService(serviceType?: string | null) {
   return ["delivery", "delivered", "delivery_pickup", "delivery / pickup", "delivery/pickup", "delivery and pickup"].includes(value);
 }
 
+// JHA-only exemption: do not change other completion checks or infer an
+// exemption from notes. Mixed pickup + installation still needs an assessment.
+export function isJhaExemptService(serviceType?: string | null) {
+  const value = (serviceType || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return isDeliveryService(serviceType) || ["pickup", "pick up", "pick-up"].includes(value);
+}
+
 export function wheelTorqueError(value: string): string | null {
   const clean = value.trim();
   if (!clean) return null; // Optional measurement; never invent a default.

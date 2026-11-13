@@ -103,15 +103,15 @@ test('missing schema fails closed and GET does not infer readiness', async () =>
   const response = await fixture().get();
   assert.equal(response.headers.get('cache-control'), 'no-store'); assert.equal((await response.json()).ready, false);
 });
-test('delivery completion is exempt using saved service type, even without JHA storage', async () => {
-  for (const service_type of ['Delivery', ' delivered ', 'DELIVERY_PICKUP', 'delivery / pickup', 'delivery/pickup', 'delivery and pickup', '  DELIVERY  ']) {
+test('delivery and pickup completion are exempt using saved service type, even without JHA storage', async () => {
+  for (const service_type of ['Delivery', ' delivered ', 'DELIVERY_PICKUP', 'delivery / pickup', 'delivery/pickup', 'delivery and pickup', '  DELIVERY  ', 'Pickup', 'pick up', 'pick-up', '  PICKUP\t ']) {
     const response = await fixture({ job: { id: '1', service_type }, missingSchema: true }).get();
     assert.equal(response.status, 200, service_type);
     const data = await response.json();
     assert.equal(data.required, false); assert.equal(data.ready, true);
     assert.equal(data.record, null); assert.equal(response.headers.get('cache-control'), 'no-store');
   }
-  for (const service_type of ['Installation', 'Mount & Balance', 'Delivery and Installation', 'Repair', 'Pickup', '', null]) {
+  for (const service_type of ['Installation', 'Mount & Balance', 'Delivery and Installation', 'Pickup and Installation', 'Repair', '', null]) {
     const response = await fixture({ job: { id: '1', service_type, notes: 'Delivery' } }).get('?service_type=Delivery');
     const data = await response.json();
     assert.equal(data.required, true, service_type); assert.equal(data.ready, false);
@@ -170,9 +170,9 @@ test('photo endpoint rejects empty, oversized and misleading content before uplo
 test('Route, job details and Tasks expose the JHA and recheck before completion', () => {
   for (const file of ['app/route/page.tsx', 'app/jobs/[id]/page.tsx', 'app/tasks/page.tsx']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.match(source, /!isDeliveryService\([^)]*\) && <JobJhaButton jobId=/); assert.match(source, /await requireCompletedJha\(/);
+    assert.match(source, /!isJhaExemptService\([^)]*\) && <JobJhaButton jobId=/); assert.match(source, /await requireCompletedJha\(/);
   }
-  assert.match(fs.readFileSync(path.join(__dirname, '../app/jobs/page.tsx'), 'utf8'), /!isDeliveryService\(job.service_type\) && <JobJhaButton jobId=/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../app/jobs/page.tsx'), 'utf8'), /!isJhaExemptService\(job.service_type\) && <JobJhaButton jobId=/);
 });
 test('valid photo receives a server-generated job path and failed metadata save removes only that upload', async () => {
   for (const missingSchema of [false, true]) {

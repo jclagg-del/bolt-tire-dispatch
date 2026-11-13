@@ -10,7 +10,7 @@ set local role authenticated;
 do $test$
 declare service text; target_field text; test_id text; accepted integer:=0; rejected integer:=0;
 begin
- foreach service in array array['Delivery','delivery',' delivered ',E'  DELIVERY\t  ','delivery_pickup','delivery / pickup','delivery/pickup','delivery and pickup','Installation','repair','General Service','Delivery and Installation','Pickup','',null] loop
+ foreach service in array array['Delivery','delivery',' delivered ',E'  DELIVERY\t  ','delivery_pickup','delivery / pickup','delivery/pickup','delivery and pickup','Pickup','pick up','pick-up',E'  PICKUP\t  ','Installation','repair','General Service','Delivery and Installation','Pickup and Installation','',null] loop
   foreach target_field in array array['complete','job_status','customer_order_status','completed_at'] loop
    test_id='jha-exemption-fixture-'||gen_random_uuid()::text;
    insert into jha_delivery_gate_test(id,service_type) values(test_id,service);
@@ -21,21 +21,21 @@ begin
      when 'customer_order_status' then update jha_delivery_gate_test set customer_order_status='Work Completed' where id=test_id;
      when 'completed_at' then update jha_delivery_gate_test set completed_at=now() where id=test_id;
     end case;
-    if service is null or service in ('Installation','repair','General Service','Delivery and Installation','Pickup','') then
+    if service is null or service in ('Installation','repair','General Service','Delivery and Installation','Pickup and Installation','') then
      raise exception 'Unexpected exemption for % / %',service,target_field;
     end if;
     accepted=accepted+1;
    exception when check_violation then
-    if service is not null and service not in ('Installation','repair','General Service','Delivery and Installation','Pickup','') then
+    if service is not null and service not in ('Installation','repair','General Service','Delivery and Installation','Pickup and Installation','') then
      raise exception 'Delivery incorrectly blocked: % / %',service,target_field;
     end if;
     rejected=rejected+1;
    end;
   end loop;
  end loop;
- if accepted<>32 or rejected<>28 then raise exception 'Wrong counts: accepted %, rejected %',accepted,rejected; end if;
+ if accepted<>48 or rejected<>28 then raise exception 'Wrong counts: accepted %, rejected %',accepted,rejected; end if;
 end;
 $test$;
 reset role;
-select 'PASS: 32 delivery completion paths allowed; 28 non-delivery paths blocked; authenticated role; no real jobs changed' as result;
+select 'PASS: 48 delivery/pickup completion paths allowed; 28 installation/unknown paths blocked; authenticated role; no real jobs changed' as result;
 rollback;

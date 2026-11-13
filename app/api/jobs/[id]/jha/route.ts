@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { jhaAccess, jhaUnavailable } from "@/lib/job-jha-server";
-import { isDeliveryService } from "@/lib/job-completion";
+import { isJhaExemptService } from "@/lib/job-completion";
 import { jhaContext, jhaReady, jhaValidation, normalizeJha, type JhaStatus } from "@/lib/job-jha";
 
 type Params = { params: Promise<{ id: string }> };
@@ -11,9 +11,9 @@ export async function GET(request: Request, { params }: Params) {
   const { admin, job } = access;
   const revision = new URL(request.url).searchParams.get("revision");
   if (revision && !/^[1-9]\d{0,8}$/.test(revision)) return NextResponse.json({ error: "Invalid revision." }, { status: 400 });
-  // Use the persisted service type, not a client-provided exemption. Delivery
+  // Use the persisted service type, not a client-provided exemption. Delivery/pickup
   // completion does not depend on an assessment or JHA storage being available.
-  if (!revision && isDeliveryService(job.service_type)) {
+  if (!revision && isJhaExemptService(job.service_type)) {
     return NextResponse.json({ job, record: null, context: jhaContext(job), required: false,
       ready: true, readOnly: true, history: [] }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -41,7 +41,7 @@ export async function GET(request: Request, { params }: Params) {
     }));
     record.assessment = { ...assessment, photos };
   }
-  return NextResponse.json({ job, record, context: jhaContext(job), required: !isDeliveryService(job.service_type), ready: !revision && jhaReady(record, job),
+  return NextResponse.json({ job, record, context: jhaContext(job), required: !isJhaExemptService(job.service_type), ready: !revision && jhaReady(record, job),
     readOnly: !!revision || !!job.complete || !!job.archived, history: history || [] }, { headers: { "Cache-Control": "no-store" } });
 }
 

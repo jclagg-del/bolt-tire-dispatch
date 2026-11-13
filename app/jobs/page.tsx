@@ -7,7 +7,7 @@ import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import JobJhaButton from "@/components/JobJhaButton";
 import CompletionTextButton from "@/components/CompletionTextButton";
-import { isDeliveryService } from "@/lib/job-completion";
+import { isJhaExemptService } from "@/lib/job-completion";
 import { isPaidTiresToOrder } from "@/lib/paid-tires-queue";
 
 type Job = {
@@ -657,7 +657,7 @@ function JobsPageContent() {
 
                   <div style={infoTag}>{job.payment_status || "unpaid"}</div>
                   <CompletionTextButton key={String(job.id)} job={job} />
-                  {!isDeliveryService(job.service_type) && <JobJhaButton jobId={job.id} />}
+                  {!isJhaExemptService(job.service_type) && <JobJhaButton jobId={job.id} />}
 
                   {total ? <div style={moneyTag}>{total}</div> : null}
 
