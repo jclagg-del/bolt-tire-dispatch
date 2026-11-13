@@ -7,7 +7,7 @@ import AppHeader from "@/components/AppHeader";
 import JobJhaButton from "@/components/JobJhaButton";
 import { requireCompletedJha } from "@/lib/job-jha-client";
 import { getQuoCallUrl, getQuoTextUrl } from "@/lib/quo";
-import { isDeliveryService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
+import { isDeliveryService, isPickupService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import WheelTorqueInput from "@/components/WheelTorqueInput";
 import RouteStopList from "@/components/RouteStopList";
 import RouteAppointmentDialog from "@/components/RouteAppointmentDialog";
@@ -435,6 +435,7 @@ export default function RoutePage() {
 
   const mileageMissing = !routeMileage.trim();
   const deliveryOnly = isDeliveryService(selectedJob?.service_type);
+  const pickupOnly = isPickupService(selectedJob?.service_type);
   const canComplete =
     !!selectedJob && !jobCompletionError(selectedJob.service_type, routeMileage, mileageConfirmed, torqueConfirmed, torqueFtLb) && !completingId;
 
@@ -544,14 +545,14 @@ export default function RoutePage() {
       {showCompleteModal && selectedJob && (
         <div style={modalOverlay}>
           <div style={modalCard}>
-            <h2 style={modalTitle}>{deliveryOnly ? "Complete this delivery" : "Before completing this job"}</h2>
+            <h2 style={modalTitle}>{pickupOnly ? "Complete this pickup" : deliveryOnly ? "Complete this delivery" : "Before completing this job"}</h2>
             <p style={modalText}>
-              {deliveryOnly ? "Confirm the tires have been delivered. Mileage and wheel-torque checks are not required for deliveries." : "Confirm the job is wrapped up properly before marking it complete."}
+              {pickupOnly ? "Confirm the tires have been picked up." : deliveryOnly ? "Confirm the tires have been delivered. Mileage and wheel-torque checks are not required for deliveries." : "Confirm the job is wrapped up properly before marking it complete."}
             </p>
 
             <div style={jobNameBox}>{selectedJob.customer || "Unnamed Job"}</div>
 
-            {!deliveryOnly && <><input
+            {!deliveryOnly && !pickupOnly && <><input
               value={routeMileage}
               onChange={(e) => setRouteMileage(e.target.value)}
               style={modalInput}

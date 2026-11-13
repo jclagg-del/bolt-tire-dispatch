@@ -7,6 +7,7 @@ type Props = {
   show: boolean;
   completing: boolean;
   deliveryOnly?: boolean;
+  pickupOnly?: boolean;
   mileageMissing: boolean;
   mileageConfirmed: boolean;
   torqueConfirmed: boolean;
@@ -22,6 +23,7 @@ export default function CompletionModal({
   show,
   completing,
   deliveryOnly = false,
+  pickupOnly = false,
   mileageMissing,
   mileageConfirmed,
   torqueConfirmed,
@@ -34,16 +36,17 @@ export default function CompletionModal({
 }: Props) {
   if (!show) return null;
 
+  const noInstallationChecks = deliveryOnly || pickupOnly;
   const canComplete =
-    (deliveryOnly || (!mileageMissing && mileageConfirmed && torqueConfirmed && !wheelTorqueError(torqueFtLb))) && !completing;
+    (noInstallationChecks || (!mileageMissing && mileageConfirmed && torqueConfirmed && !wheelTorqueError(torqueFtLb))) && !completing;
 
   return (
     <div style={modalOverlay}>
       <div style={modalCard}>
-        <h2 style={modalTitle}>{deliveryOnly ? "Complete this delivery" : "Before completing this job"}</h2>
-        <p style={modalText}>{deliveryOnly ? "Confirm the tires have been delivered. Mileage and wheel-torque checks are not required for deliveries." : "Please confirm the required reminders below."}</p>
+        <h2 style={modalTitle}>{pickupOnly ? "Complete this pickup" : deliveryOnly ? "Complete this delivery" : "Before completing this job"}</h2>
+        <p style={modalText}>{pickupOnly ? "Confirm the tires have been picked up." : deliveryOnly ? "Confirm the tires have been delivered. Mileage and wheel-torque checks are not required for deliveries." : "Please confirm the required reminders below."}</p>
 
-        {!deliveryOnly && <>{mileageMissing && (
+        {!noInstallationChecks && <>{mileageMissing && (
           <div style={warningBox}>
             Vehicle mileage has not been entered yet. Add mileage in the form before completing this job.
           </div>

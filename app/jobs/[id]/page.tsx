@@ -12,7 +12,7 @@ import { requireCompletedJha } from "@/lib/job-jha-client";
 import JobTireOrdering from "@/components/JobTireOrdering";
 import VehicleSelect from "@/components/VehicleSelect";
 import CompletionModal from "@/components/CompletionModal";
-import { isDeliveryService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
+import { isDeliveryService, isPickupService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import { type TireLabelJob } from "@/components/TireLabelPrint";
 import PrintLabelsButton from "@/components/PrintLabelsButton";
 
@@ -998,6 +998,7 @@ export default function EditJobPage() {
       <CompletionModal
         show={showCompleteModal}
         deliveryOnly={isDeliveryService(savedServiceType)}
+        pickupOnly={isPickupService(savedServiceType)}
         completing={completing}
         mileageMissing={mileageMissing}
         mileageConfirmed={mileageConfirmed}

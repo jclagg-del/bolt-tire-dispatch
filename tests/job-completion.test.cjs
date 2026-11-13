@@ -15,7 +15,7 @@ function load(file) {
   }).outputText, __filename);
   return mod.exports;
 }
-const { isDeliveryService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate, wheelTorqueError } = load('../lib/job-completion.ts');
+const { isDeliveryService, isPickupService, isDeliveryOrPickupService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate, wheelTorqueError } = load('../lib/job-completion.ts');
 const CompletionModal = load('../components/CompletionModal.tsx').default;
 const props = { show: true, completing: false, mileageMissing: true, mileageConfirmed: false, torqueConfirmed: false, torqueFtLb: '', onTorqueValueChange() {}, onMileageChange() {}, onTorqueChange() {}, onCancel() {}, onConfirm() {} };
 test('delivery service variants complete without odometer or wheel torque and preserve saved mileage', () => {
@@ -26,9 +26,23 @@ test('delivery service variants complete without odometer or wheel torque and pr
     assert.deepEqual(completionMileageUpdate(value, '99999'), {});
   }
 });
-test('installations and unrecognized services retain every completion check', () => {
-  for (const value of ['Installation', 'New Tires - Installed', 'Delivery and installation', '', null, undefined]) {
+test('pickup variants skip installation checks without erasing saved measurements', () => {
+  for (const value of ['Pickup', ' pickup ', 'PICKUP', 'Pick up', ' pick   up ', 'pick-up']) {
+    assert.equal(isPickupService(value), true);
     assert.equal(isDeliveryService(value), false);
+    assert.equal(isDeliveryOrPickupService(value), true);
+    assert.equal(jobCompletionError(value, '', false, false, 'bad'), null);
+    assert.deepEqual(completionMileageUpdate(value, ''), {});
+    assert.deepEqual(completionMileageUpdate(value, '99999'), {});
+    assert.deepEqual(completionTorqueUpdate(value, ''), {});
+    assert.deepEqual(completionTorqueUpdate(value, 'bad'), {});
+    assert.deepEqual(completionTorqueUpdate(value, '150'), {});
+  }
+});
+test('installations and unrecognized services retain every completion check', () => {
+  for (const value of ['Installation', 'New Tires - Installed', 'Delivery and installation', 'Pickup and Installation', 'pick up / install', 'repair', '', null, undefined]) {
+    assert.equal(isDeliveryService(value), false);
+    assert.equal(isDeliveryOrPickupService(value), false);
     assert.match(jobCompletionError(value, '', true, true), /enter vehicle mileage/);
     assert.match(jobCompletionError(value, '100', false, true), /confirm mileage and wheel torque/);
     assert.match(jobCompletionError(value, '100', true, false), /confirm mileage and wheel torque/);
@@ -53,6 +67,23 @@ test('installation modal still requires both confirmations and mileage', () => {
   assert.ok(html.includes('disabled=""'));
   const ready = renderToStaticMarkup(React.createElement(CompletionModal, { ...props, mileageMissing: false, mileageConfirmed: true, torqueConfirmed: true }));
   assert.ok(!ready.includes('disabled=""'));
+});
+test('pickup modal offers confirmation without mileage or torque fields', () => {
+  const html = renderToStaticMarkup(React.createElement(CompletionModal, { ...props, pickupOnly: true, torqueFtLb: 'bad' }));
+  assert.match(html, /Complete this pickup/);
+  assert.match(html, /Confirm the tires have been picked up/);
+  assert.doesNotMatch(html, /type="checkbox"|Wheel torque|Vehicle mileage|disabled=""/);
+  assert.match(html, /Confirm Complete/);
+  const busy = renderToStaticMarkup(React.createElement(CompletionModal, { ...props, pickupOnly: true, completing: true }));
+  assert.match(busy, /disabled=""/);
+});
+test('route and job editor pass the persisted pickup service to their completion UI', () => {
+  const route = fs.readFileSync(require.resolve('../app/route/page.tsx'), 'utf8');
+  const detail = fs.readFileSync(require.resolve('../app/jobs/[id]/page.tsx'), 'utf8');
+  assert.match(route, /const pickupOnly = isPickupService\(selectedJob\?\.service_type\)/);
+  assert.match(route, /!deliveryOnly && !pickupOnly &&/);
+  assert.match(route, /Complete this pickup/);
+  assert.match(detail, /pickupOnly=\{isPickupService\(savedServiceType\)\}/);
 });
 test('route and job completion both use the shared delivery rules and mileage preservation', () => {
   for (const file of ['../app/route/page.tsx', '../app/jobs/[id]/page.tsx']) {

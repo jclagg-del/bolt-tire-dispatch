@@ -5,11 +5,19 @@ export function isDeliveryService(serviceType?: string | null) {
   return ["delivery", "delivered", "delivery_pickup", "delivery / pickup", "delivery/pickup", "delivery and pickup"].includes(value);
 }
 
-// JHA-only exemption: do not change other completion checks or infer an
-// exemption from notes. Mixed pickup + installation still needs an assessment.
-export function isJhaExemptService(serviceType?: string | null) {
+export function isPickupService(serviceType?: string | null) {
   const value = (serviceType || "").trim().toLowerCase().replace(/\s+/g, " ");
-  return isDeliveryService(serviceType) || ["pickup", "pick up", "pick-up"].includes(value);
+  return ["pickup", "pick up", "pick-up"].includes(value);
+}
+
+// Exact service types only; mixed installation work and unknown types retain
+// their checks. Never infer an exemption from notes or customer names.
+export function isDeliveryOrPickupService(serviceType?: string | null) {
+  return isDeliveryService(serviceType) || isPickupService(serviceType);
+}
+
+export function isJhaExemptService(serviceType?: string | null) {
+  return isDeliveryOrPickupService(serviceType);
 }
 
 export function wheelTorqueError(value: string): string | null {
@@ -20,20 +28,20 @@ export function wheelTorqueError(value: string): string | null {
 }
 
 export function completionTorqueUpdate(serviceType: string | null | undefined, value: string) {
-  if (isDeliveryService(serviceType)) return {};
+  if (isDeliveryOrPickupService(serviceType)) return {};
   const error = wheelTorqueError(value);
   if (error) throw new Error(error);
   return { wheel_torque_ft_lb: value.trim() ? Number(value.trim()) : null };
 }
 
 export function jobCompletionError(serviceType: string | null | undefined, mileage: string, mileageConfirmed: boolean, torqueConfirmed: boolean, torqueFtLb = "") {
-  if (isDeliveryService(serviceType)) return null;
+  if (isDeliveryOrPickupService(serviceType)) return null;
   if (!mileage.trim()) return "Please enter vehicle mileage before completing the job.";
   if (!mileageConfirmed || !torqueConfirmed) return "Please confirm mileage and wheel torque before completing the job.";
   return wheelTorqueError(torqueFtLb);
 }
 
 export function completionMileageUpdate(serviceType: string | null | undefined, mileage: string) {
-  // A delivery does not record a new odometer reading or erase an existing one.
-  return isDeliveryService(serviceType) ? {} : { vehicle_mileage: mileage.trim() || null };
+  // Pickup/delivery completion must not erase existing measurements.
+  return isDeliveryOrPickupService(serviceType) ? {} : { vehicle_mileage: mileage.trim() || null };
 }
