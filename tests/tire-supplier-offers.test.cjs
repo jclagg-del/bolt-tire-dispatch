@@ -135,3 +135,90 @@ test('compact commercial half-inch sizes match formatted sizes without merging d
  for(const size of ['225/70R195','22570195/14/EXTRA','22570185','22570195UNKNOWN']) assert.notEqual(tireSizeIdentity(size).dimensions,'225/70R19.5');
  assert.notEqual(tireSizeIdentity('22570195').dimensions,tireSizeIdentity('22570225').dimensions);
 });
+
+test('live 37-inch Toyo and Nitto exact parts group when USAF omits LT, ply and load range',()=>{
+ const records = [
+  ['TOYO','354470','Open Country R/T Trail','22','12','127 Q'],
+  ['TOYO','358400','Open Country R/T Pro','22','12','127 Q'],
+  ['TOYO','356030','Open Country A/T III','22','12','127 Q'],
+  ['NITTO','224740','Terra Grappler G3','22','12','127 R'],
+  ['NITTO','217280','Ridge Grappler','22','12','127 Q'],
+  ['TOYO','356020','Open Country A/T III','20','10','126 Q'],
+  ['TOYO','360750','Open Country M/T','20','10','126 Q'],
+  ['TOYO','358280','Open Country R/T Pro','20','10','126 Q'],
+  ['TOYO','354210','Open Country R/T Trail','20','10','126 Q'],
+  ['NITTO','218030','Recon Grappler A/T','20','10','126 R'],
+  ['NITTO','224720','Terra Grappler G3','20','10','126 R'],
+  ['NITTO','217030','Ridge Grappler','20','10','126 Q'],
+  ['NITTO','205800','Trail Grappler M/T','20','10','126 Q'],
+ ];
+ const products = records.flatMap(([brand,part,model,rim,ply,speed])=>{
+  const a={...atd,brand,id:part,atdProductNumber:part,manufacturerProductNumber:part,model,size:`37X12.50R${rim}LT/${ply}`,loadSpeed:speed,loadRange:ply==='10'?'E':'F',sidewall:'BSW',runFlat:false};
+  const b={...a,id:`USAF-${part}`,supplier:'USAF',size:`371250${rim}`,loadRange:''};
+  for(const source of [[a,b],[b,a]]) {
+   assert.equal(uniqueTireCards(source).length,1,part);
+   assert.deepEqual(supplierOffers(source[0],source).map(p=>p.supplier),['ATD','USAF'],part);
+   assert.equal(uniqueTireCards(source)[0],source[0],'Preserve price, availability, rating and purchasing target');
+   assert.equal(b.loadRange,'','Do not invent missing supplier specifications');
+  }
+  return [a,b];
+ });
+ assert.equal(uniqueTireCards(products).length,records.length);
+ assert.equal(uniqueTireCards([...products].reverse()).length,records.length);
+});
+
+test('unknown flotation load range never merges conflicting or unidentified variants',()=>{
+ const a={...atd,brand:'TOYO',size:'37X12.50R22LT/12',loadSpeed:'127 Q',loadRange:'F',sidewall:'BSW',runFlat:false,oeMarking:'MO'};
+ const b={...usaf,brand:'TOYO',size:'37125022',loadSpeed:'127 Q',loadRange:'',sidewall:'BSW',runFlat:false,oeMarking:'MO'};
+ for(const patch of [{loadRange:'E'},{loadRange:'XL'},{loadRange:'SL'},{loadSpeed:'10 ply'},{loadSpeed:'126 Q'},{loadSpeed:'127 R'},{size:'37125020'},{size:'37135022'},{sidewall:'OWL'},{oeMarking:'BMW'},{runFlat:true},{fitmentPosition:'rear'},{brand:'NITTO'},{atdProductNumber:'different',manufacturerProductNumber:'different'},{atdProductNumber:'',manufacturerProductNumber:''},{size:'37X12.50R22/UNKNOWN'}]) {
+  assert.equal(sameTireVariant(a,{...b,...patch}),false,JSON.stringify(patch));
+  assert.equal(sameTireVariant({...b,...patch},a),false,JSON.stringify(patch));
+ }
+ assert.equal(sameTireVariant({...a,size:'LT275/65R20',loadRange:'E'}, {...b,size:'2756520',loadRange:'SL'}),false,'Explicit passenger construction remains separate');
+});
+
+test('metric and commercial exact-part records tolerate missing construction metadata, not explicit conflicts',()=>{
+ for(const [brand,part,size,compact,speed,range] of [
+  ['TOYO','360410','LT275/65R20/10','2756520','126 P','E'],
+  ['NITTO','206950','LT275/65R20/10','2756520','126 Q','E'],
+  ['NITTO','206600','LT275/65R20/10','2756520','126 Q','E'],
+  ['NITTO','205340','LT305/55R20/10','3055520','121 R','E'],
+  ['NEXEN','1A325NXK','LT305/55R20/12','3055520','125/122 S','F'],
+  ['NEXEN','15929NXK','LT275/65R20/10','2756520','126/123 Q','E'],
+  ['NEXEN','18766NXK','315/70R17','3157017','126/123 S','E'],
+  ['NEXEN','18767NXK','285/70R17','2857017','126/123 S','E'],
+  ['CONTINENTAL','05226360000','225/70R19.5/14','22570195','128/126 N','G'],
+  ['CONTINENTAL','15582830000','LT275/65R20/E','2756520','126/123 S','E'],
+ ]) {
+  const a={...atd,brand,id:part,atdProductNumber:part,manufacturerProductNumber:part,size,loadSpeed:speed,loadRange:range};
+  const b={...a,id:`USAF-${part}`,supplier:'USAF',size:compact,loadSpeed:brand==='NEXEN'?'':speed,loadRange:''};
+  assert.equal(sameTireVariant(a,b),true,part);
+  assert.equal(uniqueTireCards([a,b]).length,1,part);
+  assert.deepEqual(supplierOffers(b,[a,b]).map(p=>p.supplier),['ATD','USAF']);
+  for(const patch of [{loadRange:'SL'},{loadRange:'XL'},{size:`P${compact}`},{atdProductNumber:'other',manufacturerProductNumber:'other'},{loadSpeed:'99 T'}]) assert.equal(sameTireVariant(a,{...b,...patch}),false,part+JSON.stringify(patch));
+ }
+ assert.equal(sameTireVariant(atd,{...usaf,loadRange:''}),true,'Known passenger tire and its exact part with unknown load range stay grouped');
+});
+
+test('letter load-range suffixes normalize across sizes but cannot hide conflicting ply ratings',()=>{
+ for(const [range,ply] of Object.entries({C:'6',D:'8',E:'10',F:'12',G:'14',H:'16'})) {
+  for(const size of ['LT275/65R20','37X12.50R22LT','225/70R19.5']) {
+   assert.deepEqual(tireSizeIdentity(`${size}/${range}`),tireSizeIdentity(`${size}/${ply}`));
+   const a={...atd,size:`${size}/${range}`,loadRange:range};
+   const b={...usaf,size:`${size}/${ply}`,loadRange:range};
+   assert.equal(sameTireVariant(a,b),true);
+   assert.equal(sameTireVariant(a,{...b,size:`${size}/${Number(ply)+2}`}),false);
+  }
+ }
+ for(const size of ['LT275/65R20/UNKNOWN','LT275/65R20/E/EXTRA','275/65R200/E']) assert.equal(tireSizeIdentity(size).dimensions,size);
+});
+
+test('General supplier LT after the ply suffix matches the exact part without losing its ply',()=>{
+ const a={...atd,brand:'GENERAL',id:'04492680000',atdProductNumber:'04492680000',manufacturerProductNumber:'04492680000',model:'Grabber A/TX',size:'37X12.50R20/10LT',loadSpeed:'126 R',loadRange:'E'};
+ const b={...a,id:'USAF-04492680000',supplier:'USAF',size:'37125020',loadRange:''};
+ assert.deepEqual(tireSizeIdentity(a.size),{dimensions:'37X12.50R20',ply:'10'});
+ assert.equal(uniqueTireCards([a,b]).length,1);
+ assert.deepEqual(supplierOffers(b,[a,b]).map(p=>p.supplier),['ATD','USAF']);
+ assert.equal(sameTireVariant(a,{...b,size:'37X12.50R20/12LT'}),false);
+ assert.equal(tireSizeIdentity('37X12.50R20/10LT/EXTRA').dimensions,'37X12.50R20/10LT/EXTRA');
+});

@@ -20,11 +20,23 @@ export function normalizeTireSidewall(value: string): string {
   return ["bw", "bsw", "blk", "blackwall", "blacksidewall"].includes(key) ? "bsw" : key;
 }
 const identifiers = (tire: SupplierProduct) => [tire.atdProductNumber, tire.manufacturerProductNumber].map(normalize).filter(Boolean);
-const lightTruck = (tire: SupplierProduct) => /^lt/i.test(tire.size.trim())
-  || /LT(?:\/\d+(?:PR)?)?$/i.test(tire.size.trim())
-  || /^(?:load\s*)?[c-h]$/i.test(tire.loadRange.trim())
-  || /\d+\s*\/\s*\d+/.test(tire.loadSpeed)
-  || plyRatings(tire).some(ply => Number(ply) >= 6);
+function lightTruck(tire: SupplierProduct): boolean | null {
+  if (/^(?:P|ST|T)/i.test(tire.size.trim())) return false;
+  if (/^lt/i.test(tire.size.trim())
+    || /LT(?:\/\d+(?:PR)?)?$/i.test(tire.size.trim())
+    || /^(?:load\s*)?[c-h]$/i.test(tire.loadRange.trim())
+    || /\d+\s*\/\s*\d+/.test(tire.loadSpeed)
+    || plyRatings(tire).some(ply => Number(ply) >= 6)) return true;
+  // USAF records can have an exact service rating but omit LT,
+  // load range and ply. Missing data is not a passenger-tire designation.
+  // Permit unknown construction to match only after exact part/spec
+  // checks below; never guess a displayed load range. Explicit passenger,
+  // trailer and temporary-spare designations are not unknown.
+  if (/(?:XL|SL|CP|C)$/i.test(tire.size.trim())) return false;
+  if (/^(?:\d{2}(?:\.\d)?X\d{1,2}\.\d{2}|\d{3}\/\d{2})R\d{2}(?:\.5)?$/.test(tireSizeIdentity(tire.size).dimensions)
+    && !tire.loadRange.trim() && !plyRatings(tire).length) return null;
+  return false;
+}
 
 // USAF may supply "10 ply" in the load/speed field, not a service rating.
 // Compare that against the other supplier's size suffix or load range instead.
@@ -43,9 +55,14 @@ function plyRatings(tire: SupplierProduct): string[] {
 // annotations stay intact so they cannot silently collapse distinct variants.
 export function tireSizeIdentity(value: string): { dimensions: string; ply: string | null } {
   const text = value.toUpperCase().replace(/\s/g, "");
-  const flotation = text.match(/^(?:LT)?(\d{2}(?:\.\d)?)X(\d{1,2}\.\d{1,2}|\d{3,4})R(\d{2}(?:\.5)?)(?:LT)?(?:\/(\d{1,2})(?:PR)?)?$/);
+  // Known load-range suffixes are equivalent ply ratings, not dimensions.
+  // Keep the original string on parse failure so unknown annotations stay distinct.
+  const parseText = text
+    .replace(/\/(\d{1,2}(?:PR)?)LT$/, "LT/$1")
+    .replace(/\/([C-H])$/, (_, range: string) => `/${rangePly[range]}`);
+  const flotation = parseText.match(/^(?:LT)?(\d{2}(?:\.\d)?)X(\d{1,2}\.\d{1,2}|\d{3,4})R(\d{2}(?:\.5)?)(?:LT)?(?:\/(\d{1,2})(?:PR)?)?$/);
   // Only known flotation dimensions; don't reinterpret compact metric/truck sizes.
-  const compactFlotation = text.match(/^([2-5]\d)(0[5-9]\d{2}|1\d{3})(1\d|2\d)$/);
+  const compactFlotation = parseText.match(/^([2-5]\d)(0[5-9]\d{2}|1\d{3})(1\d|2\d)$/);
   if (flotation || compactFlotation) {
     const parts = (flotation || compactFlotation)!;
     const width = parts[2].includes(".") ? Number(parts[2]) : Number(parts[2]) / 100;
@@ -54,9 +71,9 @@ export function tireSizeIdentity(value: string): { dimensions: string; ply: stri
   // Commercial supplier shorthand omits the decimal too: 22570195 means
   // 225/70R19.5. Accept only compact metric sizes and known half-inch rims;
   // do not reinterpret malformed formatted sizes such as 225/70R195.
-  const compactHalfInch = text.match(/^(?:LT|P|ST|T)?([1-4]\d{2})(\d{2})(165|175|195|225|245)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
+  const compactHalfInch = parseText.match(/^(?:LT|P|ST|T)?([1-4]\d{2})(\d{2})(165|175|195|225|245)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
   if (compactHalfInch) return { dimensions: `${compactHalfInch[1]}/${compactHalfInch[2]}R${Number(compactHalfInch[3]) / 10}`, ply: compactHalfInch[4] || null };
-  const metric = text.match(/^(?:LT|P|ST|T)?(\d{3})\/?(\d{2})(?:ZR|R)?(\d{2}(?:\.5)?)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
+  const metric = parseText.match(/^(?:LT|P|ST|T)?(\d{3})\/?(\d{2})(?:ZR|R)?(\d{2}(?:\.5)?)(?:LT|XL|SL)?(?:\/(\d{1,2})(?:PR)?)?$/);
   if (!metric) return { dimensions: text, ply: null };
   return { dimensions: `${metric[1]}/${metric[2]}R${metric[3]}`, ply: metric[4] || null };
 }
@@ -66,8 +83,10 @@ export function tireSizeIdentity(value: string): { dimensions: string; ply: stri
 export function sameTireVariant(a: SupplierProduct, b: SupplierProduct): boolean {
   if (a.id === b.id && (a.fitmentPosition || "both") === (b.fitmentPosition || "both")) return true;
   const sizeA = tireSizeIdentity(a.size), sizeB = tireSizeIdentity(b.size);
+  const truckA = lightTruck(a), truckB = lightTruck(b);
+  const sameConstruction = truckA === truckB || truckA === null || truckB === null;
   if (normalize(a.brand) !== normalize(b.brand) || !a.size || !b.size ||
-      sizeA.dimensions !== sizeB.dimensions || lightTruck(a) !== lightTruck(b) ||
+      sizeA.dimensions !== sizeB.dimensions || !sameConstruction ||
       (a.fitmentPosition || "both") !== (b.fitmentPosition || "both")) return false;
   if (new Set([...plyRatings(a), ...plyRatings(b)]).size > 1) return false;
   const specsA = loadSpecs(a), specsB = loadSpecs(b);
