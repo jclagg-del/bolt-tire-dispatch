@@ -11,6 +11,7 @@ import { isDeliveryService, isPickupService, isJhaExemptService, jobCompletionEr
 import WheelTorqueInput from "@/components/WheelTorqueInput";
 import RouteStopList from "@/components/RouteStopList";
 import RouteAppointmentDialog from "@/components/RouteAppointmentDialog";
+import DeliveryManifestButton from "@/components/DeliveryManifestButton";
 import { applyRouteOrder, routeDate, routeDateTimeInput, validRouteDate, shiftRouteDate, routeDayLabel, routeJobsForDate, type SavedRouteOrder } from "@/lib/route-order";
 
 type Job = {
@@ -456,6 +457,7 @@ export default function RoutePage() {
             </label>
             <button type="button" aria-label="Next day" disabled={dateNavigationLocked} onClick={() => changeRouteDate(shiftRouteDate(selectedDate, 1))} style={dateButton}>Next day →</button>
             <button type="button" disabled={dateNavigationLocked} onClick={() => changeRouteDate(getNYDateKey(new Date()))} style={{ ...dateButton, background: "#2563eb", color: "white", borderColor: "#2563eb" }}>Today</button>
+            <DeliveryManifestButton date={selectedDate} disabled={loading || !!errorText} />
           </div>
           <p style={subtitle}>
             {readOnlyDay

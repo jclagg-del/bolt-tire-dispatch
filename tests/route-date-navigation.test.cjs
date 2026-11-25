@@ -48,7 +48,8 @@ function harness({ transferFailure = false } = {}) {
     const date=new URL(url,'https://example.test').searchParams.get('date');reads.push({table:'route_day_orders',date});await barrier(date).promise;return {ok:true,json:async()=>({orders:[{vehicle_id:'stepvan',job_ids:[date],revision:date===today?1:2}]})};
   };
   const component=type=>({__esModule:true,default:type});
-  const Page=load('app/route/page.tsx',{react,'next/navigation':{useRouter:()=>({push(){}})},'@/lib/supabase':{supabase},'@/components/AppHeader':component('app-header'),'@/components/JobJhaButton':component('jha-button'),'@/components/RouteStopList':component('route-stop-list'),'@/components/RouteAppointmentDialog':component('appointment-dialog'),'@/components/WheelTorqueInput':component('wheel-torque'),'@/lib/job-jha-client':{},'@/lib/quo':{}}).default;
+  const deliveryButton = component('delivery-manifest-button');
+  const Page=load('app/route/page.tsx',{react,'next/navigation':{useRouter:()=>({push(){}})},'@/lib/supabase':{supabase},'@/components/DeliveryManifestButton':deliveryButton,'@/components/AppHeader':component('app-header'),'@/components/JobJhaButton':component('jha-button'),'@/components/RouteStopList':component('route-stop-list'),'@/components/RouteAppointmentDialog':component('appointment-dialog'),'@/components/WheelTorqueInput':component('wheel-torque'),'@/lib/job-jha-client':{},'@/lib/quo':{}}).default;
   function render(){cursor=0;tree=Page();for(const effect of effects.splice(0))effect();return tree;}
   const find=predicate=>nodes(tree).find(predicate);
   return {today,reads,writes,render,find,barrier,

@@ -4,10 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import DeliveryManifestButton from "@/components/DeliveryManifestButton";
+import { dailyDeliveryGroups, deliveryQuantity, isFleetDelivery } from "@/lib/delivery-manifest";
+import { routeDate } from "@/lib/route-order";
 
 type Job = {
   id: string | number;
   customer?: string | null;
+  facility_name?: string | null;
   vehicle?: string | null;
   vehicle_id?: string | null;
   unit_number?: string | null;
@@ -219,6 +223,7 @@ export default function SchedulePage() {
     const { data, error } = await supabase.from("jobs").select(`
       id,
       customer,
+      facility_name,
       vehicle,
       vehicle_id,
       unit_number,
@@ -284,7 +289,7 @@ export default function SchedulePage() {
     for (const job of jobs) {
       if (!job.scheduled || job.complete || job.archived) continue;
 
-      const dateKey = getNYDateKey(job.scheduled);
+      const dateKey = routeDate(job.scheduled);
 
       if (grouped[dateKey]) grouped[dateKey].push(job);
     }
@@ -362,6 +367,7 @@ export default function SchedulePage() {
           <h1 style={title}>Weekly Schedule</h1>
           <p style={subtitle}>
             Monday through Friday. Drag jobs on desktop or use Move on iPhone to shift them between days.
+            Kingdom and HPR deliveries are grouped by facility; expand a delivery summary to see individual jobs.
           </p>
         </div>
 
@@ -406,8 +412,19 @@ export default function SchedulePage() {
         <div className="week-grid" style={weekGrid}>
           {weekDays.map((day) => {
             const dayJobs = jobsByDay[day.dateKey] || [];
+            const serviceJobs = dayJobs.filter(job => !isFleetDelivery(job));
+            const deliveryGroups = dailyDeliveryGroups(jobs,day.dateKey);
             const isDragOver = dragOverDateKey === day.dateKey;
             const isMoveTarget = moveModeJobId !== null;
+            const renderJob = (job: Job) => <JobCard
+              key={job.id} job={job} vehicle={vehicleMap[job.vehicle_id || ""]}
+              draggingJobId={draggingJobId} moveModeJobId={moveModeJobId}
+              onDragStart={(id) => setDraggingJobId(String(id))}
+              onDragEnd={() => {setDraggingJobId(null);setDragOverDateKey(null);}}
+              onOpenJob={(id) => router.push(`/jobs/${id}`)}
+              onPickForMove={(id) => setMoveModeJobId(String(id))}
+              onCancelMove={() => setMoveModeJobId(null)}
+            />;
 
             return (
               <div
@@ -449,30 +466,28 @@ export default function SchedulePage() {
                 <div style={dayHeader}>
                   <div style={dayHeaderText}>{day.label}</div>
                   <div style={dayCount}>
-                    {dayJobs.length} job{dayJobs.length === 1 ? "" : "s"}
+                    {serviceJobs.length} individual job{serviceJobs.length === 1 ? "" : "s"}{deliveryGroups.length ? ` · ${deliveryGroups.length} delivery groups` : ""}
                   </div>
                 </div>
 
                 <div style={dayBody}>
-                  {dayJobs.length > 0 ? (
-                    dayJobs.map((job) => (
-                      <JobCard
-                        key={job.id}
-                        job={job}
-                        vehicle={vehicleMap[job.vehicle_id || ""]}
-                        draggingJobId={draggingJobId}
-                        moveModeJobId={moveModeJobId}
-                        onDragStart={(id) => setDraggingJobId(String(id))}
-                        onDragEnd={() => {
-                          setDraggingJobId(null);
-                          setDragOverDateKey(null);
-                        }}
-                        onOpenJob={(id) => router.push(`/jobs/${id}`)}
-                        onPickForMove={(id) => setMoveModeJobId(String(id))}
-                        onCancelMove={() => setMoveModeJobId(null)}
-                      />
-                    ))
-                  ) : (
+                  {serviceJobs.map(renderJob)}
+                  {deliveryGroups.map(group => {
+                    const total = group.jobs.reduce((sum,job) => sum+(deliveryQuantity(job) || 0),0);
+                    const missing = group.jobs.some(job => deliveryQuantity(job) === null);
+                    const active = group.jobs.filter(job => !job.complete && !job.archived);
+                    return <section key={group.key} data-delivery-summary style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:12}} onClick={event => event.stopPropagation()}>
+                      <strong>{group.organization === "HPR" ? "HPR" : "Kingdom"} delivery · {group.site}</strong>
+                      <p style={{fontSize:13,margin:"8px 0"}}>{group.jobs.length} jobs · {total} tires{missing ? " + missing quantity" : ""} · {active.length} remaining</p>
+                      <DeliveryManifestButton date={day.dateKey} initialGroupKey={group.key} disabled={saving || !!errorText} />
+                      <details style={{marginTop:10}}><summary style={{cursor:"pointer",fontWeight:700}}>View / move individual deliveries</summary>
+                        <div style={{display:"grid",gap:10,marginTop:10}}>{active.map(renderJob)}
+                          {group.jobs.filter(job => job.complete).map(job => <a key={job.id} href={`/jobs/${job.id}`}>Completed · Job {job.po_number || job.id} · MO {job.mo_number || "-"}</a>)}
+                        </div>
+                      </details>
+                    </section>;
+                  })}
+                  {!serviceJobs.length && !deliveryGroups.length && (
                     <div style={emptyDay}>
                       {moveModeJobId ? "Tap to move here" : "Drop job here"}
                     </div>
