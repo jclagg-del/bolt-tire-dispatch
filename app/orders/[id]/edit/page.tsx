@@ -99,7 +99,7 @@ export default function StaffOrderEditPage() {
 
       <section style={card}><h2>Vehicle & references</h2><div style={grid}>
         {input("vehicle_year", "Year", true)}{input("vehicle_make", "Make", true)}{input("vehicle_model", "Model", true)}{input("vehicle_color", "Color")}{input("license_plate", "License plate")}
-        {input("job_number", "Job / PO number", true)}{input("mo_number", "MO number", true)}
+        {input("vin", "VIN")}{input("job_number", "Job / PO number", true)}{input("mo_number", "MO number", true)}
       </div></section>
       <section style={card}><h2>Tires</h2>
         {data.purchaseLocked && <p role="status" style={notice}>A supplier purchase exists or the tires are marked ordered. Tire, quantity, organization and reference fields are locked to protect that purchase.</p>}

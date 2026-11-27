@@ -22,6 +22,7 @@ type CustomerOrder = {
   vehicle_model: string | null;
   vehicle_color: string | null;
   license_plate: string | null;
+  vin: string | null;
   requested_date: string;
   requested_time: string;
   job_number: string | null;

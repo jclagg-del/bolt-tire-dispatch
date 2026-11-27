@@ -13,6 +13,7 @@ type EditableOrder = {
   requested_date: string; requested_time: string;
   vehicle_year: string; vehicle_make: string; vehicle_model: string; vehicle_color: string | null;
   license_plate: string | null; job_number: string | null; mo_number: string | null;
+  vin?: string | null;
   tire_position: string | null; qty: number; tire_size: string; tire_model?: string | null; tire_product_number: string | null;
   notes: string | null; order_status: string;
   payment_status?: string;
@@ -103,6 +104,7 @@ export default function KingdomOrderEditPage() {
 
       <h2 style={sectionTitle}>Vehicle</h2><div style={grid3}><Field label="Year" value={order.vehicle_year} onChange={(value) => change("vehicle_year", value)} /><Field label="Make" value={order.vehicle_make} onChange={(value) => change("vehicle_make", value)} /><Field label="Model" value={order.vehicle_model} onChange={(value) => change("vehicle_model", value)} /></div>
       <div style={grid2}><Field label="Color" value={order.vehicle_color || ""} onChange={(value) => change("vehicle_color", value)} /><Field label="License Plate" value={order.license_plate || ""} onChange={(value) => change("license_plate", value)} /></div>
+      <label style={label}>VIN<input style={input} value={order.vin || ""} onChange={event => change("vin", event.target.value)} maxLength={50} autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="Vehicle identification number (optional)" /></label>
       <h2 style={sectionTitle}>References</h2><div style={grid2}><Field label="Job / PO Number" required value={order.job_number || ""} onChange={(value) => change("job_number", value)} /><Field label="MO Number / Description" required value={order.mo_number || ""} onChange={(value) => change("mo_number", value)} /></div>
       <h2 style={sectionTitle}>Tires</h2><div style={grid2}><Field label="Tire Position" value={order.tire_position || ""} onChange={(value) => change("tire_position", value)} /><Field label="Quantity" type="number" value={String(order.qty)} onChange={(value) => change("qty", Number(value))} /><Field label="Tire Size" value={order.tire_size} onChange={(value) => change("tire_size", value)} /><Field label="Tire model" value={order.tire_model || ""} onChange={(value) => change("tire_model", value)} /><Field label="Part number" value={order.tire_product_number || ""} onChange={(value) => change("tire_product_number", value)} /></div>
       <label style={label}>Notes<textarea value={order.notes || ""} onChange={(event) => change("notes", event.target.value)} style={textarea} /></label>

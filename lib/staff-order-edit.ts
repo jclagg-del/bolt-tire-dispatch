@@ -1,8 +1,9 @@
 import { fleetOrderRequirementsError, fleetRequestedTime } from "@/lib/fleet-order-requirements";
 import { orderAppointment } from "@/lib/order-appointment";
+import { normalizeVin, vinError } from "@/lib/vehicle-vin";
 
 export const FLEET_CUSTOMERS = ["Kingdom Support Services", "HPR"];
-export const ORDER_EDIT_FIELDS = ["customer", "goodyear_order", "service_method", "submitted_by", "contact_name", "contact_number", "facility_id", "facility_name", "address", "requested_date", "requested_time", "vehicle_year", "vehicle_make", "vehicle_model", "vehicle_color", "license_plate", "job_number", "mo_number", "tire_position", "qty", "tire_size", "tire_model", "tire_product_number", "notes"] as const;
+export const ORDER_EDIT_FIELDS = ["customer", "goodyear_order", "service_method", "submitted_by", "contact_name", "contact_number", "facility_id", "facility_name", "address", "requested_date", "requested_time", "vehicle_year", "vehicle_make", "vehicle_model", "vehicle_color", "license_plate", "vin", "job_number", "mo_number", "tire_position", "qty", "tire_size", "tire_model", "tire_product_number", "notes"] as const;
 export const PURCHASE_LOCKED_FIELDS = ["customer", "goodyear_order", "job_number", "mo_number", "qty", "tire_size", "tire_product_number"] as const;
 export type OrderEditFields = Record<typeof ORDER_EDIT_FIELDS[number], string | number | boolean | null>;
 export type OrderRecord = Record<string, unknown>;
@@ -19,6 +20,10 @@ export function normalizeOrderEdit(input: unknown, previous: OrderRecord = {}): 
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid order changes.");
   const raw = { ...input } as OrderRecord;
   if (raw.tire_model === undefined) raw.tire_model = previous.tire_model ?? null;
+  if (raw.vin === undefined) raw.vin = previous.vin ?? null;
+  const vehicleError = vinError(raw.vin);
+  if (vehicleError) throw new Error(vehicleError);
+  raw.vin = normalizeVin(raw.vin as string | null);
   const values = {} as OrderEditFields;
   for (const key of ORDER_EDIT_FIELDS) {
     if (["goodyear_order", "qty", "facility_id"].includes(key)) continue;

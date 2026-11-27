@@ -6,6 +6,9 @@ const mod = new Module(file, module);
 mod.require = id => id === 'server-only' ? {} : require(id);
 mod._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, file);
 const { fleetOrderChanges, sendFleetOrderNotification } = mod.exports;
+test('VIN changes identify the field and preserve leading zeros', () => {
+  assert.deepEqual(fleetOrderChanges({ vin: '00123' }, { vin: '00456' }), [{ field: 'VIN', before: '00123', after: '00456' }]);
+});
 
 test('diff includes only adjusted fields, preserving references and showing removed values', () => {
   assert.deepEqual(fleetOrderChanges({ qty: 4, mo_number: '0012', notes: 'Remove', requested_time: '11:00:00' }, { qty: 2, mo_number: '0013', notes: null, requested_time: '14:00' }), [
@@ -38,7 +41,7 @@ test('email shows escaped before/after above full details and preserves delivery
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => { calls.push({ url, options, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ id: 'mock' }) }; });
   const before = { customer: 'HPR', job_number: '001', mo_number: '002', notes: '<script>old</script>', qty: 4 };
-  const after = { ...before, notes: '<img src=x onerror="bad">', qty: 2 };
+  const after = { ...before, notes: '<img src=x onerror="bad">', qty: 2, vin: '00123<VIN>' };
   await sendFleetOrderNotification('changed', after, 'test-idempotency', before);
   const { body, options } = calls[0];
   assert.equal(options.headers['Idempotency-Key'], 'test-idempotency');
@@ -51,6 +54,7 @@ test('email shows escaped before/after above full details and preserves delivery
   assert.match(body.html, /&lt;img src=x onerror=&quot;bad&quot;&gt;/);
   assert.doesNotMatch(body.html, /<script>|<img/);
   assert.match(body.html, /Open Orders/);
+  assert.match(body.html, /<strong>VIN:<\/strong> 00123&lt;VIN&gt;/);
   for (const kind of ['new', 'cancellation']) {
     await sendFleetOrderNotification(kind, after);
     assert.doesNotMatch(calls.at(-1).body.html, /What changed|Updated order details/);

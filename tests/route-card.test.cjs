@@ -13,6 +13,7 @@ mod.require = id => {
   if (id === 'next/navigation') return { useRouter: () => ({ push() {} }) };
   if (id === '@/lib/supabase') return { supabase: {} };
   if (id === '@/components/AppHeader') return { default: () => null };
+  if (id === '@/components/DeliveryManifestButton') return { default: () => null };
   if (id === '@/components/JobJhaButton') return { __esModule: true, default: () => React.createElement('button', null, 'Complete JHA') };
   if (id === '@/lib/job-jha-client') return {};
   if (id === '@/lib/quo') return { getQuoCallUrl: () => null, getQuoTextUrl: () => null };

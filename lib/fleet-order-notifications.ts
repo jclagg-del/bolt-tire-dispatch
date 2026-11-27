@@ -18,6 +18,7 @@ export type FleetOrderNotification = {
   vehicle_model?: string | null;
   vehicle_color?: string | null;
   license_plate?: string | null;
+  vin?: string | null;
   requested_date?: string | null;
   requested_time?: string | null;
   job_number?: string | null;
@@ -56,7 +57,7 @@ const changeFields = {
   requested_date: "Requested date", requested_time: "Requested time",
   job_number: "Job / PO number", mo_number: "MO number",
   vehicle_year: "Vehicle year", vehicle_make: "Vehicle make", vehicle_model: "Vehicle model",
-  vehicle_color: "Vehicle color", license_plate: "License plate",
+  vehicle_color: "Vehicle color", license_plate: "License plate", vin: "VIN",
   qty: "Tire quantity", tire_size: "Tire size", tire_model: "Tire model",
   tire_product_number: "Part number", tire_position: "Tire position", notes: "Notes",
 } satisfies Partial<Record<keyof FleetOrderNotification, string>>;
@@ -112,7 +113,8 @@ export async function sendFleetOrderNotification(kind: NotificationKind, order: 
   const subject = `${label} | ${organizationCode} | Job ${order.job_number || "not provided"} | MO ${order.mo_number || "not provided"}`;
   const heading = kind === "new" ? `New ${organization} order` : kind === "changed" ? `${organization} order changed` : `${organization} cancellation requested`;
   const accent = kind === "cancellation" ? "#b91c1c" : kind === "changed" ? "#d97706" : "#1d4ed8";
-  const changesHtml = kind === "changed" ? changeSummary(previousOrder, order) : "";
+  const changesHtml = (kind === "changed" ? changeSummary(previousOrder, order) : "") +
+    (order.vin ? `<p><strong>VIN:</strong> ${escapeHtml(order.vin)}</p>` : "");
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",

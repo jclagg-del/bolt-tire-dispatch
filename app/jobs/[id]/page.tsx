@@ -15,6 +15,7 @@ import CompletionModal from "@/components/CompletionModal";
 import { isDeliveryService, isPickupService, isJhaExemptService, jobCompletionError, completionMileageUpdate, completionTorqueUpdate } from "@/lib/job-completion";
 import { type TireLabelJob } from "@/components/TireLabelPrint";
 import PrintLabelsButton from "@/components/PrintLabelsButton";
+import { normalizeVin, vinError } from "@/lib/vehicle-vin";
 
 type JobForm = {
   additional_items?: AdditionalItem[];
@@ -26,6 +27,7 @@ type JobForm = {
   submitted_by: string;
   tire_position: string;
   license_plate: string;
+  vin: string;
   vehicle_mileage: string;
   tires: string;
   size: string;
@@ -127,6 +129,7 @@ export default function EditJobPage() {
         submitted_by,
         tire_position,
         license_plate,
+        vin,
         vehicle_mileage,
         wheel_torque_ft_lb,
         tires,
@@ -206,6 +209,7 @@ export default function EditJobPage() {
       submitted_by: data.submitted_by || "",
       tire_position: data.tire_position || "",
       license_plate: data.license_plate || "",
+      vin: data.vin || "",
       vehicle_mileage: data.vehicle_mileage || "",
       tires: data.tires || "",
       size: data.size || "",
@@ -333,6 +337,8 @@ export default function EditJobPage() {
 
   const handleSave = async (stayForPurchase = false) => {
     if (!form || !id || saving) return;
+    const vehicleError = vinError(form.vin);
+    if (vehicleError) { alert(vehicleError); return; }
 
     setSaving(true);
 
@@ -367,6 +373,7 @@ export default function EditJobPage() {
         submitted_by: form.submitted_by.trim() || null,
         tire_position: form.tire_position.trim() || null,
         license_plate: form.license_plate.trim() || null,
+        vin: normalizeVin(form.vin),
         vehicle_mileage: form.vehicle_mileage.trim() || null,
         tires: form.tires.trim() || null,
         size: form.size.trim() || null,
@@ -752,6 +759,11 @@ export default function EditJobPage() {
             <Field>
               <label style={fieldLabel}>Vehicle Mileage</label>
               <input name="vehicle_mileage" value={form.vehicle_mileage} onChange={handleChange} style={input} placeholder="Vehicle Mileage" inputMode="numeric" />
+            </Field>
+
+            <Field fullWidth>
+              <label style={fieldLabel}>VIN</label>
+              <input name="vin" value={form.vin} onChange={handleChange} style={input} placeholder="Vehicle identification number" maxLength={50} autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
             </Field>
 
             <Field>

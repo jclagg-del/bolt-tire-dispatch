@@ -15,6 +15,19 @@ function loader(stubs = {}) {
   };
 }
 const helpers = loader()('lib/staff-order-edit.ts');
+test('staff VIN normalization preserves omitted existing values and supports explicit clearing', async () => {
+  const f = fixture({ row: { vin: 'EXISTING123' } });
+  assert.equal((await (await f.get()).json()).order.vin, 'EXISTING123');
+  assert.equal((await f.save({ vin: ' new123 ' })).status, 200);
+  assert.equal(f.calls.at(-1).args.p_changes.vin, 'NEW123');
+  assert.equal((await f.save({ vin: undefined })).status, 200);
+  assert.equal(f.calls.at(-1).args.p_changes.vin, 'EXISTING123');
+  assert.equal((await f.save({ vin: '' })).status, 200);
+  assert.equal(f.calls.at(-1).args.p_changes.vin, null);
+  const count = f.calls.length;
+  for (const vin of [123, {}, 'X'.repeat(51)]) assert.equal((await f.save({ vin })).status, 400);
+  assert.equal(f.calls.length, count);
+});
 const base = { id: 1, customer: 'Kingdom Support Services', goodyear_order: false, service_method: 'delivery', submitted_by: 'Dispatcher', contact_name: 'Contact', contact_number: '5550100', facility_id: 1, facility_name: 'Example Facility', address: 'Example Address', requested_date: '2026-11-05', requested_time: '09:30:00', vehicle_year: '2024', vehicle_make: 'Ford', vehicle_model: 'Transit', vehicle_color: 'White', license_plate: 'ABC123', job_number: '001234', mo_number: '005678', tire_position: 'Left rear', qty: 4, tire_size: '235/65R16', tire_product_number: '123456', notes: 'Original notes', order_status: 'new', approved_job_id: null, reviewed_at: null, tires_ordered: false, source_quote_id: null, payment_status: 'unpaid', amount_paid: null, tire_items: null };
 const context = { params: Promise.resolve({ id: '1' }) };
 function fixture({ role = 'admin', setup = false, missingStaff = false, row = {}, purchase = null, rpcError = null, queryError = null } = {}) {

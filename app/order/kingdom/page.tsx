@@ -21,6 +21,7 @@ type OrderForm = {
   vehicle_model: string;
   vehicle_color: string;
   license_plate: string;
+  vin: string;
   requested_date: string;
   requested_time: string;
   request_earlier_service: boolean;
@@ -70,6 +71,7 @@ const initialForm: OrderForm = {
   vehicle_model: "",
   vehicle_color: "",
   license_plate: "",
+  vin: "",
   requested_date: "",
   requested_time: "",
   request_earlier_service: false,
@@ -523,6 +525,7 @@ export default function KingdomOrderPage() {
       vehicle_model: form.vehicle_model.trim(),
       vehicle_color: form.vehicle_color.trim() || null,
       license_plate: form.license_plate.trim() || null,
+      vin: form.vin.trim().toUpperCase() || null,
       requested_date: form.requested_date,
       requested_time: form.requested_time,
       job_number: form.job_number.trim(),
@@ -785,6 +788,12 @@ export default function KingdomOrderPage() {
                       autoCapitalize="characters"
                     />
                   </div>
+                </div>
+                <div>
+                  <FieldLabel text="VIN" />
+                  <input type="text" name="vin" value={form.vin} onChange={handleChange}
+                    style={input} placeholder="Vehicle identification number (optional)"
+                    maxLength={50} autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
                 </div>
               </section>
 

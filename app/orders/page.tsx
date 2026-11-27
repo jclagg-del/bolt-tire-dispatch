@@ -27,6 +27,7 @@ type CustomerOrder = {
   vehicle_model: string | null;
   vehicle_color: string | null;
   license_plate: string | null;
+  vin: string | null;
   requested_date: string;
   requested_time: string;
   job_number: string | null;
@@ -109,6 +110,7 @@ function buildVehicleDescription(order: CustomerOrder) {
   const details = [
     order.vehicle_color ? `Color: ${order.vehicle_color}` : "",
     order.license_plate ? `Plate: ${order.license_plate}` : "",
+    order.vin ? `VIN: ${order.vin}` : "",
   ].filter(Boolean);
 
   return [mainVehicle, ...details].filter(Boolean).join(" • ");
@@ -155,6 +157,7 @@ export default function OrdersPage() {
         vehicle_model,
         vehicle_color,
         license_plate,
+        vin,
         requested_date,
         requested_time,
         job_number,

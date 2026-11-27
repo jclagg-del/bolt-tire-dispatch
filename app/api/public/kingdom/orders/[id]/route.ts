@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
 import { fleetOrderRequirementsError, fleetRequestedTime } from "@/lib/fleet-order-requirements";
 import { changedCustomerOrderJobFields } from "@/lib/customer-order-job-fields";
+import { normalizeVin, vinError } from "@/lib/vehicle-vin";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -67,6 +68,8 @@ export async function PATCH(request: Request, { params }: Context) {
   }
 
   if (body.tire_model != null && (typeof body.tire_model !== "string" || body.tire_model.length > 1000)) return NextResponse.json({ error: "Enter a tire model of no more than 1,000 characters." }, { status: 400 });
+  const vehicleError = vinError(body.vin);
+  if (vehicleError) return NextResponse.json({ error: vehicleError }, { status: 400 });
   const updates = {
     customer,
     goodyear_order: Boolean(body.goodyear_order),
@@ -84,6 +87,8 @@ export async function PATCH(request: Request, { params }: Context) {
     vehicle_model: String(body.vehicle_model).trim(),
     vehicle_color: String(body.vehicle_color || "").trim() || null,
     license_plate: String(body.license_plate || "").trim() || null,
+    // Preserve VIN when an older open form does not send the new field.
+    vin: body.vin === undefined ? order.vin ?? null : normalizeVin(body.vin),
     job_number: String(body.job_number).trim(),
     mo_number: String(body.mo_number).trim(),
     tire_position: String(body.tire_position || "").trim() || null,

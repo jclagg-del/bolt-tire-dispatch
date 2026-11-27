@@ -18,7 +18,7 @@ function loader(stubs = {}) {
 }
 const request = (id = 1, extra = {}) => new Request('https://example.test/api/orders/approve', { method: 'POST', body: JSON.stringify({ orderId: id, tireSupplier: 'U.S. AutoForce', estimatedDeliveryDate: '2026-10-01', ...extra }) });
 const order = (id, extra = {}) => ({ id, customer: 'Kingdom Support Services', job_number: '3097885', mo_number: `MO-${id}`, tire_product_number: '413134582', qty: 4, tire_size: '235/40R18', contact_name: 'Example', contact_number: '2015550123', address: 'Example St', submitted_by: 'Example', service_method: 'delivery', order_status: 'new', tires_ordered: true, approved_job_id: null, reviewed_at: null, requested_date: '2026-10-01', requested_time: '09:30', ...extra });
-const portalFields = { submitted_by: 'Portal Submitter', tire_position: 'Left rear outer', license_plate: 'ABC-123 NY',
+const portalFields = { submitted_by: 'Portal Submitter', tire_position: 'Left rear outer', license_plate: 'ABC-123 NY', vin: '1FTBW2CM1FKA12345',
   vehicle_year: '2024', vehicle_make: 'Ford', vehicle_model: 'Transit', vehicle_color: 'White' };
 
 test('approval uses saved office corrections, including their dedicated job fields', async () => {
@@ -367,4 +367,42 @@ test('mapping changes retain portal authorization and completed/paid-order edit 
     const res = await route.PATCH(new Request('https://example.test', { method: 'PATCH', body: JSON.stringify({ ...original, license_plate: 'NEW' }) }), { params: Promise.resolve({ id: '1' }) });
     assert.equal(res.status, guard === 'unauthorized' ? 401 : 409); assert.deepEqual(f.tables, before);
   }
+});
+
+test('VIN is optional, normalized, returned on read, and invalid VIN inputs cannot create an order', async () => {
+  const f = fixture({ orders: [] });
+  const portal = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/route.ts');
+  const submit = vin => portal.POST(new Request('https://example.test', { method: 'POST', body: JSON.stringify(order(1, { ...portalFields, facility_id: 7, facility_name: 'Example', vin })) }));
+  for (const vin of [123, {}, 'X'.repeat(51)]) assert.equal((await submit(vin)).status, 400);
+  assert.equal(f.tables.customer_orders.length, 0);
+  for (const [vin, expected] of [[undefined, null], ['', null], [' 1ftbw2cm1fka12345 ', '1FTBW2CM1FKA12345'], ['old123', 'OLD123']]) {
+    assert.equal((await submit(vin)).status, 201);
+    assert.equal(f.tables.customer_orders.at(-1).vin, expected);
+  }
+  const read = await (await portal.GET()).json();
+  assert.ok(read.some(row => row.vin === '1FTBW2CM1FKA12345' && row.license_plate === 'ABC-123 NY'));
+});
+
+test('VIN edits sync to the dedicated job field, while old forms and unrelated changes preserve manual VIN corrections', async () => {
+  const original = order('1', { ...portalFields, order_status: 'approved', approved_job_id: 5, facility_name: 'Example', facility_id: null });
+  const f = fixture({ orders: [original], jobs: [{ id: 5, complete: false, vin: 'STAFF-CORRECTION' }] });
+  const route = loader({ '@/lib/supabase/admin': { createAdminClient: () => f.admin }, '@/lib/kingdom-auth': { hasKingdomAccess: async () => true }, '@/lib/fleet-order-notifications': { sendFleetOrderNotification: async () => {} } })('app/api/public/kingdom/orders/[id]/route.ts');
+  const save = patch => route.PATCH(new Request('https://example.test', { method: 'PATCH', body: JSON.stringify({ ...f.tables.customer_orders[0], ...patch }) }), { params: Promise.resolve({ id: '1' }) });
+  assert.equal((await save({ notes: 'Other edit', vin: undefined })).status, 200);
+  assert.equal(f.tables.customer_orders[0].vin, original.vin); assert.equal(f.tables.jobs[0].vin, 'STAFF-CORRECTION');
+  assert.equal((await save({ notes: 'Another edit' })).status, 200); assert.equal(f.tables.jobs[0].vin, 'STAFF-CORRECTION');
+  const before = structuredClone(f.tables);
+  assert.equal((await save({ vin: 'X'.repeat(51) })).status, 400); assert.deepEqual(f.tables, before);
+  assert.equal((await save({ vin: ' new123 ' })).status, 200); assert.equal(f.tables.jobs[0].vin, 'NEW123');
+  assert.equal((await save({ vin: '' })).status, 200); assert.equal(f.tables.jobs[0].vin, null);
+});
+
+test('VIN and license plate are available in every fleet entry/edit screen and VIN survives job editor save', () => {
+  for (const file of ['app/order/kingdom/page.tsx','app/kingdom-orders/[id]/page.tsx','app/orders/[id]/edit/page.tsx','app/jobs/[id]/page.tsx']) {
+    const source = fs.readFileSync(path.resolve(__dirname,'..',file),'utf8');
+    assert.match(source,/VIN/); assert.match(source,/license_plate/); assert.match(source,/vin/);
+    assert.doesNotMatch(source,/name="vin"[^>]*\brequired\b/);
+  }
+  const source = fs.readFileSync(path.resolve(__dirname,'../app/jobs/[id]/page.tsx'),'utf8');
+  assert.match(source,/vin: data\.vin \|\| ""/); assert.match(source,/vin: normalizeVin\(form\.vin\)/);
 });

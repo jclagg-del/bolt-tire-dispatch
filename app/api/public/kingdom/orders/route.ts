@@ -3,13 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasKingdomAccess } from "@/lib/kingdom-auth";
 import { sendFleetOrderNotification } from "@/lib/fleet-order-notifications";
 import { fleetOrderRequirementsError, fleetRequestedTime } from "@/lib/fleet-order-requirements";
+import { normalizeVin, vinError } from "@/lib/vehicle-vin";
 
 export async function GET() {
   if (!await hasKingdomAccess()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const admin = createAdminClient();
   const { data: orders, error } = await admin.from("customer_orders").select(`
     id, customer, submitted_at, submitted_by, contact_name, contact_number, requested_date, requested_time, job_number, mo_number, goodyear_order, service_method, facility_id, facility_name, address,
-    vehicle_year, vehicle_make, vehicle_model, vehicle_color, license_plate, tire_position,
+    vehicle_year, vehicle_make, vehicle_model, vehicle_color, license_plate, vin, tire_position,
     qty, tire_size, tire_model, tire_product_number, notes, order_status, tires_ordered, approved_job_id, payment_status
   `).in("customer", ["Kingdom Support Services", "HPR"]).order("submitted_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -40,6 +41,8 @@ export async function POST(request: Request) {
   if (requirementsError) return NextResponse.json({ error: requirementsError }, { status: 400 });
 
   const quantity = Number(body.qty);
+  const vehicleError = vinError(body.vin);
+  if (vehicleError) return NextResponse.json({ error: vehicleError }, { status: 400 });
   if (body.tire_model != null && (typeof body.tire_model !== "string" || body.tire_model.length > 1000)) return NextResponse.json({ error: "Enter a tire model of no more than 1,000 characters." }, { status: 400 });
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 24) {
     return NextResponse.json({ error: "A valid tire quantity is required." }, { status: 400 });
@@ -60,6 +63,7 @@ export async function POST(request: Request) {
     vehicle_model: String(body.vehicle_model).trim(),
     vehicle_color: String(body.vehicle_color || "").trim() || null,
     license_plate: String(body.license_plate || "").trim() || null,
+    vin: normalizeVin(body.vin as string | null | undefined),
     requested_date: String(body.requested_date),
     requested_time: fleetRequestedTime(body.requested_time),
     job_number: String(body.job_number).trim(),
